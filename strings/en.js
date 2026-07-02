@@ -207,7 +207,7 @@ export default {
 
   // ── Builder (rules-engine guided progression — appears when installed) ──
   'builder.soon':        'The guided Builder appears here when the rules engine and compendium addons are installed.',
-  'builder.editHere':    'This character uses the rules engine. On the sheet, press ✎ Edit to enter modification mode, then open the 🛠️ Builder tab — abilities, class & levels, and choices all live there, and the sheet auto-calculates.',
+  'builder.editHere':    'This character uses the rules engine. Open the 🛠️ Builder tab — abilities, class & levels, and choices all live there (edit them directly), and the sheet auto-calculates.',
   'builder.totalLevel':  'Total Level',
   'builder.abilities':   'Ability Scores',
   'builder.baseHint':    'Enter base scores; the engine adds background / feat increases (capped at 20).',
