@@ -33,8 +33,11 @@
 //  prof toggles) follow the same gate.
 //
 //  ── Module layout (decomposed; native ES modules, no build step) ──
-//    helpers.js          pure constants + helpers.
-//    engine.js           decision/derivation pipeline + viewModel + mutators.
+//    rules/engine.js     the PURE D&D rules engine (host-free, tests/rules.mjs)
+//    rules/api.js        │  — merged from the retired dnd55e-core-rules addon.
+//                        └  makeRulesApi(getData): engine + live book data.
+//    helpers.js          pure constants + helpers (re-exports the rules facts).
+//    model.js            decision/derivation pipeline + viewModel + mutators.
 //    ui.js               shared render primitives (section/heroTile/abilityTile/…).
 //    panel.header.js     the slim D&D vitals bar.
 //    panel.overview.js   ┐  one render module per tab (Character Sheet / Combat /
@@ -54,7 +57,7 @@ import {
   num, abilityMod, signed, titleize, clampHp, blank, makeHelpers,
   POINT_BUY, pointCost, pointsSpent,
 } from './helpers.js';
-import { makeEngine } from './engine.js';
+import { makeEngine } from './model.js';
 import { makeUI } from './ui.js';
 import { makeLegends } from './legends.js';
 import { makeRail } from './panel.rail.js';
@@ -583,12 +586,30 @@ export default function register(host) {
   });
 
   // ── Info tab (Settings → 🎲 Character Sheets) ─────────────────────
+  // Also reports the rules status: the engine is built in; the CONTENT comes
+  // from installed book addons (Player's Handbook), so show whether one is
+  // connected and how many classes it currently serves.
   host.registerSettingsTab({
     id: 'info', label: t('settings.label'), icon: '🎲',
-    render: () => `
+    render: () => {
+      const engine = getRules();
+      const status = engine
+        ? t('rules.connected', { count: engine.listClasses().length })
+        : t('rules.disconnected');
+      return `
       <div class="settings-editor-head"><h2>🎲 ${esc(t('help.title'))}</h2></div>
       <div class="settings-panel">
         <p class="settings-hint">${esc(t('help.body', { count: host.store.getCharacters().length }))}</p>
-      </div>`,
+        <p class="settings-hint" style="color:${engine ? 'var(--color-success)' : 'var(--text-muted)'}">${esc(status)}</p>
+      </div>`;
+    },
   });
+
+  // ── Rules API for other addons ────────────────────────────────────
+  // The same api the panels consume (rules/api.js over live book data). A
+  // future addon (combat tools, NPC generators) declares this addon as a
+  // dependency and host.use('dnd55e-sheets') to reach hydrate/derive/list*.
+  // Provided unconditionally: without a book addon the passthroughs return
+  // empty lists and hydrate degrades to universal math + warnings.
+  host.provide(ctx.engine.rulesApi);
 }

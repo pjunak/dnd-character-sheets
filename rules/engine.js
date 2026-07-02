@@ -1,17 +1,17 @@
 // ═══════════════════════════════════════════════════════════════
-//  engine.js — the pure D&D 5.5e (2024) derivation engine.
+//  rules/engine.js — the pure D&D 5.5e (2024) derivation engine.
 //
-//  No host, no DOM: every function takes plain decisions + a compendium data
-//  accessor `api` (the object dnd55e-compendium provides), so it's unit-testable
-//  in isolation (tests/smoke.mjs drives it with a fake api). entry.js wires
-//  `hydrate(cd) = hydrate(cd, host.use('dnd55e-compendium'))`.
+//  No host, no DOM: every function takes plain decisions + a book-data accessor
+//  `api` (the object dnd55e-players-handbook provides), so it's unit-testable
+//  in isolation (tests/rules.mjs drives it with a fake api). rules/api.js wires
+//  `hydrate(cd) = hydrate(cd, <live book data>)`.
 //
 //  It encodes the SYSTEM (how PB / mods / HP / AC / saves / slots are computed)
 //  and reads CONTENT (class/species/armor records) from `api` — so new content
-//  is a compendium change and never touches this file. Each pipeline step is
-//  error-isolated: a throw becomes a warning and the sheet is still returned
+//  is a book-addon data change and never touches this file. Each pipeline step
+//  is error-isolated: a throw becomes a warning and the sheet is still returned
 //  (mirrors Living-scroll's accumulate-don't-throw contract). See
-//  ../dnd55e-sheets/docs/RULES_EDGE_CASES.md for the rule IDs referenced below.
+//  ../docs/RULES_EDGE_CASES.md for the rule IDs referenced below.
 // ═══════════════════════════════════════════════════════════════
 
 export const ABILITIES = ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'];
@@ -33,6 +33,21 @@ export const num = (v, d = 0) => { const n = Number(v); return Number.isFinite(n
 export const abilityMod = (score) => Math.floor((num(score, 10) - 10) / 2);
 export const proficiencyBonus = (totalLevel) => 2 + Math.floor((Math.max(1, num(totalLevel, 1)) - 1) / 4);
 export const dieSize = (hitDie) => num(String(hitDie || '').replace(/^d/i, ''), 8);
+
+// D&D 2024 standard point buy — 27 points; each BASE score 8–15; the cost per
+// point rises past 13. SYSTEM rules (the Builder's ability-score budget), so
+// they live here beside the rest of the math. `pointCost` clamps out-of-range
+// scores into [8,15] for costing; `pointsSpent` totals a {STR..CHA} base map.
+export const POINT_BUY = { budget: 27, min: 8, max: 15, cost: { 8: 0, 9: 1, 10: 2, 11: 3, 12: 4, 13: 5, 14: 7, 15: 9 } };
+export const pointCost = (v) => POINT_BUY.cost[Math.max(POINT_BUY.min, Math.min(POINT_BUY.max, num(v, POINT_BUY.min)))] || 0;
+export const pointsSpent = (base) => ABILITIES.reduce((sum, a) => sum + pointCost(base && base[a]), 0);
+
+/** HP clamp — one rule for all sites. With a max>0, clamp into [0, max];
+ *  with no max set (0), only floor at 0 (the ± action stays usable). */
+export const clampHp = (hp, maxHp) => {
+  const h = num(hp, 0), m = num(maxHp, 0);
+  return m > 0 ? Math.max(0, Math.min(m, h)) : Math.max(0, h);
+};
 
 // Standard multiclass spell-slot table, indexed by combined CASTER LEVEL
 // (MC-2). slots[i] = number of (i+1)-th-level slots. Single full casters land on

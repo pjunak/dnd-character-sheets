@@ -1,16 +1,23 @@
 // ═══════════════════════════════════════════════════════════════
-//  engine.js — the decision/derivation pipeline (engine-mode brains).
+//  model.js — the decision/derivation pipeline (engine-mode brains).
 //
 //  Builds the Builder's working model from the stored sheet, collects + resolves
-//  the choice descriptors, hydrates the optional rules engine (error-isolated),
+//  the choice descriptors, hydrates the rules engine (error-isolated),
 //  materializes the DEG-1 fallback, and exposes the single `viewModel` the read
 //  tabs consume (computed-when-present, hand-filled otherwise; a stored override
 //  always wins — ARCH-3). Also owns `mutate` / `builderMutate` (persist + re-render
 //  through patchAddonData → this NS only).
 //
+//  The rules ENGINE is built in (rules/engine.js + rules/api.js — merged from
+//  the retired dnd55e-core-rules addon); what's optional is the CONTENT: the
+//  api activates only while a book data addon (dnd55e-players-handbook) is
+//  installed, and the sheet stays fully hand-fillable without it.
+//
 //  `makeEngine(ctx)` binds host + the shared helpers/constants; every function is
 //  pure-ish (no module-level state) except the two mutators.
 // ═══════════════════════════════════════════════════════════════
+
+import { makeRulesApi } from './rules/api.js';
 
 export function makeEngine(ctx) {
   const { host, NS, ABILITIES, SKILLS, num, abilityMod, sheetOf } = ctx;
@@ -126,18 +133,27 @@ export function makeEngine(ctx) {
     for (const id of Object.keys(cs.skills || {})) s.skillProf[id] = !!cs.skills[id].proficient;
   };
 
-  /** Soft-probe the rules engine. Lazily, per render, try/caught — so installing
-   *  or removing core-rules never breaks the sheet (ARCH-4). core-rules is a
-   *  manifest `optionalDependencies` entry: the host permits host.use() for it
-   *  and load-orders it before us WHEN present, but never blocks us when it's
-   *  absent (then use() throws → null → standalone). So the Builder tab appears
-   *  only once core-rules is installed and provides an apiVersion≥1 API. */
-  const getRules = () => {
+  // ── The rules api — the built-in engine bound to live book data ──
+  // The engine always ships with this addon now; what's optional is CONTENT.
+  // `_probeData()` soft-probes the Player's Handbook data addon (a manifest
+  // `optionalDependencies` entry: the host permits host.use() for it and
+  // load-orders it before us WHEN present, but never blocks us when it's
+  // absent — then use() throws → null → standalone). `getRules()` returns the
+  // api only while book data is actually present, so every engine-mode branch
+  // (Builder tab, computed vitals, the spellbook engine path) lights up exactly
+  // when there is content to compute from, and the sheet degrades to the
+  // hand-filled standalone paths otherwise (ARCH-4). The probe is lazy, per
+  // render, try/caught — installing/removing the book mid-session never breaks
+  // the sheet.
+  const DATA_ADDON = 'dnd55e-players-handbook';
+  const _probeData = () => {
     try {
-      const r = host.use && host.use('dnd55e-core-rules');
-      return (r && r.apiVersion >= 1) ? r : null;
+      const d = host.use && host.use(DATA_ADDON);
+      return (d && d.apiVersion >= 1) ? d : null;
     } catch (_) { return null; }
   };
+  const rulesApi = makeRulesApi(_probeData);
+  const getRules = () => (_probeData() ? rulesApi : null);
 
   /** One value source for the read tabs: computed values from the engine when
    *  present (ARCH-1 — derive, don't store), else the hand-filled flat fields. A
@@ -213,6 +229,6 @@ export function makeEngine(ctx) {
 
   return {
     builderModel, collectChoices, resolveChoices, decisionsOf,
-    safeHydrate, materializeInto, getRules, viewModel, mutate, builderMutate,
+    safeHydrate, materializeInto, getRules, rulesApi, viewModel, mutate, builderMutate,
   };
 }

@@ -1,40 +1,32 @@
 // ═══════════════════════════════════════════════════════════════
-//  dnd55e-core-rules — the generic D&D 5.5e (2024) rules engine ("handler").
+//  rules/api.js — the rules API surface over a data provider.
 //
-//  It encodes the SYSTEM rules (how proficiency bonus / ability modifiers / HP /
-//  AC / saves / skills / spell slots are computed and how declarative
-//  grants/formulas are interpreted) but NO content. All content comes from
-//  dnd55e-compendium (a HARD dependency) via host.use — so adding a new
-//  class/subclass/item/spell is a compendium data change and never touches this
-//  engine.
-//
-//  It provide()s the rules API consumed by dnd55e-sheets:
-//    • list*()/getItem()  — passthrough of compendium data for dropdowns
+//  `makeRulesApi(getData)` binds the pure engine (rules/engine.js) to a live
+//  content accessor (the object the dnd55e-players-handbook addon provide()s —
+//  or any future per-book data addon with the same shape) and returns the api
+//  the sheet panels consume:
+//    • list*()/getItem()  — passthrough of book data for dropdowns
 //    • hydrate(decisions) — decisions → computed sheet (NEVER throws; warnings[])
 //    • derive.*           — granular stat helpers
 //
-//  The actual math lives in the pure, host-free engine.js (unit-testable). This
-//  file just wires it to the compendium accessor + the host facade.
+//  `getData()` is probed live on every call (never cached), so installing or
+//  removing a book addon mid-session degrades to empty lists/warnings instead
+//  of throwing. model.js builds one instance of this api and entry.js also
+//  provide()s it, so a future addon (combat, NPC tools) can consume the same
+//  rules surface without this addon changing.
 // ═══════════════════════════════════════════════════════════════
 
-import { t } from './i18n.js';
 import * as Engine from './engine.js';
 
-export default function register(host) {
-  const { esc } = host.h;
+export function makeRulesApi(getData) {
+  const data = () => { try { return getData() || null; } catch (_) { return null; } };
 
-  // Lazy handle to the compendium data API. core-rules HARD-depends on it, so
-  // load order guarantees it's present by the time anything runs — but we guard
-  // so a transient absence degrades to empty/warnings instead of throwing.
-  const data = () => { try { return host.use('dnd55e-compendium'); } catch (_) { return null; } };
-
-  /** Decisions → computed sheet, via the pure engine + live compendium data. */
+  /** Decisions → computed sheet, via the pure engine + live book data. */
   const hydrate = (decisions) => Engine.hydrate(decisions, data());
 
-  // ── Provide the rules API (consumed by dnd55e-sheets) ────────────
-  host.provide({
+  return {
     apiVersion: 1,
-    // dropdown enumeration — passthrough of compendium data
+    // dropdown enumeration — passthrough of book data
     listClasses:     () => (data()?.listClasses?.() || []),
     listSubclasses:  (classId) => (data()?.listSubclasses?.(classId) || []),
     listSpecies:     () => (data()?.listSpecies?.() || []),
@@ -69,22 +61,5 @@ export default function register(host) {
       armorClass:       (cd) => hydrate(cd).sheet.derived.armorClass,
       saveDC:           (abilityScore, totalLevel) => 8 + Engine.proficiencyBonus(totalLevel) + Engine.abilityMod(abilityScore),
     },
-  });
-
-  // ── Status tab (Settings → ⚙ Rules Engine) ───────────────────────
-  host.registerSettingsTab({
-    id: 'status', label: t('settings.label'), icon: '⚙',
-    render: () => {
-      const d = data();
-      const status = d
-        ? t('status.connected', { count: (d.listClasses?.() || []).length })
-        : t('status.disconnected');
-      return `
-        <div class="settings-editor-head"><h2>⚙ ${esc(t('status.title'))}</h2></div>
-        <div class="settings-panel">
-          <p class="settings-hint">${esc(t('status.intro'))}</p>
-          <p class="settings-hint" style="color:${d ? 'var(--color-success)' : 'var(--text-muted)'}">${esc(status)}</p>
-        </div>`;
-    },
-  });
+  };
 }

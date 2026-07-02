@@ -1,25 +1,35 @@
-# dnd55e-core-rules
+# rules/ — the built-in D&D 5.5e (2024) rules engine
 
-The generic **D&D 5.5e (2024) rules engine** for
-[ttrpg-codex](https://github.com/pjunak/ttrpg-codex). Addon id: `dnd55e-core-rules`.
+The generic **D&D 5.5e (2024) rules engine**, a module of the character-sheets addon.
+It began life as the standalone `dnd55e-core-rules` addon and was **merged into this
+repo** (full git history preserved) once it was clear the sheet was its only consumer —
+the engine now always ships with the sheet, and what is optional is the *content*.
 
 It is a **data-driven handler**: it encodes the *system* rules (how proficiency bonus,
 ability modifiers, AC, HP, saves, spell slots are computed, and how declarative
-grants/modifiers/formulas are interpreted) but contains **no content**. All content comes
-from [`dnd55e-compendium`](https://github.com/pjunak/dnd55e-compendium) — a **hard
-dependency** consumed via `host.use`. Adding a new class/subclass/item/spell is a compendium
-data change and never touches this engine.
+grants/modifiers/formulas are interpreted) but contains **no content**. All content
+comes from a per-book data addon —
+[`dnd55e-players-handbook`](https://github.com/pjunak/dnd55e-players-handbook) — soft-used
+via `host.use` (a manifest `optionalDependencies` entry). Adding a new
+class/subclass/item/spell is a book-addon data change and never touches this engine.
 
-It `provide()`s the rules API consumed by `dnd55e-sheets`:
+## Layout
 
-- `list*()` / `getItem()` — passthrough of compendium data for the sheet's dropdowns.
-- `hydrate(decisions)` — turns the character's decisions into a fully computed sheet;
-  **never throws** (failures accumulate as `warnings`, mirroring Living-scroll's
-  error-isolated pipeline).
-- `derive.*` — granular stat helpers.
+- **`engine.js`** — the pure, host-free derivation pipeline (plus the shared rules
+  facts: `ABILITIES`, `SKILL_ABILITY`, point buy, `clampHp`, `abilityMod`…).
+  Unit-tested by `../tests/rules.mjs` with a fake book api.
+- **`api.js`** — `makeRulesApi(getData)`: binds the engine to a live data provider and
+  returns the api the sheet panels consume (and that the addon `provide()`s for other
+  addons):
+  - `list*()` / `getItem()` — passthrough of book data for the sheet's dropdowns.
+  - `hydrate(decisions)` — turns the character's decisions into a fully computed sheet;
+    **never throws** (failures accumulate as `warnings`, mirroring Living-scroll's
+    error-isolated pipeline).
+  - `derive.*` — granular stat helpers.
 
-The character sheet *soft-uses* this engine: if `core-rules` is absent the sheet falls back
-to hand-filled values, so installing/uninstalling the engine never breaks a sheet.
+The sheet activates engine mode only while book data is present (`getRules()` in
+`../model.js`); without it the sheet falls back to hand-filled values, so
+installing/uninstalling the book addon never breaks a sheet.
 
 ## Status
 
@@ -50,8 +60,5 @@ the total, so no "origin class" is tracked.
 ## Develop
 
 ```sh
-node scripts/dev-install-addon.cjs ../dnd55e-core-rules   # from the ttrpg-codex repo
-node --test tests/smoke.mjs                                # assumes ttrpg-codex is a sibling
+node --test tests/rules.mjs   # from the repo root; assumes ttrpg-codex is a sibling
 ```
-
-See [`AGENTS.md`](AGENTS.md) for the addon authoring contract.

@@ -1,141 +1,23 @@
-// Client self-test for dnd55e-core-rules against the host test harness.
-// Run: node --test tests/smoke.mjs  (assumes ttrpg-codex is a sibling checkout).
+// Self-test for the BUILT-IN rules engine (rules/engine.js + rules/api.js —
+// merged from the retired dnd55e-core-rules addon), driven through the sheets
+// addon's real register(): `rec.provided` is the rules api this addon
+// provide()s for other addons, identical to the one the panels consume.
+// Run: node --test tests/rules.mjs  (assumes ttrpg-codex is a sibling checkout).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { dryRunRegister, smokeRegistrations } from '../../ttrpg-codex/web/js/addon-test-harness.mjs';
 import register from '../entry.js';
+import { makeFake } from './fake-phb.mjs';
 
 const META = {
-  id: 'dnd55e-core-rules',
-  permissions: ['ui:settings-tab'],
-  dependencies: { 'dnd55e-compendium': { range: '>=0.1.0' } },
+  id: 'dnd55e-sheets',
+  permissions: ['ui:override', 'ui:action', 'ui:settings-tab', 'data:read:characters', 'data:write:characters.addonData'],
+  optionalDependencies: { 'dnd55e-players-handbook': { range: '>=0.1.0' } },
 };
 
-// A fake compendium API mirroring the real seed shapes, to exercise hydrate.
-function makeFake() {
-  const store = {
-    class: {
-      wizard: {
-        id: 'wizard', name: 'Wizard', kind: 'class', hitDie: 'd6', savingThrows: ['INT', 'WIS'],
-        spellcasting: { ability: 'INT', type: 'full', prepares: 'spellbook', ritual: true },
-        weaponMastery: { count: 2 }, acFormulas: [],
-        // Authoritative printed full-caster spell-slot progression (2024 PHB).
-        progression: [
-          { level: 1, cantripsKnown: 3, preparedSpells: 4, spellSlots: [2] },
-          { level: 5, cantripsKnown: 4, preparedSpells: 9, spellSlots: [4, 3, 2] },
-          { level: 11, cantripsKnown: 5, preparedSpells: 15, spellSlots: [4, 3, 3, 2, 1, 1] },
-          { level: 17, cantripsKnown: 5, preparedSpells: 21, spellSlots: [4, 3, 3, 3, 2, 1, 1, 1, 1] },
-          { level: 19, cantripsKnown: 5, preparedSpells: 23, spellSlots: [4, 3, 3, 3, 3, 1, 1, 1, 1] },
-        ],
-      },
-      barbarian: {
-        id: 'barbarian', name: 'Barbarian', kind: 'class', hitDie: 'd12', savingThrows: ['STR', 'CON'],
-        spellcasting: null, weaponMastery: { count: 2 },
-        acFormulas: [{ id: 'ud', base: 10, addAbilities: ['DEX', 'CON'], requires: { noArmor: true } }],
-        // FE-2/FE-3 resources exercising all three max shapes: progression table,
-        // per-level multiple, ability modifier.
-        classResources: [
-          { key: 'rage', name: 'Rage', recharge: 'long', progression: [{ level: 1, max: 2 }, { level: 3, max: 3 }, { level: 6, max: 4 }] },
-          { key: 'pool', name: 'Pool', recharge: 'short', perLevel: 5 },
-          { key: 'insp', name: 'Insp', recharge: [{ on: 'short', amount: 1 }, { on: 'long', amount: 'full' }], abilityMod: 'CHA', min: 1 },
-        ],
-      },
-      fighter: {
-        id: 'fighter', name: 'Fighter', kind: 'class', hitDie: 'd10', savingThrows: ['STR', 'CON'],
-        spellcasting: null, weaponMastery: { count: 3 }, acFormulas: [],
-        startingProficiencies: { weapons: ['simple', 'martial'] },
-      },
-      paladin: {
-        id: 'paladin', name: 'Paladin', kind: 'class', hitDie: 'd10', savingThrows: ['WIS', 'CHA'],
-        spellcasting: { ability: 'CHA', type: 'half', prepares: 'list' }, weaponMastery: { count: 2 }, acFormulas: [],
-        // Authoritative printed half-caster spell-slot progression (2024 PHB).
-        progression: [
-          { level: 1, preparedSpells: 2, spellSlots: [2] },
-          { level: 5, preparedSpells: 6, spellSlots: [4, 2] },
-          { level: 10, preparedSpells: 8, spellSlots: [4, 3, 2] },
-          { level: 11, preparedSpells: 9, spellSlots: [4, 3, 3] },
-          { level: 17, preparedSpells: 14, spellSlots: [4, 3, 3, 1] },
-          { level: 19, preparedSpells: 15, spellSlots: [4, 3, 3, 1] },
-        ],
-      },
-      // Ranger deliberately ships NO spellSlots → exercises the heuristic fallback.
-      ranger: {
-        id: 'ranger', name: 'Ranger', kind: 'class', hitDie: 'd10', savingThrows: ['STR', 'DEX'],
-        spellcasting: { ability: 'WIS', type: 'half', prepares: 'list' }, weaponMastery: { count: 2 }, acFormulas: [],
-        progression: [{ level: 1, preparedSpells: 2 }, { level: 5, preparedSpells: 6 }, { level: 10, preparedSpells: 8 }],
-      },
-      // Rogue-ish class: the 2024 'martial-finesse-or-light' weapon subset (PR-5)
-      // — proficient with simple weapons + martial weapons that have Finesse or Light.
-      rogue: {
-        id: 'rogue', name: 'Rogue', kind: 'class', hitDie: 'd8', savingThrows: ['DEX', 'INT'],
-        spellcasting: null, weaponMastery: { count: 2 }, acFormulas: [],
-        startingProficiencies: { weapons: ['martial-finesse-or-light'] },
-      },
-    },
-    weapon: {
-      longsword: { id: 'longsword', name: 'Longsword', kind: 'weapon', category: 'martial', range: 'melee', damage: '1d8', damageType: 'slashing', properties: ['versatile'], versatileDamage: '1d10', mastery: 'Sap' },
-      dagger: { id: 'dagger', name: 'Dagger', kind: 'weapon', category: 'simple', range: 'melee', damage: '1d4', damageType: 'piercing', properties: ['finesse', 'light', 'thrown'], mastery: 'Nick' },
-      rapier: { id: 'rapier', name: 'Rapier', kind: 'weapon', category: 'martial', range: 'melee', damage: '1d8', damageType: 'piercing', properties: ['finesse'], mastery: 'Vex' },
-      greatsword: { id: 'greatsword', name: 'Greatsword', kind: 'weapon', category: 'martial', range: 'melee', damage: '2d6', damageType: 'slashing', properties: ['heavy', 'two-handed'], mastery: 'Graze' },
-    },
-    subclass: {
-      'eldritch-knight': {
-        id: 'eldritch-knight', name: 'Eldritch Knight', kind: 'subclass', classId: 'fighter',
-        spellcasting: { ability: 'INT', type: 'third', prepares: 'list' },
-        features: [{ level: 3, id: 'war-bond', name: 'War Bond' }],
-        progression: [{ level: 3, cantripsKnown: 2, preparedSpells: 3, spellSlots: [2] }],
-        classResources: [{ key: 'ek-pool', name: 'EK Pool', recharge: [{ on: 'short', amount: 'full' }], progression: [{ level: 3, max: 2 }, { level: 7, max: 3 }] }],
-      },
-      'life-domain': {
-        id: 'life-domain', name: 'Life Domain', kind: 'subclass', classId: 'cleric',
-        spells: [{ level: 3, ids: ['bless'], alwaysPrepared: true }],
-      },
-    },
-    feat: {
-      'fey-touched': { id: 'fey-touched', name: 'Fey Touched', grants: { abilityScoreIncrease: { choose: 1, amount: 1, from: ['INT', 'WIS', 'CHA'] }, spells: [{ ids: ['misty-step'], alwaysPrepared: true, free: '1/long' }] } },
-      tough: { id: 'tough', name: 'Tough', grants: { hpPerLevel: 2 } },
-      'magic-initiate': { id: 'magic-initiate', name: 'Magic Initiate', grants: { spells: [
-        { id: 'mi-cantrips', choose: 2, spellLevel: 0, from: { class: ['wizard'] }, alwaysPrepared: true },
-        { id: 'mi-spell', choose: 1, spellLevel: 1, from: { class: ['wizard'] }, alwaysPrepared: true, free: '1/long' },
-      ] } },
-    },
-    spell: {
-      bless: { id: 'bless', name: 'Bless', level: 1, school: 'Enchantment' },
-      'misty-step': { id: 'misty-step', name: 'Misty Step', level: 2, school: 'Conjuration' },
-      'dancing-lights': { id: 'dancing-lights', name: 'Dancing Lights', level: 0, school: 'Illusion' },
-      'faerie-fire': { id: 'faerie-fire', name: 'Faerie Fire', level: 1, school: 'Evocation' },
-      darkness: { id: 'darkness', name: 'Darkness', level: 2, school: 'Evocation' },
-      druidcraft: { id: 'druidcraft', name: 'Druidcraft', level: 0, school: 'Transmutation' },
-    },
-    armor: {
-      breastplate: { id: 'breastplate', name: 'Breastplate', kind: 'armor', armorType: 'medium', baseAC: 14, dexCap: 2, acBonus: 0 },
-      // A malformed body-armor record (garbage negative baseAC) — must never drag
-      // AC below the 10+DEX unarmored floor.
-      brokenplate: { id: 'brokenplate', name: 'Broken Plate', kind: 'armor', armorType: 'heavy', baseAC: -5, dexCap: 0, acBonus: 0 },
-    },
-    species: {
-      dwarf: { id: 'dwarf', name: 'Dwarf', kind: 'species', speeds: { walk: 30 }, senses: { darkvision: 120 }, resistances: ['poison'], grants: { hpPerLevel: 1 }, lineages: [{ id: 'hill-dwarf', name: 'Hill Dwarf', grants: { hpPerLevel: 1 } }] },
-      elf: { id: 'elf', name: 'Elf', kind: 'species', speeds: { walk: 30 }, senses: { darkvision: 60 }, resistances: [], lineages: [
-        { id: 'drow', name: 'Drow', grants: { senses: { darkvision: 120 }, spells: [{ level: 0, ids: ['dancing-lights'], alwaysPrepared: true }, { level: 3, ids: ['faerie-fire'], alwaysPrepared: true, free: '1/long' }, { level: 5, ids: ['darkness'], alwaysPrepared: true, free: '1/long' }] } },
-        { id: 'wood-elf', name: 'Wood Elf', grants: { speedBonus: 5, spells: [{ level: 0, ids: ['druidcraft'], alwaysPrepared: true }] } },
-      ] },
-    },
-    background: { sage: { id: 'sage', name: 'Sage', kind: 'background', skillProficiencies: ['arcana', 'history'] } },
-  };
-  const byName = (kind, name) => Object.values(store[kind] || {}).find((r) => (r.name || '').toLowerCase() === String(name).toLowerCase()) || null;
-  return {
-    apiVersion: 1,
-    listClasses: () => Object.values(store.class).map((c) => ({ id: c.id, name: c.name })),
-    listSubclasses: () => Object.values(store.subclass).map((c) => ({ id: c.id, name: c.name, classId: c.classId })),
-    listSkills: () => [], listSpells: () => [], listArmor: () => [], listWeapons: () => [],
-    getItem: (kind, id) => (store[kind] && store[kind][id]) || null,
-    getItemByName: byName,
-    getRecords: (kind) => Object.values(store[kind] || {}),
-  };
-}
-const withFake = () => dryRunRegister(register, META, { deps: { 'dnd55e-compendium': makeFake() } });
+const withFake = () => dryRunRegister(register, META, { deps: { 'dnd55e-players-handbook': makeFake() } });
 
-test('core-rules: provides a versioned rules API', () => {
+test('rules: provides a versioned rules API', () => {
   const { ok, rec, error } = dryRunRegister(register, META);
   assert.ok(ok, error);
   assert.ok(rec.provided && rec.provided.apiVersion === 1, 'apiVersion 1');
@@ -145,7 +27,7 @@ test('core-rules: provides a versioned rules API', () => {
   assert.ok(rec.settingsTabs.length >= 1, 'a settings tab');
 });
 
-test('core-rules: universal math is correct, with or without compendium', () => {
+test('rules: universal math is correct, with or without compendium', () => {
   const { rec } = dryRunRegister(register, META);
   const { sheet, warnings } = rec.provided.hydrate({ abilities: { STR: 16, DEX: 14 }, level: 5, className: 'Wizard' });
   assert.equal(sheet.abilities.STR.mod, 3, 'STR 16 → +3');
@@ -154,7 +36,7 @@ test('core-rules: universal math is correct, with or without compendium', () => 
   assert.ok(Array.isArray(warnings)); // no compendium → no class-lookup warning (data() is null)
 });
 
-test('core-rules: passes compendium data through + resolves the class record', () => {
+test('rules: passes compendium data through + resolves the class record', () => {
   const { rec } = withFake();
   assert.ok(rec.provided.listClasses().length >= 3, 'passthrough listClasses');
   const { sheet } = rec.provided.hydrate({ className: 'Wizard', level: 1 });
@@ -162,7 +44,7 @@ test('core-rules: passes compendium data through + resolves the class record', (
   assert.equal(sheet.derived.hitDie, 'd6', 'pulls hitDie from the class record');
 });
 
-test('core-rules: derives HP / AC / saves / slots / mastery from content', () => {
+test('rules: derives HP / AC / saves / slots / mastery from content', () => {
   const { rec } = withFake();
   const { sheet } = rec.provided.hydrate({
     abilities: { STR: 10, DEX: 14, CON: 14, INT: 16, WIS: 12, CHA: 8 }, level: 5, className: 'Wizard',
@@ -179,7 +61,7 @@ test('core-rules: derives HP / AC / saves / slots / mastery from content', () =>
   assert.equal(sheet.weaponMastery.slots, 2, 'wizard weapon mastery');                   // EQ-4
 });
 
-test('core-rules: AC takes the best eligible base, armor beats Unarmored Defense', () => {
+test('rules: AC takes the best eligible base, armor beats Unarmored Defense', () => {
   const { rec } = withFake();
   const abilities = { STR: 14, DEX: 14, CON: 16, INT: 8, WIS: 10, CHA: 8 };
   const unarmored = rec.provided.hydrate({ abilities, level: 5, className: 'Barbarian' }).sheet;
@@ -190,7 +72,7 @@ test('core-rules: AC takes the best eligible base, armor beats Unarmored Defense
   assert.equal(armored.derived.armorClass, 16, 'Breastplate 14 + DEX capped at 2'); // AC-2
 });
 
-test('core-rules: a third-caster subclass (classes[] shape) gets spells from the subclass', () => {
+test('rules: a third-caster subclass (classes[] shape) gets spells from the subclass', () => {
   const { rec } = withFake();
   const { sheet } = rec.provided.hydrate({
     abilities: { INT: 14 }, classes: [{ classId: 'fighter', level: 3, subclass: 'eldritch-knight' }],
@@ -203,7 +85,7 @@ test('core-rules: a third-caster subclass (classes[] shape) gets spells from the
   assert.equal(sheet.weaponMastery.slots, 3, 'fighter mastery');
 });
 
-test('core-rules: applies resolved skill proficiencies + expertise', () => {
+test('rules: applies resolved skill proficiencies + expertise', () => {
   const { rec } = withFake();
   const { sheet } = rec.provided.hydrate({
     abilities: { DEX: 14, INT: 10 }, className: 'Wizard', level: 5,
@@ -215,7 +97,7 @@ test('core-rules: applies resolved skill proficiencies + expertise', () => {
   assert.equal(sheet.skills.arcana.proficient, false, 'unchosen skill not proficient');
 });
 
-test('core-rules: applies ability grants over base scores, clamped to 20', () => {
+test('rules: applies ability grants over base scores, clamped to 20', () => {
   const { rec } = withFake();
   const { sheet } = rec.provided.hydrate({
     baseStats: { STR: 15, CON: 13 }, className: 'Barbarian', level: 1,
@@ -229,7 +111,7 @@ test('core-rules: applies ability grants over base scores, clamped to 20', () =>
   assert.equal(capped.abilities.STR.score, 20, 'clamped at 20');           // AB-2
 });
 
-test('core-rules: computes weapon attacks for equipped weapons (EQ-3/4/5)', () => {
+test('rules: computes weapon attacks for equipped weapons (EQ-3/4/5)', () => {
   const { rec } = withFake();
   const { sheet } = rec.provided.hydrate({
     abilities: { STR: 16, DEX: 14 }, className: 'Fighter', level: 1,
@@ -248,7 +130,7 @@ test('core-rules: computes weapon attacks for equipped weapons (EQ-3/4/5)', () =
   assert.equal(sheet.attunement.count, 1, 'one attuned item');                  // EQ-3
 });
 
-test('core-rules: grants always-prepared spells from subclass + feat (provenance)', () => {
+test('rules: grants always-prepared spells from subclass + feat (provenance)', () => {
   const { rec } = withFake();
   const { sheet } = rec.provided.hydrate({
     abilities: { WIS: 14 }, classes: [{ classId: 'wizard', level: 5, subclass: 'life-domain' }],
@@ -262,7 +144,7 @@ test('core-rules: grants always-prepared spells from subclass + feat (provenance
   assert.ok(misty && misty.source.type === 'feat', 'feat grants Misty Step');   // SP-1/SP-10
 });
 
-test('core-rules: species grants senses, resistances, and a per-level HP bonus', () => {
+test('rules: species grants senses, resistances, and a per-level HP bonus', () => {
   const { rec } = withFake();
   const { sheet } = rec.provided.hydrate({ abilities: { CON: 14 }, level: 5, className: 'Wizard', race: 'Dwarf' });
   assert.equal(sheet.senses.darkvision, 120, 'take-highest darkvision'); // SB-4
@@ -271,14 +153,14 @@ test('core-rules: species grants senses, resistances, and a per-level HP bonus',
   assert.equal(sheet.derived.maxHp, 37, '32 base + Dwarven Toughness (+1/level × 5)'); // HP-3
 });
 
-test('core-rules: caster surfaces per-level cantrips-known + prepared', () => {
+test('rules: caster surfaces per-level cantrips-known + prepared', () => {
   const { rec } = withFake();
   const { sheet } = rec.provided.hydrate({ abilities: { INT: 16 }, className: 'Wizard', level: 5 });
   assert.equal(sheet.spellcasting.perClass[0].cantripsKnown, 4, 'L5 wizard cantrips');  // SP-7
   assert.equal(sheet.spellcasting.perClass[0].preparedLimit, 9, 'L5 wizard prepared');  // SP-2
 });
 
-test('core-rules: selected lineage applies senses / speed / per-level HP', () => {
+test('rules: selected lineage applies senses / speed / per-level HP', () => {
   const { rec } = withFake();
   const drow = rec.provided.hydrate({ abilities: { CON: 12 }, className: 'Wizard', level: 5, race: 'Elf', lineage: 'drow' }).sheet;
   assert.equal(drow.senses.darkvision, 120, 'drow take-highest 60→120');           // SB-4
@@ -288,7 +170,7 @@ test('core-rules: selected lineage applies senses / speed / per-level HP', () =>
   assert.equal(hill.derived.maxHp, 42, '32 + (species 1 + lineage 1)/level × 5');  // HP-3
 });
 
-test('core-rules: lineage spells are level-gated + provenance-tagged', () => {
+test('rules: lineage spells are level-gated + provenance-tagged', () => {
   const { rec } = withFake();
   const ids = (lvl) => rec.provided.hydrate({ className: 'Wizard', level: lvl, race: 'Elf', lineage: 'drow' }).sheet.spellcasting.granted.map((g) => g.ref);
   const l1 = ids(1);
@@ -299,7 +181,7 @@ test('core-rules: lineage spells are level-gated + provenance-tagged', () => {
   assert.equal(l5.find((g) => g.ref === 'faerie-fire').source.type, 'species', 'tagged species provenance');
 });
 
-test('core-rules: a single-class half-caster uses its OWN slot table (2024 L1)', () => {
+test('rules: a single-class half-caster uses its OWN slot table (2024 L1)', () => {
   const { rec } = withFake();
   const l1 = rec.provided.hydrate({ abilities: { CHA: 16 }, className: 'Paladin', level: 1 }).sheet;
   assert.deepEqual(l1.spellcasting.slots, [2], 'L1 paladin: two 1st-level slots (own table), not [] from floor');
@@ -308,7 +190,7 @@ test('core-rules: a single-class half-caster uses its OWN slot table (2024 L1)',
   assert.deepEqual(l5.spellcasting.slots, [4, 2], 'L5 paladin = 4× 1st, 2× 2nd');
 });
 
-test('core-rules: single-class half-caster reads printed slots at high levels (not the heuristic)', () => {
+test('rules: single-class half-caster reads printed slots at high levels (not the heuristic)', () => {
   const { rec } = withFake();
   // The combined-caster-level heuristic diverges from the printed Paladin table
   // at high levels (it would give L19 = [4,3,3,3,2]); the class table wins.
@@ -318,7 +200,7 @@ test('core-rules: single-class half-caster reads printed slots at high levels (n
   assert.deepEqual(slots(19), [4, 3, 3, 1], 'Paladin L19 printed slots (= L20), NOT the heuristic [4,3,3,3,2]');
 });
 
-test('core-rules: single-class full-caster reads printed slots at high levels', () => {
+test('rules: single-class full-caster reads printed slots at high levels', () => {
   const { rec } = withFake();
   const slots = (lvl) => rec.provided.hydrate({ abilities: { INT: 16 }, className: 'Wizard', level: lvl }).sheet.spellcasting.slots;
   assert.deepEqual(slots(11), [4, 3, 3, 2, 1, 1], 'Wizard L11 printed slots');
@@ -326,7 +208,7 @@ test('core-rules: single-class full-caster reads printed slots at high levels', 
   assert.deepEqual(slots(19), [4, 3, 3, 3, 3, 1, 1, 1, 1], 'Wizard L19 printed slots');
 });
 
-test('core-rules: single-class caster falls back to the heuristic when content lacks spellSlots', () => {
+test('rules: single-class caster falls back to the heuristic when content lacks spellSlots', () => {
   const { rec } = withFake();
   // Ranger ships no spellSlots in its progression → the engine must fall back to
   // the ceil(level/2) caster-level heuristic rather than returning [].
@@ -335,7 +217,7 @@ test('core-rules: single-class caster falls back to the heuristic when content l
   assert.ok(r5.spellcasting.slots.length > 0, 'heuristic never yields empty slots for an odd-level half-caster');
 });
 
-test('core-rules: multiclassing two half-casters double-rounds (stingier than single)', () => {
+test('rules: multiclassing two half-casters double-rounds (stingier than single)', () => {
   const { rec } = withFake();
   const mc = rec.provided.hydrate({ classes: [{ classId: 'paladin', level: 5 }, { classId: 'ranger', level: 5 }] }).sheet;
   assert.deepEqual(mc.spellcasting.slots, [4, 3], 'Pal5/Ran5 → floor(5/2)+floor(5/2)=4 combined → [4,3]');  // MC-2
@@ -343,7 +225,7 @@ test('core-rules: multiclassing two half-casters double-rounds (stingier than si
   assert.deepEqual(solo.spellcasting.slots, [4, 3, 2], 'but single Paladin 10 keeps its own table');
 });
 
-test('core-rules: choose-grants resolve picks + expose pending choices (SP-10)', () => {
+test('rules: choose-grants resolve picks + expose pending choices (SP-10)', () => {
   const { rec } = withFake();
   // Magic Initiate (2 cantrips + 1 spell). No picks → 2 pending choices, nothing granted from it.
   const empty = rec.provided.hydrate({ className: 'Wizard', level: 5, feats: [{ featId: 'magic-initiate' }] }).sheet;
@@ -364,14 +246,14 @@ test('core-rules: choose-grants resolve picks + expose pending choices (SP-10)',
   assert.equal(picked.spellcasting.pendingChoices.find((x) => x.key === cantrips.key).picked.length, 2, 'picks reflected (capped)');
 });
 
-test('core-rules: a feat with hpPerLevel (Tough) raises max HP', () => {
+test('rules: a feat with hpPerLevel (Tough) raises max HP', () => {
   const { rec } = withFake();
   const base = rec.provided.hydrate({ abilities: { CON: 14 }, className: 'Wizard', level: 5 }).sheet.derived.maxHp;
   const tough = rec.provided.hydrate({ abilities: { CON: 14 }, className: 'Wizard', level: 5, feats: [{ featId: 'tough' }] }).sheet.derived.maxHp;
   assert.equal(tough - base, 10, 'Tough = +2/level × 5');
 });
 
-test('core-rules: first character level gets the max hit die; later levels average (HP-1)', () => {
+test('rules: first character level gets the max hit die; later levels average (HP-1)', () => {
   const { rec } = withFake();
   // Single-class Fighter L1 (d10), CON 10 → +0, no species: max d10 = 10.
   const single = rec.provided.hydrate({
@@ -393,7 +275,7 @@ test('core-rules: first character level gets the max hit die; later levels avera
   assert.equal(wizardFirst, 12, 'Wizard first (max d6=6) + Fighter (avg d10=6) = 12');
 });
 
-test('core-rules: AC never drops below the 10+DEX unarmored floor for a malformed armor record (AC-1)', () => {
+test('rules: AC never drops below the 10+DEX unarmored floor for a malformed armor record (AC-1)', () => {
   const { rec } = withFake();
   const abilities = { DEX: 14, CON: 10 };  // +2 DEX → floor 12
   const bad = rec.provided.hydrate({
@@ -404,7 +286,7 @@ test('core-rules: AC never drops below the 10+DEX unarmored floor for a malforme
   assert.ok(bad.ac.candidates.some((c) => c.id === 'unarmored'), 'unarmored candidate always present');
 });
 
-test('core-rules: martial-finesse-or-light proficiency covers only finesse/light martials (PR-5)', () => {
+test('rules: martial-finesse-or-light proficiency covers only finesse/light martials (PR-5)', () => {
   const { rec } = withFake();
   const { sheet } = rec.provided.hydrate({
     abilities: { STR: 12, DEX: 16 }, className: 'Rogue', level: 1,
@@ -426,7 +308,7 @@ test('core-rules: martial-finesse-or-light proficiency covers only finesse/light
   assert.equal(greatsword.attackBonus, 1, 'STR +1, no PB (not proficient)');
 });
 
-test('core-rules: saveProf manually unions extra saving-throw proficiencies (PR-4)', () => {
+test('rules: saveProf manually unions extra saving-throw proficiencies (PR-4)', () => {
   const { rec } = withFake();
   // Wizard saves are INT/WIS; a manual saveProf adds STR on top of the class set.
   const { sheet } = rec.provided.hydrate({
@@ -438,7 +320,7 @@ test('core-rules: saveProf manually unions extra saving-throw proficiencies (PR-
   assert.equal(sheet.saves.DEX.proficient, false, 'untouched save stays non-proficient');
 });
 
-test('core-rules: expertise on a non-proficient skill is ignored (PR-2)', () => {
+test('rules: expertise on a non-proficient skill is ignored (PR-2)', () => {
   const { rec } = withFake();
   const { sheet } = rec.provided.hydrate({
     abilities: { DEX: 14 }, className: 'Wizard', level: 5,
@@ -450,7 +332,7 @@ test('core-rules: expertise on a non-proficient skill is ignored (PR-2)', () => 
   assert.equal(sheet.skills.acrobatics.total, 2, 'just the DEX mod, no PB doubling');
 });
 
-test('core-rules: progression lookup above the seed cap returns the highest row ≤ level', () => {
+test('rules: progression lookup above the seed cap returns the highest row ≤ level', () => {
   const { rec } = withFake();
   // Ranger progression rows stop at L10; querying L15 must use the L10 row
   // (preparedSpells 8), not return null / the L1 row.
@@ -458,7 +340,7 @@ test('core-rules: progression lookup above the seed cap returns the highest row 
   assert.equal(r15.spellcasting.perClass[0].preparedLimit, 8, 'L15 ranger uses the L10 cap row (highest ≤ 15)');
 });
 
-test('core-rules: emits pools + hit dice + slots + charges with structured recharge (FE-2/FE-3)', () => {
+test('rules: emits pools + hit dice + slots + charges with structured recharge (FE-2/FE-3)', () => {
   const { rec } = withFake();
   const s1 = rec.provided.hydrate({ abilities: { CHA: 16 }, className: 'Barbarian', level: 1 }).sheet;
   const R = (s, k) => (s.resources || []).find((r) => r.key === k);
@@ -491,7 +373,7 @@ test('core-rules: emits pools + hit dice + slots + charges with structured recha
   assert.deepEqual(ch.recharge, [{ on: 'long', amount: 'full' }], '1/long → full-on-long');
 });
 
-test('core-rules: subclass resources are emitted, resolved at the class level (FE-2)', () => {
+test('rules: subclass resources are emitted, resolved at the class level (FE-2)', () => {
   const { rec } = withFake();
   const s = rec.provided.hydrate({ classes: [{ classId: 'fighter', level: 7, subclass: 'eldritch-knight' }] }).sheet;
   const r = (s.resources || []).find((x) => x.key === 'ek-pool');
@@ -500,7 +382,7 @@ test('core-rules: subclass resources are emitted, resolved at the class level (F
   assert.equal(r.source.type, 'subclass', 'tagged with subclass provenance');
 });
 
-test('core-rules: renderers survive the smoke pass', () => {
+test('rules: renderers survive the smoke pass', () => {
   const { rec } = dryRunRegister(register, META);
   assert.ok(smokeRegistrations(rec).ok, JSON.stringify(smokeRegistrations(rec).failures));
 });

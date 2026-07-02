@@ -335,5 +335,7 @@ export default {
   // ── Settings / help ──────────────────────────────────────────────
   'settings.label':   'Character Sheets',
   'help.title':       'D&D 5.5e Character Sheets',
-  'help.body':        'Adds a fully hand-fillable D&D 5.5e character sheet to every character page, stored per character. Works standalone; when the rules engine and compendium addons are installed it can auto-fill stats from class/species/background choices. Characters in the database: {count}.',
+  'help.body':        'Adds a fully hand-fillable D&D 5.5e character sheet (with a built-in rules engine) to every character page, stored per character. Works standalone; when a rulebook addon (Player’s Handbook) is installed it auto-fills stats from class/species/background choices. Characters in the database: {count}.',
+  'rules.connected':    'Rulebook data connected — {count} classes available. The Builder and auto-computed stats are active.',
+  'rules.disconnected': 'No rulebook addon installed — the sheet is fully hand-fillable. Install the D&D 5.5e Player’s Handbook addon to unlock the Builder and auto-computed stats.',
 };

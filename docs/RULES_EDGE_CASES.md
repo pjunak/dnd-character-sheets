@@ -6,10 +6,14 @@
 > of reworking it three times. Each item has a stable ID (reference it in commits/issues),
 > a description of *why it bites*, and a recommended solution split across the three addons.
 >
-> **Ownership tags** — who implements the fix:
-> `[S]` dnd55e-sheets (UI / per-character storage) ·
-> `[R]` dnd55e-core-rules (engine / hydration / math) ·
-> `[C]` dnd55e-compendium (content record shape / declared grants).
+> **Ownership tags** — which LAYER implements the fix:
+> `[S]` the sheet UI / per-character storage (this repo's panels + model.js) ·
+> `[R]` the rules engine (this repo's `rules/` module — merged in from the
+> retired standalone `dnd55e-core-rules` addon) ·
+> `[C]` the book data addon (`dnd55e-players-handbook`, formerly
+> `dnd55e-compendium`; content record shape / declared grants).
+> Older entries below still say "core-rules"/"compendium" — read those as the
+> rules module / the Player's Handbook addon respectively.
 >
 > **Severity** — `★★★` must get right now (reworking it later is expensive) ·
 > `★★` important, design the seam now even if implemented later ·
@@ -337,3 +341,11 @@ preview echo, and `scripts/dev-install-addon.cjs`. Covered by new tests in `test
 `optionalDependencies: { "dnd55e-core-rules": ">=0.1.0" }`, so its lazy `getRules()` probe lights up
 (and the Builder tab appears) automatically once `core-rules` ships.
 ```
+
+> **2026-07-02 update:** the standalone `dnd55e-core-rules` addon was MERGED into this
+> repo as the `rules/` module (the engine always ships with the sheet now). The
+> optional dependency — and the `getRules()` probe — retarget to the book DATA addon:
+> `optionalDependencies: { "dnd55e-players-handbook": ">=0.1.0" }`. The Builder tab and
+> every engine-mode branch light up exactly when book data is installed; the host
+> `optionalDependencies` mechanism described above is unchanged and still what makes
+> the soft seam work.

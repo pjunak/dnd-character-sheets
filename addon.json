@@ -1,7 +1,7 @@
 {
   "id": "dnd55e-sheets",
   "name": "D&D 5.5e Character Sheets",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "apiVersion": 1,
   "hostVersion": ">=1.0.0",
   "entry": "entry.js",
@@ -13,8 +13,8 @@
     "data:write:characters.addonData"
   ],
   "optionalDependencies": {
-    "dnd55e-core-rules": ">=0.1.0"
+    "dnd55e-players-handbook": ">=0.1.0"
   },
-  "tests": { "client": "tests/smoke.mjs" },
-  "summary": "A fully hand-fillable D&D 5.5e character sheet on every character page; auto-fills from the rules engine + compendium addons when installed."
+  "tests": { "client": ["tests/smoke.mjs", "tests/rules.mjs"] },
+  "summary": "A fully hand-fillable D&D 5.5e character sheet with a built-in rules engine on every character page; auto-fills from per-book data addons (Player's Handbook) when installed, and provides the rules API for other addons."
 }

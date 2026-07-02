@@ -39,16 +39,23 @@ side-card, which lands inside the Overview tab); editors
 anonymous viewers get a clean read-only sheet. Live-play controls (HP ±, trackers,
 spell prep, proficiency toggles) follow the same gate.
 
-Everything can be entered by hand. The only math done here is universal D&D arithmetic that
-holds regardless of content — ability modifiers `⌊(score−10)/2⌋` and proficiency totals
-(`mod + PB` when proficient). It has **no dependencies** and works entirely standalone.
+Everything can be entered by hand. The **rules engine is built in** (`rules/engine.js`, a
+pure host-free module merged from the retired `dnd55e-core-rules` addon) — but without
+book data it only does universal D&D arithmetic (ability modifiers `⌊(score−10)/2⌋`,
+proficiency totals). The addon has **no hard dependencies** and works entirely standalone.
 
 ## Designed to grow
 
-- **Rules in harmony (later):** the sheet *soft-uses* the `dnd55e-core-rules` engine (which
-  reads `dnd55e-compendium` data) to auto-fill stats from class/species/background choices
-  and to turn free-text fields into dropdowns. If those addons are absent, the sheet falls
-  back to manual entry — installing/uninstalling them never breaks a sheet.
+- **Rules in harmony:** the sheet *soft-uses* per-book data addons
+  (`dnd55e-players-handbook`, a manifest `optionalDependencies` entry) — when one is
+  installed, the built-in engine auto-fills stats from class/species/background choices,
+  free-text fields become dropdowns, and the Builder tab appears. If the book addon is
+  absent, the sheet falls back to manual entry — installing/uninstalling it never breaks
+  a sheet. Future books (Monster Manual, DMG) ship as further standalone data addons the
+  DM can toggle per campaign.
+- **Rules API for other addons:** the addon `provide()`s the same rules api the panels
+  consume (`hydrate` / `derive.*` / `list*` passthroughs), so a future combat or NPC
+  addon can declare a dependency on `dnd55e-sheets` and reuse the engine.
 - **Localization:** all UI strings flow through a vendored `i18n.js` that mirrors the host's
   localization design (English source of truth, per-locale catalogs layered on top, browser
   default, per-key English fallback). v1 ships English only; adding a language is dropping a
@@ -59,13 +66,15 @@ holds regardless of content — ability modifiers `⌊(score−10)/2⌋` and pro
 No build step (browser ES modules). From a sibling checkout of the host:
 
 ```sh
-node scripts/dev-install-addon.cjs ../dnd_5.5e_character_sheets_addon   # from the ttrpg-codex repo
+node scripts/dev-install-addon.cjs ../dnd55e-character-sheets   # from the ttrpg-codex repo
 ```
 
-Run the client smoke test (assumes the host repo is a sibling directory):
+Run the test suites (assume the host repo is a sibling directory) — the sheet
+smoke tests and the pure rules-engine tests:
 
 ```sh
 node --test tests/smoke.mjs
+node --test tests/rules.mjs
 ```
 
 See [`AGENTS.md`](AGENTS.md) for the full addon authoring contract.

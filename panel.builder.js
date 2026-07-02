@@ -2,10 +2,12 @@
 //  panel.builder.js — the Builder (guided progression + edit surface, engine mode).
 //
 //  Writes the rich decision model (classes[]/baseStats/grants/choices); every edit
-//  re-hydrates + materializes the DEG-1 fallback. Reached only when the engine is
-//  present (the tab is gated on it). Every engine list-call is feature-detected
-//  through callEngine, so a partial engine degrades a section to "content pending"
-//  rather than throwing.
+//  re-hydrates + materializes the DEG-1 fallback. Reached only when rulebook
+//  data is present (the tab is gated on `getRules()`), and the rules api is
+//  built in-addon (rules/api.js) with a guaranteed shape — its list* members
+//  return [] while data is missing, so sections degrade to empty pickers
+//  rather than throwing. (The old cross-addon `callEngine` feature-detection
+//  died with the dnd55e-core-rules merge.)
 // ═══════════════════════════════════════════════════════════════
 
 export function makeBuilderPanel(ctx) {
@@ -13,12 +15,6 @@ export function makeBuilderPanel(ctx) {
   const { esc, dataAction, dataOn } = host.h;
   const { section, miniStat, selectBox, fieldRow, choiceBlock, warningsBlock, numField } = ui;
   const { builderModel, collectChoices } = E;
-
-  // Feature-detect every engine list-method: `(engine.fn ? engine.fn(args) : [])
-  // || []`. A partial engine (missing listSpecies/listFeats/…) degrades the
-  // dependent section gracefully instead of erroring it.
-  const callEngine = (engine, name, ...args) =>
-    ((engine && typeof engine[name] === 'function') ? engine[name](...args) : []) || [];
 
   function panelBuilder(c, s, editable, comp, warnings, engine) {
     if (!engine) return panelBuilderStub();
@@ -106,8 +102,8 @@ export function makeBuilderPanel(ctx) {
 
   // Identity: species (+lineage), background, alignment, player.
   function builderIdentity(c, s, engine, ro) {
-    const speciesOpts = callEngine(engine, 'listSpecies').map((o) => ({ value: o.name, label: o.name }));
-    const bgOpts = callEngine(engine, 'listBackgrounds').map((o) => ({ value: o.name, label: o.name }));
+    const speciesOpts = engine.listSpecies().map((o) => ({ value: o.name, label: o.name }));
+    const bgOpts = engine.listBackgrounds().map((o) => ({ value: o.name, label: o.name }));
     const speciesRec = s.race ? (engine.getItemByName('species', s.race) || engine.getItem('species', s.race)) : null;
     const lineageOpts = (speciesRec && speciesRec.lineages || []).map((l) => ({ value: l.id, label: l.name }));
     const rows = [
@@ -120,11 +116,11 @@ export function makeBuilderPanel(ctx) {
 
   // Classes: ordered classes[] with class / level / subclass + add/remove.
   function builderClasses(c, classes, engine, ro) {
-    const classOpts = callEngine(engine, 'listClasses').map((o) => ({ value: o.id, label: o.name }));
+    const classOpts = engine.listClasses().map((o) => ({ value: o.id, label: o.name }));
     const rows = classes.map((cl, idx) => {
       const rec = cl.classId ? engine.getItem('class', cl.classId) : null;
       const subLevel = rec ? num(rec.subclassLevel, 3) : 3;
-      const subOpts = callEngine(engine, 'listSubclasses', cl.classId).map((o) => ({ value: o.id, label: o.name }));
+      const subOpts = engine.listSubclasses(cl.classId).map((o) => ({ value: o.id, label: o.name }));
       const showSub = rec && num(cl.level, 1) >= subLevel;
       const levelCtl = ro
         ? `<span style="color:var(--text-parchment)">${esc(String(num(cl.level, 1)))}</span>`
@@ -179,10 +175,10 @@ export function makeBuilderPanel(ctx) {
     } else if (Array.isArray(ch.from)) {
       options = ch.from.map((v) => ({ value: v, label: titleize(v) }));
     } else if (ch.kind === 'weaponMastery') {
-      options = callEngine(engine, 'listWeapons').map((w) => ({ value: w.id, label: w.name }));
+      options = engine.listWeapons().map((w) => ({ value: w.id, label: w.name }));
       label = t('builder.weaponMastery');
     } else if (ch.kind === 'feat') {
-      options = callEngine(engine, 'listFeats', ch.category ? { category: ch.category } : undefined).map((f) => ({ value: f.id, label: f.name }));
+      options = engine.listFeats(ch.category ? { category: ch.category } : undefined).map((f) => ({ value: f.id, label: f.name }));
     }
     if (!options || !options.length) {
       return choiceBlock(label, `<span style="color:var(--text-muted);font-size:var(--text-xs)">${esc(t('builder.contentPending'))}</span>`);
@@ -211,7 +207,7 @@ export function makeBuilderPanel(ctx) {
     } else if (mode === 'feat') {
       const featKey = key + ':feat';
       const chosenFeat = s.featureChoices[featKey] || '';
-      const featOpts = callEngine(engine, 'listFeats', { category: 'general' }).map((f) => ({ value: f.id, label: f.name }));
+      const featOpts = engine.listFeats({ category: 'general' }).map((f) => ({ value: f.id, label: f.name }));
       detail = `<div style="margin-top:var(--space-1);min-width:12rem">${selectBox(chosenFeat, featOpts, dataOn('change', host.action('builderChoose'), c.id, featKey, '$value'), t('builder.choose'), ro)}</div>`;
       // Half-feat with a CHOICE of ability → ability sub-pick (AB-2). A fixed
       // single-option bump is auto-applied in builderChoose; granted spells +

@@ -1,47 +1,29 @@
 // ═══════════════════════════════════════════════════════════════
 //  helpers.js — domain constants + pure helpers, shared by every module.
 //
+//  RULES facts (ability list, skill→ability map, point buy, HP clamp, the mod
+//  math) live in rules/engine.js — the single source of D&D system knowledge —
+//  and are re-exported here so panels keep one import site (ctx). This file
+//  adds only UI-side constants + formatting.
+//
 //  No host/DOM coupling except `uid`, which uses host.store.generateId for
 //  stable ids (with a safe random fallback). `makeHelpers(host)` binds that one
 //  dependency; everything else is a free pure function exported directly.
 // ═══════════════════════════════════════════════════════════════
 
-// ── Domain constants ─────────────────────────────────────────────
-export const ABILITIES = ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'];
+import { ABILITIES, SKILL_ABILITY, num, abilityMod, POINT_BUY, pointCost, pointsSpent, clampHp } from './rules/engine.js';
+export { ABILITIES, num, abilityMod, POINT_BUY, pointCost, pointsSpent, clampHp };
+
+// ── Domain constants (UI-side) ───────────────────────────────────
 export const COINS = ['pp', 'gp', 'ep', 'sp', 'cp'];
 export const LOCATIONS = ['equipped', 'ready', 'pack']; // carry state (EQ-1)
-// Each skill maps to its governing ability (D&D 2024).
-export const SKILLS = [
-  { id: 'acrobatics', ability: 'DEX' }, { id: 'animalHandling', ability: 'WIS' },
-  { id: 'arcana', ability: 'INT' },     { id: 'athletics', ability: 'STR' },
-  { id: 'deception', ability: 'CHA' },  { id: 'history', ability: 'INT' },
-  { id: 'insight', ability: 'WIS' },    { id: 'intimidation', ability: 'CHA' },
-  { id: 'investigation', ability: 'INT' }, { id: 'medicine', ability: 'WIS' },
-  { id: 'nature', ability: 'INT' },     { id: 'perception', ability: 'WIS' },
-  { id: 'performance', ability: 'CHA' }, { id: 'persuasion', ability: 'CHA' },
-  { id: 'religion', ability: 'INT' },   { id: 'sleightOfHand', ability: 'DEX' },
-  { id: 'stealth', ability: 'DEX' },    { id: 'survival', ability: 'WIS' },
-];
+// Display-friendly skill list, derived from the engine's skill→ability map so
+// the two encodings can never drift (D&D 2024).
+export const SKILLS = Object.entries(SKILL_ABILITY).map(([id, ability]) => ({ id, ability }));
 
-// ── Pure helpers ─────────────────────────────────────────────────
-export const num = (v, d = 0) => { const n = Number(v); return Number.isFinite(n) ? n : d; };
-export const abilityMod = (score) => Math.floor((num(score, 10) - 10) / 2);
+// ── Pure helpers (formatting) ────────────────────────────────────
 export const signed = (n) => (n >= 0 ? '+' + n : String(n));
 export const titleize = (id) => String(id || '').replace(/[-_:]/g, ' ').replace(/\b\w/g, (ch) => ch.toUpperCase());
-
-// D&D 2024 standard point buy — 27 points; each BASE score 8–15; the cost per
-// point rises past 13. `pointCost` clamps out-of-range scores into [8,15] for
-// costing; `pointsSpent` totals a {STR..CHA} base map.
-export const POINT_BUY = { budget: 27, min: 8, max: 15, cost: { 8: 0, 9: 1, 10: 2, 11: 3, 12: 4, 13: 5, 14: 7, 15: 9 } };
-export const pointCost = (v) => POINT_BUY.cost[Math.max(POINT_BUY.min, Math.min(POINT_BUY.max, num(v, POINT_BUY.min)))] || 0;
-export const pointsSpent = (base) => ABILITIES.reduce((sum, a) => sum + pointCost(base && base[a]), 0);
-
-/** HP clamp — one rule for all sites. With a max>0, clamp into [0, max];
- *  with no max set (0), only floor at 0 (the ± action stays usable). */
-export const clampHp = (hp, maxHp) => {
-  const h = num(hp, 0), m = num(maxHp, 0);
-  return m > 0 ? Math.max(0, Math.min(m, h)) : Math.max(0, h);
-};
 
 /** A blank sheet — the v2 shape stored under addonData[NS]. Only player
  *  decisions are stored; in standalone (no engine) the entered numbers ARE
