@@ -7,11 +7,14 @@
 //  portrait, species, description, relationships…); this addon reads those and
 //  adds ONLY the D&D mechanics — it never duplicates them.
 //
-//  ── Integration: a tab strip in place of the lore (ARCH) ──
-//  We claim the host's `characters:body` fragment (registerFragmentOp · replace)
-//  and turn it into a tab strip. The host's side-card (portrait/name/species) and
-//  its relationship/event sections render natively ABOVE us; the lore becomes our
-//  first "Overview" tab (reused, not copied). Tabs:
+//  ── Integration: a full-width tab strip in place of the article body (ARCH) ──
+//  We claim the host's `characters:body` fragment (registerFragmentOp · replace),
+//  which makes the article FULL-WIDTH: the host drops its side rail and folds the
+//  whole wiki profile INTO the `html` we receive — the side-card (✏ Upravit +
+//  portrait/name/species/facts, floated `.article-sidecard-inbody`), every
+//  relationship/event/known/questions/pets section, then the lore. That blob
+//  becomes our first "Overview" tab (reused, not copied), so the tab strip sits
+//  at the very top of the page; only the host's breadcrumb bar rides above. Tabs:
 //    • Overview        — the host's lore (description), passed in as `html`.
 //    • Character Sheet — ability scores, saving throws, skills, notes.
 //    • Combat          — attacks from equipped/ready weapons + resource trackers.
@@ -22,10 +25,12 @@
 //  sits under the tabs on the mechanical tabs (panel.header.js).
 //
 //  ── Editing: direct, role-gated, NO separate mode ──
-//  The host already owns the one edit affordance ("✏ Upravit", which edits
-//  identity/lore). We don't add a second button: editors (`!isAnonymous()`) edit
-//  D&D directly in the tabs (and the Builder); anonymous viewers see read-only.
-//  Live-play controls (HP ±, trackers, prep, prof toggles) follow the same gate.
+//  The host already owns the one edit affordance — "✏ Upravit" rides the
+//  side-card, which lands inside our Overview tab, so it appears exactly with
+//  the identity/lore content it edits. We don't add a second button: editors
+//  (`!isAnonymous()`) edit D&D directly in the tabs (and the Builder);
+//  anonymous viewers see read-only. Live-play controls (HP ±, trackers, prep,
+//  prof toggles) follow the same gate.
 //
 //  ── Module layout (decomposed; native ES modules, no build step) ──
 //    helpers.js          pure constants + helpers.
@@ -177,9 +182,10 @@ export default function register(host) {
     },
   });
 
-  // The Overview = the host lore. In full-width mode the host folds its side-card
-  // (portrait + identity + facts) into this html as a floated `.article-sidecard-inbody`
-  // block; `display:flow-root` contains that float so the lore wraps around the
+  // The Overview = the host's whole wiki profile: the folded side-card (✏ Upravit
+  // + portrait + identity + facts, a floated `.article-sidecard-inbody` block),
+  // the relationship/event/known/questions/pets sections, then the lore.
+  // `display:flow-root` contains that float so the content wraps around the
   // portrait cleanly (magazine-style) without bleeding into the next tab.
   function lorePanel(html) {
     const lore = (typeof html === 'string' && html.trim()) ? html

@@ -7,17 +7,19 @@ framework). Addon id: `dnd55e-sheets`.
 The sheet stores its D&D data per character in `character.addonData['dnd55e-sheets']`
 — it does **not** own a collection, and it does **not** duplicate anything the host
 already owns (name, portrait, species, lore, relationships). It integrates by claiming
-the host's character `body` fragment (`registerFragmentOp` · replace) and turning it
-into a tab strip, so the host's side-card and relationship sections render natively
-above it.
+the host's character `body` fragment (`registerFragmentOp` · replace), which makes the
+article full-width: the host folds its side-card and every relationship/event section
+into the body html this addon receives, and the addon shows that whole wiki profile as
+its first tab.
 
 ## What it does
 
-The character's native page **is** the Overview: portrait, lore, connections and facts
-stay exactly where the host puts them. The addon turns the lore block into the first
-tab of a strip and adds the D&D tabs after it:
+The character's native page **is** the Overview tab: the host's side-card (with its
+✏ Upravit button), connections, facts and lore arrive folded into the body fragment,
+so the tab strip sits at the very top of the page (only the host's breadcrumb rides
+above it). The D&D tabs follow:
 
-- **Overview** — the host's own description (lore), reused as tab 1 (not copied).
+- **Overview** — the host's own wiki profile (side-card + sections + lore), reused as tab 1 (not copied).
 - **Character Sheet** — D&D identity (class/level/background/alignment), ability scores,
   saving throws, skills, mechanical notes.
 - **Combat** — attacks from equipped/ready weapons + resource trackers (Rage, Ki, slots…).
@@ -31,7 +33,8 @@ A slim **vitals bar** (HP with live **+/-**, AC, Initiative, Speed, Proficiency,
 Perception, plus a class-level line) sits under the tabs on the mechanical tabs.
 
 **Editing is direct and role-gated — there is no separate "edit mode" and no second edit
-button.** The host's own **✏ Upravit** owns identity/lore/portrait; editors
+button.** The host's own **✏ Upravit** owns identity/lore/portrait (it rides the host
+side-card, which lands inside the Overview tab); editors
 (`!isAnonymous()`) change D&D stats directly in the tabs (and the Builder), while
 anonymous viewers get a clean read-only sheet. Live-play controls (HP ±, trackers,
 spell prep, proficiency toggles) follow the same gate.
