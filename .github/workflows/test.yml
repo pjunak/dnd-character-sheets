@@ -1,0 +1,27 @@
+name: Tests
+
+# The tests import the published addon-test harness from a SIBLING checkout
+# of the host repo (../ttrpg-codex), so CI checks out both.
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          path: dnd55e-character-sheets
+
+      - uses: actions/checkout@v5
+        with:
+          repository: pjunak/ttrpg-codex
+          path: ttrpg-codex
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+
+      - run: node --test tests/smoke.mjs tests/rules.mjs
+        working-directory: dnd55e-character-sheets

@@ -3,6 +3,7 @@ node_modules/
 
 # ── Claude Code local config ───────────────────────────────────
 .claude/
+CLAUDE.MD
 
 # ── OS / editor noise ──────────────────────────────────────────
 .DS_Store

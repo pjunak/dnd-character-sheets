@@ -22,15 +22,17 @@ above it). The D&D tabs follow:
 - **Overview** — the host's own wiki profile (side-card + sections + lore), reused as tab 1 (not copied).
 - **Character Sheet** — D&D identity (class/level/background/alignment), ability scores,
   saving throws, skills, mechanical notes.
-- **Combat** — attacks from equipped/ready weapons + resource trackers (Rage, Ki, slots…).
-- **Spellbook** — prepared/cantrip slots, granted & choose-grant sections, extras
-  (shown only when the character has spells).
+- **Combat** — attacks from equipped/ready weapons, a castable-spells quick-reference,
+  and resource trackers (Rage, Ki, slots…) with the Rest wizard.
 - **Backpack** — inventory grouped by carry location + currency.
+- **Spellbook** — prepared/cantrip slots, granted & choose-grant sections, extras
+  (appended after Backpack, and only when the character has spells).
 - **Builder** — guided progression; rightmost, only with the rules engine and only for
   editors.
 
 A slim **vitals bar** (HP with live **+/-**, AC, Initiative, Speed, Proficiency, Passive
-Perception, plus a class-level line) sits under the tabs on the mechanical tabs.
+Perception, plus a class-level line) renders full-width under the tabs on
+Backpack/Spellbook; Character Sheet and Combat place it inside their own right column.
 
 **Editing is direct and role-gated — there is no separate "edit mode" and no second edit
 button.** The host's own **✏ Upravit** owns identity/lore/portrait (it rides the host

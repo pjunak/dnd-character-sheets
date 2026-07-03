@@ -2,7 +2,8 @@
 //  panel.sheet.js — the Combat tab.
 //
 //  "What can I do in a fight" — attacks, the spells I can cast (UX-6), and my
-//  resource trackers. The vital strip (HP/AC/…) lives in the persistent header.
+//  resource trackers. The vital strip (HP/AC/…) is placed per-tab by entry.js;
+//  this panel renders its own copy in the right column (see below).
 //    • Attacks     → engine-computed to-hit/damage/mastery, else a readied list.
 //    • Spells      → a castable quick-reference (per-class DC/attack + the
 //                    prepared/known loadout grouped by level) so you don't have
