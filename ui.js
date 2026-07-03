@@ -27,36 +27,12 @@ export function makeUI(ctx) {
   // ── Scoped stylesheet (tokens only) ──────────────────────────────
   // Addons can't ship global CSS, but a <style> scoped under our own
   // `.addon-dnd55e-sheets` wrapper is sanctioned (AUTHORING §"bespoke styling
-  // goes in an .addon-<id> wrapper"). It powers the hover-legend popovers
-  // (statTip) — a floating card that explains a stat's meaning, its formula and
-  // how the number was reached. Injected once per render at the fragment root.
+  // goes in an .addon-<id> wrapper"). Only the sheet-specific LAYOUT lives
+  // here — the popover legend, tab strip, stat tile and warning list all use
+  // the host's shared component classes (widgets.css: .codex-tip/.codex-pop,
+  // .codex-tab-strip/.codex-tab, .codex-tile, .codex-warnings), which is what
+  // keeps them theme-aware for free.
   const STYLE = `
-    .addon-dnd55e-sheets .dse-tip { position:relative; display:inline-flex; align-items:center; gap:var(--space-1); cursor:help; outline:none }
-    .addon-dnd55e-sheets .dse-tip-u { text-decoration:underline dotted rgba(var(--accent-gold-rgb),.55); text-underline-offset:3px; text-decoration-thickness:1px }
-    .addon-dnd55e-sheets .dse-tip:focus-visible { border-radius:var(--radius-sm); box-shadow:0 0 0 2px rgba(var(--accent-gold-rgb),.5) }
-    .addon-dnd55e-sheets .dse-pop {
-      position:absolute; z-index:var(--z-dropdown); top:calc(100% + 6px); left:50%;
-      transform:translateX(-50%) translateY(-4px); width:max-content; max-width:17rem;
-      background:var(--bg-raised); border:1px solid rgba(var(--accent-gold-rgb),.35);
-      border-radius:var(--radius); box-shadow:var(--shadow-lg); padding:var(--space-2) var(--space-3);
-      text-align:left; white-space:normal; opacity:0; visibility:hidden; pointer-events:none;
-      transition:opacity var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out) }
-    .addon-dnd55e-sheets .dse-tip:hover .dse-pop,
-    .addon-dnd55e-sheets .dse-tip:focus-within .dse-pop { opacity:1; visibility:visible; transform:translateX(-50%) translateY(0) }
-    .addon-dnd55e-sheets .dse-tip-l .dse-pop { left:0; transform:translateY(-4px) }
-    .addon-dnd55e-sheets .dse-tip-l:hover .dse-pop, .addon-dnd55e-sheets .dse-tip-l:focus-within .dse-pop { transform:translateY(0) }
-    .addon-dnd55e-sheets .dse-tip-r .dse-pop { left:auto; right:0; transform:translateY(-4px) }
-    .addon-dnd55e-sheets .dse-tip-r:hover .dse-pop, .addon-dnd55e-sheets .dse-tip-r:focus-within .dse-pop { transform:translateY(0) }
-    .addon-dnd55e-sheets .dse-pop-title { font-weight:700; color:var(--text-parchment); font-size:var(--text-sm) }
-    .addon-dnd55e-sheets .dse-pop-desc { color:var(--text-light); font-size:var(--text-xs); line-height:1.5; margin-top:2px }
-    .addon-dnd55e-sheets .dse-pop-formula { color:var(--text-muted); font-size:var(--text-xs); font-style:italic; margin-top:var(--space-1) }
-    .addon-dnd55e-sheets .dse-pop-terms { display:grid; grid-template-columns:1fr auto; gap:1px var(--space-3); margin-top:var(--space-2); font-size:var(--text-xs) }
-    .addon-dnd55e-sheets .dse-pop-terms .k { color:var(--text-muted) }
-    .addon-dnd55e-sheets .dse-pop-terms .v { color:var(--text-light); font-variant-numeric:tabular-nums; text-align:right }
-    .addon-dnd55e-sheets .dse-pop-total { border-top:1px solid var(--border-subtle); margin-top:var(--space-2); padding-top:var(--space-1);
-      display:flex; justify-content:space-between; gap:var(--space-3); font-size:var(--text-xs) }
-    .addon-dnd55e-sheets .dse-pop-total .k { color:var(--text-muted); text-transform:uppercase; letter-spacing:.04em }
-    .addon-dnd55e-sheets .dse-pop-total .v { color:var(--accent-gold); font-weight:700; font-variant-numeric:tabular-nums }
     /* Full-width sheet layout (UX): the ability CARDS (score + integrated save +
        that ability's skills) stack in a vertical column down the left, from the
        very top; the tab's other content (vitals bar + attacks/spells/trackers)
@@ -68,6 +44,7 @@ export function makeUI(ctx) {
   const styleTag = `<style>${STYLE}</style>`;
 
   // ── Hoisted style strings (M8) — tokens only, reused verbatim. ────
+  // (The vital stat tile moved to the host's .codex-tile classes.)
   const S = {
     // Layout
     column: 'display:flex;flex-direction:column;gap:var(--space-4)',
@@ -77,10 +54,6 @@ export function makeUI(ctx) {
     sectionTitle: 'font-size:var(--text-sm);font-weight:600;color:var(--text-light);letter-spacing:.04em;text-transform:uppercase',
     // Boxed surface
     card: 'background:var(--bg-surface);border:1px solid var(--border-subtle);border-radius:var(--radius-lg);padding:var(--space-3) var(--space-4)',
-    // Vital stat tile
-    heroTile: 'flex:1 1 5rem;min-width:5rem;background:var(--bg-raised);border:1px solid var(--border-subtle);border-radius:var(--radius);padding:var(--space-2) var(--space-3);text-align:center',
-    tileLabel: 'font-size:var(--text-xs);color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;white-space:nowrap',
-    tileValue: 'font-size:var(--text-xl);color:var(--text-parchment);font-weight:700;line-height:1.15',
     // Ability tile
     abilTile: 'background:var(--bg-raised);border:1px solid var(--border-subtle);border-radius:var(--radius);padding:var(--space-2) var(--space-1);text-align:center',
     abilAbbr: 'font-size:var(--text-xs);color:var(--text-muted);letter-spacing:.08em;font-weight:600',
@@ -124,18 +97,18 @@ export function makeUI(ctx) {
   function subLabel(text) { return `<div style="${S.subLabel}">${esc(text)}</div>`; }
 
   // ── Vital stat tile (HP / AC / Init / Speed / Proficiency / Passive). ──
-  // `valueHtml` is pre-rendered (may carry colour); `sub` a small line under it
-  // (temp HP, "auto" note); `editHtml` the edit-mode controls beneath. `accent`
-  // gives a faint gold ring (used on HP/AC — the two you read most).
+  // Host component classes (.codex-tile — widgets.css): `valueHtml` is
+  // pre-rendered (may carry colour); `sub` a small line under it (temp HP,
+  // "auto" note); `editHtml` the edit-mode controls beneath. `accent` gives the
+  // faint gold ring (used on HP/AC — the two you read most).
   function heroTile(label, valueHtml, opts) {
     opts = opts || {};
-    const ring = opts.accent ? ';border-color:rgba(var(--accent-gold-rgb),.35);box-shadow:inset 0 0 0 1px rgba(var(--accent-gold-rgb),.08)' : '';
-    const grow = opts.wide ? ';flex-grow:2;min-width:8rem' : '';
+    const cls = 'codex-tile' + (opts.accent ? ' codex-tile-accent' : '') + (opts.wide ? ' codex-tile-wide' : '');
     const sub = opts.sub ? `<div style="font-size:var(--text-xs);color:var(--text-muted);margin-top:1px">${opts.sub}</div>` : '';
     const edit = opts.editHtml ? `<div style="margin-top:var(--space-1)">${opts.editHtml}</div>` : '';
-    return `<div style="${S.heroTile}${ring}${grow}" title="${esc(opts.title || label)}">
-      <div style="${S.tileLabel}">${esc(label)}</div>
-      <div style="${S.tileValue}">${valueHtml}</div>${sub}${edit}</div>`;
+    return `<div class="${cls}" title="${esc(opts.title || label)}">
+      <div class="codex-tile-label">${esc(label)}</div>
+      <div class="codex-tile-value">${valueHtml}</div>${sub}${edit}</div>`;
   }
 
   // ── Ability tile — abbr · big modifier · score pill. `scoreHtml` is either the
@@ -208,18 +181,18 @@ export function makeUI(ctx) {
   function statTip(triggerHtml, legend, opts) {
     opts = opts || {};
     if (!legend) return triggerHtml;
-    const align = opts.align === 'l' ? ' dse-tip-l' : opts.align === 'r' ? ' dse-tip-r' : '';
-    const inner = opts.underline ? `<span class="dse-tip-u">${triggerHtml}</span>` : triggerHtml;
-    const desc = legend.desc ? `<div class="dse-pop-desc">${esc(legend.desc)}</div>` : '';
-    const formula = legend.formula ? `<div class="dse-pop-formula">${esc(legend.formula)}</div>` : '';
+    const align = opts.align === 'l' ? ' codex-tip-l' : opts.align === 'r' ? ' codex-tip-r' : '';
+    const inner = opts.underline ? `<span class="codex-tip-u">${triggerHtml}</span>` : triggerHtml;
+    const desc = legend.desc ? `<div class="codex-pop-desc">${esc(legend.desc)}</div>` : '';
+    const formula = legend.formula ? `<div class="codex-pop-formula">${esc(legend.formula)}</div>` : '';
     const terms = (legend.terms && legend.terms.length)
-      ? `<div class="dse-pop-terms">${legend.terms.map((tm) => `<span class="k">${esc(tm.label)}</span><span class="v">${esc(String(tm.value))}</span>`).join('')}</div>`
+      ? `<div class="codex-pop-terms">${legend.terms.map((tm) => `<span class="k">${esc(tm.label)}</span><span class="v">${esc(String(tm.value))}</span>`).join('')}</div>`
       : '';
     const total = (legend.total != null)
-      ? `<div class="dse-pop-total"><span class="k">${esc(legend.totalLabel || t('legend.total'))}</span><span class="v">${esc(String(legend.total))}</span></div>`
+      ? `<div class="codex-pop-total"><span class="k">${esc(legend.totalLabel || t('legend.total'))}</span><span class="v">${esc(String(legend.total))}</span></div>`
       : '';
-    return `<span class="dse-tip${align}" tabindex="0" role="note" aria-label="${esc(legend.aria || legend.title || '')}">${inner}`
-      + `<span class="dse-pop" role="tooltip"><span class="dse-pop-title">${esc(legend.title || '')}</span>${desc}${formula}${terms}${total}</span></span>`;
+    return `<span class="codex-tip${align}" tabindex="0" role="note" aria-label="${esc(legend.aria || legend.title || '')}">${inner}`
+      + `<span class="codex-pop" role="tooltip"><span class="codex-pop-title">${esc(legend.title || '')}</span>${desc}${formula}${terms}${total}</span></span>`;
   }
 
   // ── Engine-mode "manual override" control pair (ARCH-3). Type a value to beat
@@ -283,7 +256,7 @@ export function makeUI(ctx) {
   function warningsBlock(warnings) {
     const warns = (warnings || []).slice(0, 6);
     if (!warns.length) return '';
-    return `<div style="background:rgba(var(--color-danger-bd),.08);border:1px solid var(--color-danger-bd);border-radius:var(--radius);padding:var(--space-2) var(--space-3);color:var(--color-danger);font-size:var(--text-xs);line-height:1.6">${warns.map((w) => '⚠ ' + esc(String(w))).join('<br>')}</div>`;
+    return `<div class="codex-warnings">${warns.map((w) => '⚠ ' + esc(String(w))).join('<br>')}</div>`;
   }
 
   // Combat attacks from equipped/ready weapons (engine-computed, EQ-5). Renders

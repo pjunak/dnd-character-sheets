@@ -145,19 +145,17 @@ export default function register(host) {
       const active = currentTab(c.id, tabs);
       const pid = panelId(c.id);
 
-      // Tab bar — ARIA tablist; the Builder (a tool) is pushed right with a tint.
+      // Tab bar — host `.codex-tab-strip` component (widgets.css); ARIA tablist.
+      // The Builder (a tool tab) is pushed right + gold-tinted via -tool.
       const tabBtn = (tb) => {
         const on = tb.id === active;
-        const tint = tb.tool
-          ? (on ? 'background:rgba(var(--accent-gold-rgb),.16);color:var(--accent-gold)' : 'background:rgba(var(--accent-gold-rgb),.05);color:var(--text-light)')
-          : (on ? 'background:rgba(var(--accent-gold-rgb),.12);color:var(--text-parchment)' : 'background:transparent;color:var(--text-muted)');
-        return `<button role="tab" id="${esc(tabBtnId(c.id, tb.id))}" aria-selected="${on}" aria-controls="${esc(pid)}" tabindex="${on ? '0' : '-1'}"
+        const cls = 'codex-tab' + (tb.tool ? ' codex-tab-tool' : '') + (on ? ' is-active' : '');
+        return `<button role="tab" class="${cls}" id="${esc(tabBtnId(c.id, tb.id))}" aria-selected="${on}" aria-controls="${esc(pid)}" tabindex="${on ? '0' : '-1'}"
           title="${esc(tb.hint || tb.label)}"
-          style="${tint};border:none;border-bottom:3px solid ${on ? 'var(--accent-gold)' : 'transparent'};${tb.tool ? 'margin-left:auto;' : ''}padding:var(--space-2) var(--space-3);font-size:var(--text-sm);font-weight:${on ? '600' : '500'};cursor:pointer;border-radius:var(--radius) var(--radius) 0 0;display:inline-flex;align-items:center;gap:var(--space-1);white-space:nowrap"
           ${host.h.dataAction(host.action('tab'), c.id, tb.id)}
           ${host.h.dataOn('keydown', host.action('tabKey'), '$ev', c.id, tb.id)}><span aria-hidden="true">${esc(tb.icon)}</span> ${esc(tb.label)}</button>`;
       };
-      const tabBar = `<div role="tablist" aria-label="${esc(t('sheet.title'))}" style="display:flex;flex-wrap:wrap;gap:var(--space-1);border-bottom:1px solid var(--border-subtle);margin-bottom:var(--space-4)">${tabs.map(tabBtn).join('')}</div>`;
+      const tabBar = `<div role="tablist" class="codex-tab-strip" aria-label="${esc(t('sheet.title'))}">${tabs.map(tabBtn).join('')}</div>`;
 
       // The Overview tab is the host lore itself; mechanical tabs get the vitals bar.
       let panel = '';

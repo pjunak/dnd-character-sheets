@@ -79,9 +79,9 @@ export function makeHeaderPanel(ctx) {
 
     // Read view (anonymous): just the number + temp, no controls.
     if (!editable) {
-      return `<div style="${ui.S.heroTile};flex-grow:2;min-width:8rem;border-color:rgba(var(--accent-gold-rgb),.35);box-shadow:inset 0 0 0 1px rgba(var(--accent-gold-rgb),.08)">
-        <div style="${ui.S.tileLabel}">${esc(t('stat.hp'))}</div>
-        <div style="${ui.S.tileValue}">${hpVal}</div>${tempSub}</div>`;
+      return `<div class="codex-tile codex-tile-accent codex-tile-wide">
+        <div class="codex-tile-label">${esc(t('stat.hp'))}</div>
+        <div class="codex-tile-value">${hpVal}</div>${tempSub}</div>`;
     }
 
     const stepBtn = (delta, sym, title, col) =>
@@ -89,7 +89,7 @@ export function makeHeaderPanel(ctx) {
     // Vertical ± with the current/max between them.
     const vertical = `<div style="display:flex;flex-direction:column;align-items:center;gap:2px">
       ${stepBtn(1, '＋', t('action.hpPlus'), 'var(--color-success)')}
-      <div style="${ui.S.tileValue}">${hpVal}</div>
+      <div class="codex-tile-value">${hpVal}</div>
       ${stepBtn(-1, '−', t('action.hpMinus'), 'var(--color-danger)')}</div>`;
 
     // Manual amount → Heal / Damage by any number at once.
@@ -105,8 +105,8 @@ export function makeHeaderPanel(ctx) {
     const tempEd = lbl(t('stat.temp'), 'tempHp', temp, 0);
     const fields = `<div style="display:flex;gap:var(--space-2);justify-content:center;flex-wrap:wrap;margin-top:var(--space-2)">${maxEd}${tempEd}</div>`;
 
-    return `<div style="${ui.S.heroTile};flex-grow:2;min-width:9.5rem;border-color:rgba(var(--accent-gold-rgb),.35);box-shadow:inset 0 0 0 1px rgba(var(--accent-gold-rgb),.08)">
-      <div style="${ui.S.tileLabel}">${esc(t('stat.hp'))}</div>
+    return `<div class="codex-tile codex-tile-accent codex-tile-wide" style="min-width:9.5rem">
+      <div class="codex-tile-label">${esc(t('stat.hp'))}</div>
       ${vertical}${tempSub}${amount}${fields}</div>`;
   }
 
