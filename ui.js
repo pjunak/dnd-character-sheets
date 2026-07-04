@@ -44,7 +44,6 @@ export function makeUI(ctx) {
   const styleTag = `<style>${STYLE}</style>`;
 
   // ── Hoisted style strings (M8) — tokens only, reused verbatim. ────
-  // (The vital stat tile moved to the host's .codex-tile classes.)
   const S = {
     // Layout
     column: 'display:flex;flex-direction:column;gap:var(--space-4)',
@@ -141,7 +140,7 @@ export function makeUI(ctx) {
       ${profDot(state, opts.dotAttr)}<span style="${S.profLabel}">${labelHtml}</span>
       <strong style="${S.profTotal}">${esc(totalText)}</strong></div>`;
   }
-  // Legacy alias kept for any remaining caller (maps prof/exp booleans → state).
+  // Boolean-arg alias for profRow (maps prof/exp booleans → state).
   function rowLine(prof, labelHtml, totalText, exp) {
     return profRow(exp ? 'exp' : prof ? 'prof' : 'none', labelHtml, totalText);
   }
