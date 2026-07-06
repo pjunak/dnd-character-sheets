@@ -9,9 +9,9 @@
 // ═══════════════════════════════════════════════════════════════
 
 export function makeBackpackPanel(ctx) {
-  const { host, t, COINS, LOCATIONS, num, ui } = ctx;
+  const { host, t, COINS, LOCATIONS, num, titleize, ui } = ctx;
   const { esc, dataAction, dataOn } = host.h;
-  const { section, card, numField } = ui;
+  const { section, card, numField, entityRef } = ui;
 
   function panelBackpack(c, s, edit, comp, engine) {
     // Add bar (modification mode): compendium pickers + free-text item.
@@ -51,13 +51,50 @@ export function makeBackpackPanel(ctx) {
     return `<select class="edit-input" style="max-width:11rem"${dataOn('change', host.action('invAddRef'), c.id, kind, '$value')}>${opts}</select>`;
   }
 
+  // Resolve an inventory item → its compendium {kind, id, rec}, probing the kinds
+  // that can be ref-added (weapon, armor); falls back to a by-name weapon match.
+  // null for free-text items or when the book is absent (→ plain text, no link).
+  function itemRef(engine, it) {
+    if (!engine || !engine.getItem) return null;
+    if (it.ref) {
+      for (const kind of ['weapon', 'armor']) {
+        const rec = engine.getItem(kind, it.ref);
+        if (rec) return { kind, id: it.ref, rec };
+      }
+    }
+    if (it.name && engine.getItemByName) {
+      const rec = engine.getItemByName('weapon', it.name);
+      if (rec) return { kind: 'weapon', id: rec.id, rec };
+    }
+    return null;
+  }
+
+  // Light hover legend for a resolved weapon/armor item (properties + mastery, or AC).
+  function itemLegend(resolved) {
+    if (!resolved || !resolved.rec) return null;
+    const r = resolved.rec;
+    if (resolved.kind === 'weapon') {
+      const props = (r.properties || []).map(titleize);
+      const terms = r.mastery ? [{ label: t('combat.mastery'), value: r.mastery }] : [];
+      return (props.length || terms.length) ? { title: r.name, desc: props.join(' · '), terms, aria: r.name } : null;
+    }
+    if (resolved.kind === 'armor' && r.baseAC != null) {
+      return { title: r.name, desc: r.armorType ? titleize(r.armorType) : '', terms: [{ label: t('stat.ac'), value: r.baseAC }], aria: r.name };
+    }
+    return null;
+  }
+
   function invRow(c, it, edit, engine) {
     const loc = it.location || 'pack';
-    const wrec = engine ? ((it.ref && engine.getItem && engine.getItem('weapon', it.ref)) || (it.name && engine.getItemByName && engine.getItemByName('weapon', it.name))) : null;
+    const resolved = itemRef(engine, it);
+    const wrec = resolved && resolved.kind === 'weapon' ? resolved.rec : null;
     const masteryTag = wrec && wrec.mastery ? `<span title="${esc(t('combat.mastery'))}" style="color:var(--text-muted);font-size:var(--text-xs)">${esc(wrec.mastery)}</span>` : '';
     if (!edit) {
+      const nameHtml = resolved
+        ? entityRef(resolved.kind, resolved.id, it.name || t('misc.unnamed'), itemLegend(resolved))
+        : esc(it.name || t('misc.unnamed'));
       return `<div style="display:flex;align-items:center;gap:var(--space-2);padding:var(--space-2);border-bottom:1px solid var(--border-subtle)">
-        <span style="flex:1;color:var(--text-light);font-size:var(--text-sm)">${it.attuned ? '<span style="color:var(--accent-gold)">✦</span> ' : ''}${esc(it.name || t('misc.unnamed'))}</span>
+        <span style="flex:1;color:var(--text-light);font-size:var(--text-sm)">${it.attuned ? '<span style="color:var(--accent-gold)">✦</span> ' : ''}${nameHtml}</span>
         ${masteryTag}
         ${num(it.qty, 1) !== 1 ? `<span style="color:var(--text-muted);font-size:var(--text-xs)">×${esc(String(num(it.qty, 1)))}</span>` : ''}
       </div>`;

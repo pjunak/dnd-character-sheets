@@ -21,7 +21,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 export function makeUI(ctx) {
-  const { host, t, num, signed, compendiumHref } = ctx;
+  const { host, t, num, signed, compendiumHref, titleize } = ctx;
   const { esc } = host.h;
 
   // ── Scoped stylesheet (tokens only) ──────────────────────────────
@@ -285,8 +285,12 @@ export function makeUI(ctx) {
         ? ` <span title="${esc(t('combat.mastery'))}" style="color:${w.masteryActive ? 'var(--accent-gold)' : 'var(--text-muted)'};font-size:var(--text-xs)">${w.masteryActive ? '★' : ''}${esc(w.mastery)}</span>`
         : '';
       const profMark = w.proficient ? '' : ` <span title="${esc(t('combat.notProficient'))}" style="color:var(--color-danger);font-size:var(--text-xs)">⚠</span>`;
+      // Weapon name → its compendium page, with a properties/mastery hover card.
+      const legend = ((w.properties && w.properties.length) || w.mastery)
+        ? { title: w.name, desc: (w.properties || []).map(titleize).join(' · '), terms: w.mastery ? [{ label: t('combat.mastery'), value: w.mastery }] : [], aria: w.name }
+        : null;
       return `<div style="display:flex;align-items:center;gap:var(--space-2);padding:var(--space-2);border-bottom:1px solid var(--border-subtle)">
-        <span style="flex:1;color:var(--text-light);font-size:var(--text-sm)">${esc(w.name)}${mastery}${profMark}</span>
+        <span style="flex:1;color:var(--text-light);font-size:var(--text-sm)">${entityRef('weapon', w.ref, w.name, legend)}${mastery}${profMark}</span>
         <strong style="color:var(--text-parchment);font-variant-numeric:tabular-nums">${esc(signed(num(w.attackBonus)))}</strong>
         <span style="color:var(--text-muted);font-size:var(--text-sm);min-width:6rem;text-align:right">${esc(w.damage)}${w.damageType ? ' ' + esc(w.damageType) : ''}</span>
       </div>`;

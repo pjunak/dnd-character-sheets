@@ -346,6 +346,17 @@ test('sheets: Backpack offers compendium pickers + attunement counter', () => {
   } finally { clearLocalStorage(); }
 });
 
+test('sheets: Combat attacks link the weapon to the compendium (B2.3)', () => {
+  mockLocalStorage('combat');
+  try {
+    const { rec } = dryRunRegister(register, META, PHB());
+    const out = renderBody(rec, { id: 'catk', name: 'Knight', addonData: { 'dnd55e-sheets': {
+      classes: [{ classId: 'fighter', level: 1, subclass: '' }], abilities: { STR: 16 },
+      inventory: [{ id: 'i1', ref: 'longsword', name: 'Longsword', location: 'equipped' }] } } });
+    assert.match(out, /href="#\/compendium\/weapon:longsword"/, 'equipped weapon links to its compendium page');
+  } finally { clearLocalStorage(); }
+});
+
 test('sheets: Backpack add-item + attune actions do not throw', () => {
   const { rec } = dryRunRegister(register, META, PHB());
   const act = (name, ...args) => rec.actions.find(a => a.name === name).fn(...args);
