@@ -61,6 +61,30 @@ export function makeEngine(ctx) {
         else if (!Array.isArray(ch.from) && (ch.type === 'feat' || ch.category)) kind = 'feat';
         out.push({ id: ch.id, kind, count: num(ch.count, 1), from: ch.from, category: ch.category, prompt: ch.prompt, source: { type: 'class', id: cl.classId, level: srcLevel } });
       }
+      // Option-pool choices declared on the class's FEATURE records (Metamagic,
+      // Battle Master maneuvers, …). Historically collectChoices read only the
+      // class record's grants; feature records carry their own grants.choices,
+      // usually with `fromCategory` — expand it to the ids of every feature in
+      // that category (all Metamagic options, all maneuvers, …). Subclass-feature
+      // grants apply only when that subclass is selected. (feature.grants rides
+      // on the slim projection, so no per-feature full fetch here.)
+      if (engine.listFeatures) {
+        for (const fslim of engine.listFeatures({ classId: cl.classId })) {
+          if (num(fslim.level) > clvl) continue;
+          if (fslim.subclassId && fslim.subclassId !== cl.subclass) continue;
+          for (const ch of (fslim.grants && fslim.grants.choices) || []) {
+            const srcLevel = num(String(ch.source || '').split(':')[1], num(fslim.level, 1));
+            if (srcLevel > clvl) continue;
+            let from = Array.isArray(ch.from) ? ch.from : null;
+            if (!from && ch.fromCategory) from = engine.listFeatures({ category: ch.fromCategory }).map((o) => o.id);
+            let kind = 'enumerated';
+            if (ch.type === 'expertise') kind = 'expertise';
+            else if (ch.type === 'weaponMastery') kind = 'weaponMastery';
+            else if (!Array.isArray(from) && (ch.type === 'feat' || ch.category)) kind = 'feat';
+            out.push({ id: ch.id, kind, count: num(ch.count, 1), from, category: ch.category, prompt: ch.prompt, source: { type: 'feature', id: fslim.id, level: srcLevel } });
+          }
+        }
+      }
       for (const lvl of [4, 8, 12, 16, 19]) if (lvl <= clvl) out.push({ id: 'asi:' + cl.classId + ':' + lvl, kind: 'asiMode', classId: cl.classId, level: lvl, source: { type: 'class', id: cl.classId, level: lvl } });
     }
     return out;

@@ -13,7 +13,7 @@
 export function makeBuilderPanel(ctx) {
   const { host, t, ABILITIES, SKILLS, num, signed, abilityMod, titleize, ui, engine: E, POINT_BUY, pointCost, pointsSpent } = ctx;
   const { esc, dataAction, dataOn } = host.h;
-  const { section, miniStat, selectBox, fieldRow, choiceBlock, warningsBlock, numField } = ui;
+  const { section, miniStat, selectBox, fieldRow, choiceBlock, warningsBlock, numField, statTip } = ui;
   const { builderModel, collectChoices } = E;
 
   function panelBuilder(c, s, editable, comp, warnings, engine) {
@@ -173,7 +173,9 @@ export function makeBuilderPanel(ctx) {
       options = pool.map((id) => ({ value: id, label: t('skill.' + id) }));
       label = ch.kind === 'skills' ? t('builder.skillProfs') : t('builder.expertise');
     } else if (Array.isArray(ch.from)) {
-      options = ch.from.map((v) => ({ value: v, label: titleize(v) }));
+      // Values may be feature ids (option pools like Metamagic/maneuvers) — label
+      // them by the feature's name rather than a titleized id when resolvable.
+      options = ch.from.map((v) => { const fr = engine.getFeature && engine.getFeature(v); return { value: v, label: fr ? fr.name : titleize(v) }; });
     } else if (ch.kind === 'weaponMastery') {
       options = engine.listWeapons().map((w) => ({ value: w.id, label: w.name }));
       label = t('builder.weaponMastery');
@@ -222,6 +224,30 @@ export function makeBuilderPanel(ctx) {
     return choiceBlock(label, `${selectBox(mode, modeOpts, dataOn('change', host.action('builderChoose'), c.id, key, '$value'), t('builder.choose'), ro)}${detail}`);
   }
 
+  // First paragraph of a feature's prose, flattened for the hover card. statTip
+  // renders `desc` as ESCAPED plain text, so drop a leading heading + emphasis
+  // markers and collapse whitespace; cap the length so the card stays compact.
+  function firstPara(md) {
+    const body = String(md || '').replace(/\r/g, '').replace(/^#{1,6}\s+[^\n]*\n+/, '').trim();
+    const para = (body.split(/\n\s*\n/)[0] || '').replace(/\*\*/g, '').replace(/\s+/g, ' ').trim();
+    return para.length > 300 ? para.slice(0, 297) + '…' : para;
+  }
+
+  // Resolve a shown class-feature name → its `feature` record (Phase-2 hover).
+  // Joins by (classId, level, name) — the progression string is NOT a record id —
+  // then falls back to a level-agnostic match and finally a shared generic
+  // (Ability Score Improvement / Epic Boon, classId null). Returns null (→ statTip
+  // degrades to a plain name) when the book addon predates feature records.
+  function featureRecordFor(engine, classId, level, name) {
+    if (!engine.listFeatures || !engine.getFeature) return null;
+    const norm = (x) => String(x || '').trim().toLowerCase();
+    const owned = engine.listFeatures({ classId });
+    let hit = owned.find((f) => !f.subclassId && f.level === level && norm(f.name) === norm(name))
+           || owned.find((f) => !f.subclassId && norm(f.name) === norm(name))
+           || engine.listFeatures().find((f) => f.classId == null && norm(f.name) === norm(name));
+    return hit ? engine.getFeature(hit.id) : null;
+  }
+
   // Progression log — what each level granted (the "when did I choose what").
   function builderLog(classes, engine, comp) {
     const features = (comp && comp.features) || [];
@@ -232,11 +258,22 @@ export function makeBuilderPanel(ctx) {
       const clsName = rec ? rec.name : (cl.classId || '?');
       for (let l = 1; l <= num(cl.level, 1); l++) {
         charLvl++;
-        const feats = features.filter((f) => f.source && f.source.id === cl.classId && num(f.source.level) === l).map((f) => f.name || titleize(f.id));
+        // Feature names for this class-level, each wrapped in a hover card that
+        // reveals the feature's prose (statTip degrades to the bare name if the
+        // record is missing). Each name is esc()'d inside the trigger, so the
+        // joined result is HTML and must NOT be re-escaped.
+        const feats = features
+          .filter((f) => f.source && f.source.id === cl.classId && num(f.source.level) === l)
+          .map((f) => {
+            const name = f.name || titleize(f.id);
+            const recF = featureRecordFor(engine, cl.classId, l, name);
+            const legend = recF && recF.text ? { title: recF.name || name, desc: firstPara(recF.text), aria: name } : null;
+            return statTip(`<span>${esc(name)}</span>`, legend, { underline: true });
+          });
         rows.push(`<div style="display:flex;gap:var(--space-2);padding:var(--space-1) 0;border-bottom:1px solid rgba(var(--gold-muted),.1);font-size:var(--text-sm)">
           <span style="color:var(--text-muted);min-width:2.5rem">L${esc(String(charLvl))}</span>
           <span style="color:var(--text-light);min-width:7rem">${esc(clsName)} ${esc(String(l))}</span>
-          <span style="color:var(--text-parchment);flex:1">${feats.length ? esc(feats.join(', ')) : '<span style="color:var(--text-muted)">—</span>'}</span>
+          <span style="color:var(--text-parchment);flex:1">${feats.length ? feats.join(', ') : '<span style="color:var(--text-muted)">—</span>'}</span>
         </div>`);
       }
     }

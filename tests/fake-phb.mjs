@@ -61,6 +61,10 @@ export function makeFake() {
         spellcasting: null, weaponMastery: { count: 2 }, acFormulas: [],
         startingProficiencies: { weapons: ['martial-finesse-or-light'] },
       },
+      sorcerer: {
+        id: 'sorcerer', name: 'Sorcerer', kind: 'class', hitDie: 'd6', savingThrows: ['CON', 'CHA'],
+        spellcasting: { ability: 'CHA', type: 'full', prepares: 'list' }, weaponMastery: { count: 0 }, acFormulas: [],
+      },
     },
     weapon: {
       longsword: { id: 'longsword', name: 'Longsword', kind: 'weapon', category: 'martial', range: 'melee', damage: '1d8', damageType: 'slashing', properties: ['versatile'], versatileDamage: '1d10', mastery: 'Sap' },
@@ -122,6 +126,14 @@ export function makeFake() {
       // Origin feat carrier → exercises the bg→feat→choose-grant chain (smoke.mjs).
       acolyte: { id: 'acolyte', name: 'Acolyte', kind: 'background', skillProficiencies: ['insight', 'religion'], originFeat: 'magic-initiate' },
     },
+    // Feature records incl. an option-pool parent (Metamagic) + its category-tagged
+    // options — exercises collectChoices' feature-grants + fromCategory expansion.
+    feature: {
+      'sorcerer-metamagic': { id: 'sorcerer-metamagic', name: 'Metamagic', kind: 'feature', classId: 'sorcerer', level: 2, localId: 'metamagic',
+        grants: { choices: [{ id: 'metamagic', source: 'sorcerer:2', type: 'metamagic', count: 2, fromCategory: 'metamagic', swappableOn: 'levelup' }] } },
+      'metamagic-quickened-spell': { id: 'metamagic-quickened-spell', name: 'Quickened Spell', kind: 'feature', classId: 'sorcerer', level: 2, localId: 'quickened-spell', category: 'metamagic', prerequisite: { cost: '2 Sorcery Points' } },
+      'metamagic-twinned-spell': { id: 'metamagic-twinned-spell', name: 'Twinned Spell', kind: 'feature', classId: 'sorcerer', level: 2, localId: 'twinned-spell', category: 'metamagic', prerequisite: { cost: '1 Sorcery Point' } },
+    },
   };
   const byName = (kind, name) => Object.values(store[kind] || {}).find((r) => (r.name || '').toLowerCase() === String(name).toLowerCase()) || null;
   const vals = (kind) => Object.values(store[kind] || {});
@@ -129,6 +141,13 @@ export function makeFake() {
     apiVersion: 1,
     listClasses: () => vals('class').map((c) => ({ id: c.id, name: c.name })),
     listSubclasses: (classId) => vals('subclass').filter((s) => !classId || s.classId === classId).map((c) => ({ id: c.id, name: c.name, classId: c.classId })),
+    listFeatures: (q) => vals('feature').filter((f) =>
+      (!q || !q.classId || f.classId === q.classId) &&
+      (!q || !q.subclassId || f.subclassId === q.subclassId) &&
+      (!q || !q.category || f.category === q.category) &&
+      (!q || q.level == null || f.level === q.level))
+      .map((f) => ({ id: f.id, name: f.name, kind: f.kind, classId: f.classId, subclassId: f.subclassId, level: f.level, category: f.category, grants: f.grants })),
+    getFeature: (id) => (store.feature && store.feature[id]) || null,
     listSpecies: () => vals('species').map((s) => ({ id: s.id, name: s.name })),
     listBackgrounds: () => vals('background').map((b) => ({ id: b.id, name: b.name })),
     listFeats: (opts) => vals('feat').filter((f) => !opts || !opts.category || f.category === opts.category).map((f) => ({ id: f.id, name: f.name })),

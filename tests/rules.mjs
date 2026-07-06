@@ -8,6 +8,7 @@ import assert from 'node:assert/strict';
 import { dryRunRegister, smokeRegistrations } from '../../ttrpg-codex/web/js/addon-test-harness.mjs';
 import register from '../entry.js';
 import { makeFake } from './fake-phb.mjs';
+import { makeEngine } from '../model.js';
 
 const META = {
   id: 'dnd55e-sheets',
@@ -16,6 +17,20 @@ const META = {
 };
 
 const withFake = () => dryRunRegister(register, META, { deps: { 'dnd55e-players-handbook': makeFake() } });
+
+test('rules: feature-record grants expand fromCategory into pool choices', () => {
+  const fake = makeFake();
+  const num = (v, d = 0) => { const n = Number(v); return Number.isFinite(n) ? n : d; };
+  const model = makeEngine({ num, host: {}, NS: 'x', ABILITIES: [], SKILLS: [], abilityMod: () => 0, sheetOf: () => ({}) });
+  const choices = model.collectChoices([{ classId: 'sorcerer', level: 2, subclass: '' }], fake);
+  const mm = choices.find((c) => c.id === 'metamagic');
+  assert.ok(mm, 'metamagic choice collected from the feature record grants');
+  assert.equal(mm.kind, 'enumerated');
+  assert.equal(mm.from.length, 2, 'fromCategory expanded to the 2 metamagic options');
+  assert.ok(mm.from.includes('metamagic-twinned-spell'), 'options are feature ids');
+  // level gating: no metamagic choice at sorcerer level 1
+  assert.ok(!model.collectChoices([{ classId: 'sorcerer', level: 1, subclass: '' }], fake).find((c) => c.id === 'metamagic'), 'level-gated');
+});
 
 test('rules: provides a versioned rules API', () => {
   const { ok, rec, error } = dryRunRegister(register, META);

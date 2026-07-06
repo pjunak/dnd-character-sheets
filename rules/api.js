@@ -29,6 +29,8 @@ export function makeRulesApi(getData) {
     // dropdown enumeration — passthrough of book data
     listClasses:     () => (data()?.listClasses?.() || []),
     listSubclasses:  (classId) => (data()?.listSubclasses?.(classId) || []),
+    listFeatures:    (q) => (data()?.listFeatures?.(q) || []),
+    getFeature:      (id) => (data()?.getFeature?.(id) || null),
     listSpecies:     () => (data()?.listSpecies?.() || []),
     listBackgrounds: () => (data()?.listBackgrounds?.() || []),
     listFeats:       (opts) => (data()?.listFeats?.(opts) || []),
