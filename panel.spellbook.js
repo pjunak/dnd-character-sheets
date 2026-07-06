@@ -11,7 +11,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 export function makeSpellbookPanel(ctx) {
-  const { host, t, num, signed, titleize, ui } = ctx;
+  const { host, t, num, signed, titleize, firstPara, ui } = ctx;
   const { esc, dataAction, dataOn } = host.h;
   const { section, card, subLabel, spellChip, numField } = ui;
 
@@ -22,6 +22,16 @@ export function makeSpellbookPanel(ctx) {
     const r = engine && engine.getItem ? engine.getItem('spell', ref) : null;
     return r ? { name: r.name, level: num(r.level, 0), school: r.school || '' }
              : { name: t('misc.unknown'), level: null, school: '' };
+  }
+  // Hover legend for a spell ref: title + compact description + level/school
+  // terms. null when the ref doesn't resolve (→ the name renders without a card).
+  function spellLegend(engine, ref) {
+    const r = engine && engine.getItem ? engine.getItem('spell', ref) : null;
+    if (!r) return null;
+    const lvl = num(r.level, 0);
+    const terms = [{ label: t('spellbook.level'), value: lvl === 0 ? t('spellbook.cantrip') : lvl }];
+    if (r.school) terms.push({ label: t('spellbook.school'), value: r.school });
+    return { title: r.name, desc: r.text ? firstPara(r.text) : '', terms, aria: r.name };
   }
   function lvlLabel(level) { return level === 0 ? t('spellbook.cantrip') : level == null ? '' : t('spellbook.lvlN', { n: level }); }
 
@@ -35,7 +45,7 @@ export function makeSpellbookPanel(ctx) {
     for (const p of (sc.perClass || [])) blocks.push(classSpellSection(c, s, p, comp, engine, edit, alwaysSet));
     const pending = sc.pendingChoices || [];
     if (pending.length) blocks.push(grantChoicesSection(c, s, pending, engine, edit));
-    if (granted.length) blocks.push(grantedSection(granted));
+    if (granted.length) blocks.push(grantedSection(granted, engine));
     blocks.push(extraSection(c, s, edit, granted));
 
     return `<div style="display:flex;flex-direction:column;gap:var(--space-5)">${blocks.filter(Boolean).join('')}</div>`;
@@ -107,7 +117,7 @@ export function makeSpellbookPanel(ctx) {
       if (ref) {
         const info = spellInfo(engine, ref);
         const dup = alwaysSet && alwaysSet.has(ref);
-        slots.push(spellChip(info.name, lvlLabel(info.level), { danger: dup, title: dup ? t('spell.forcedDup') : '', removeAttr: edit ? dataAction(host.action(removeAct), c.id, cid, ref) : null }));
+        slots.push(spellChip(info.name, lvlLabel(info.level), { danger: dup, title: dup ? t('spell.forcedDup') : '', link: { kind: 'spell', id: ref }, legend: spellLegend(engine, ref), removeAttr: edit ? dataAction(host.action(removeAct), c.id, cid, ref) : null }));
       } else if (edit) {
         slots.push(`<div style="border:1px dashed rgba(var(--gold-muted),.35);border-radius:var(--radius-sm);min-width:8.5rem;min-height:2.4rem;display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:var(--text-xs)">${esc(t('spell.emptySlot'))}</div>`);
       }
@@ -134,12 +144,12 @@ export function makeSpellbookPanel(ctx) {
   }
 
   // Always-prepared / granted spells, grouped visually by provenance (SP-2/SP-12).
-  function grantedSection(granted) {
+  function grantedSection(granted, engine) {
     const BADGE = { subclass: '✦', feat: '⚝', species: '◈', class: '🎓', item: '⚙' };
     const chips = granted.map((g) => {
       const src = (g.source && g.source.type) || '';
       const sub = [lvlLabel(g.level), g.free ? t('spell.free') : ''].filter(Boolean).join(' · ');
-      return spellChip(g.name, sub, { locked: g.alwaysPrepared, badge: BADGE[src] || '•', badgeTitle: titleize((g.source && g.source.id) || src), title: t('spell.grantedBy', { src: titleize((g.source && g.source.id) || src) }) });
+      return spellChip(g.name, sub, { locked: g.alwaysPrepared, badge: BADGE[src] || '•', badgeTitle: titleize((g.source && g.source.id) || src), title: t('spell.grantedBy', { src: titleize((g.source && g.source.id) || src) }), link: { kind: 'spell', id: g.ref }, legend: spellLegend(engine, g.ref) });
     }).join('');
     return section(t('spell.alwaysPreparedHdr'), `<div style="display:flex;flex-wrap:wrap;gap:var(--space-1)">${chips}</div>`, { icon: '🔒' });
   }
@@ -151,7 +161,7 @@ export function makeSpellbookPanel(ctx) {
       const picked = (s.grantChoices && s.grantChoices[pc.key]) || [];
       const chips = picked.map((ref) => {
         const info = spellInfo(engine, ref);
-        return spellChip(info.name, lvlLabel(info.level), { removeAttr: edit ? dataAction(host.action('grantUnpick'), c.id, pc.key, ref) : null });
+        return spellChip(info.name, lvlLabel(info.level), { link: { kind: 'spell', id: ref }, legend: spellLegend(engine, ref), removeAttr: edit ? dataAction(host.action('grantUnpick'), c.id, pc.key, ref) : null });
       }).join('');
       let adder = '';
       if (edit && picked.length < pc.choose) {

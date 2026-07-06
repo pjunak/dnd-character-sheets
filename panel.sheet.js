@@ -13,9 +13,9 @@
 // ═══════════════════════════════════════════════════════════════
 
 export function makeSheetPanel(ctx) {
-  const { host, t, num, signed, titleize, ui, viewModel, legends, abilityRail, vitalsBar } = ctx;
+  const { host, t, num, signed, titleize, firstPara, ui, viewModel, legends, abilityRail, vitalsBar } = ctx;
   const { esc, dataAction, dataOn } = host.h;
-  const { section, card, subLabel, attacksBlock, numField, statTip } = ui;
+  const { section, card, subLabel, attacksBlock, numField, statTip, entityRef } = ui;
 
   const DIE_AVG = { d6: 4, d8: 5, d10: 6, d12: 7 };
   const RES_ORDER = { pool: 0, charge: 1, slot: 2, hitdice: 3 };
@@ -61,6 +61,16 @@ export function makeSheetPanel(ctx) {
     return r ? { ref, name: r.name, level: num(r.level, 0), school: r.school || '' }
              : { ref, name: t('misc.unknown'), level: 0, school: '' };
   }
+  // Hover legend for a spell ref (title + compact description + level/school
+  // terms); null when unresolved → entityRef renders a plain name.
+  function spellLegend(engine, ref) {
+    const r = engine && engine.getItem ? engine.getItem('spell', ref) : null;
+    if (!r) return null;
+    const lvl = num(r.level, 0);
+    const terms = [{ label: t('spellbook.level'), value: lvl === 0 ? t('spellbook.cantrip') : lvl }];
+    if (r.school) terms.push({ label: t('spellbook.school'), value: r.school });
+    return { title: r.name, desc: r.text ? firstPara(r.text) : '', terms, aria: r.name };
+  }
   function combatSpells(c, s, comp, engine) {
     const sc = comp && comp.spellcasting;
     if (!sc || !Array.isArray(sc.perClass) || !sc.perClass.length) return '';
@@ -92,7 +102,7 @@ export function makeSheetPanel(ctx) {
       cast.forEach((sp) => { (byLevel[sp.level] = byLevel[sp.level] || []).push(sp); });
       const groups = Object.keys(byLevel).map(Number).sort((a, b) => a - b).map((lvl) => {
         const label = lvl === 0 ? t('spellbook.cantrip') : t('spellbook.lvlN', { n: lvl });
-        const chips = byLevel[lvl].map((sp) => `<span title="${esc(sp.school || '')}" style="background:var(--bg-raised);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);padding:var(--space-1) var(--space-2);font-size:var(--text-sm);color:var(--text-light)">${esc(sp.name)}</span>`).join('');
+        const chips = byLevel[lvl].map((sp) => `<span style="background:var(--bg-raised);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);padding:var(--space-1) var(--space-2);font-size:var(--text-sm);color:var(--text-light)">${entityRef('spell', sp.ref, sp.name, spellLegend(engine, sp.ref))}</span>`).join('');
         return `<div>${subLabel(label)}<div style="display:flex;flex-wrap:wrap;gap:var(--space-1)">${chips}</div></div>`;
       }).join('');
       body += `<div style="display:flex;flex-direction:column;gap:var(--space-2)">${groups}</div>`;

@@ -254,11 +254,16 @@ export function makeUI(ctx) {
     const color = opts.danger ? 'var(--color-danger)' : 'var(--text-parchment)';
     const bd = opts.danger ? 'var(--color-danger)' : 'var(--border-subtle)';
     const badge = opts.badge ? `<span title="${esc(opts.badgeTitle || '')}">${esc(opts.badge)}</span>` : '';
+    // Name links to its compendium page (when given an {kind,id} link) and/or
+    // carries a hover legend; falls back to plain escaped text.
+    const nameHtml = (opts.link || opts.legend)
+      ? entityRef(opts.link && opts.link.kind, opts.link && opts.link.id, name, opts.legend || null)
+      : esc(name);
     const right = opts.removeAttr
       ? `<button class="inline-create-btn" title="${esc(t('action.remove'))}"${opts.removeAttr}>✕</button>`
       : (opts.locked ? `<span title="${esc(t('spell.alwaysPrepared'))}" style="color:var(--accent-gold)">🔒</span>` : '');
     return `<div title="${esc(opts.title || '')}" style="${S.chip};background:var(--bg-raised);border:1px solid ${bd}">
-      ${badge}<div style="flex:1"><div style="color:${color};font-size:var(--text-sm)">${esc(name)}</div>${sub ? `<div style="color:var(--text-muted);font-size:var(--text-xs)">${esc(sub)}</div>` : ''}</div>${right}</div>`;
+      ${badge}<div style="flex:1"><div style="color:${color};font-size:var(--text-sm)">${nameHtml}</div>${sub ? `<div style="color:var(--text-muted);font-size:var(--text-xs)">${esc(sub)}</div>` : ''}</div>${right}</div>`;
   }
 
   // Engine validation warnings (⚠) — shown in the Builder only. There is no
