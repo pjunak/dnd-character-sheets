@@ -131,7 +131,7 @@ export function makeFake() {
     // options — exercises collectChoices' feature-grants + fromCategory expansion.
     feature: {
       'sorcerer-metamagic': { id: 'sorcerer-metamagic', name: 'Metamagic', kind: 'feature', classId: 'sorcerer', level: 2, localId: 'metamagic',
-        grants: { choices: [{ id: 'metamagic', source: 'sorcerer:2', type: 'metamagic', count: 2, fromCategory: 'metamagic', swappableOn: 'levelup' }] } },
+        grants: { choices: [{ id: 'metamagic', source: 'sorcerer:2', type: 'metamagic', count: 2, countByLevel: { '2': 2, '10': 4, '17': 6 }, fromCategory: 'metamagic', swappableOn: 'levelup' }] } },
       'metamagic-quickened-spell': { id: 'metamagic-quickened-spell', name: 'Quickened Spell', kind: 'feature', classId: 'sorcerer', level: 2, localId: 'quickened-spell', category: 'metamagic', prerequisite: { cost: '2 Sorcery Points' } },
       'metamagic-twinned-spell': { id: 'metamagic-twinned-spell', name: 'Twinned Spell', kind: 'feature', classId: 'sorcerer', level: 2, localId: 'twinned-spell', category: 'metamagic', prerequisite: { cost: '1 Sorcery Point' } },
     },

@@ -81,7 +81,15 @@ export function makeEngine(ctx) {
             if (ch.type === 'expertise') kind = 'expertise';
             else if (ch.type === 'weaponMastery') kind = 'weaponMastery';
             else if (!Array.isArray(from) && (ch.type === 'feat' || ch.category)) kind = 'feat';
-            out.push({ id: ch.id, kind, count: num(ch.count, 1), from, category: ch.category, prompt: ch.prompt, source: { type: 'feature', id: fslim.id, level: srcLevel } });
+            // Pool size grows with level: `countByLevel` maps a level → total known;
+            // take the highest entry at or below this class's level (falls back to the
+            // flat `count`, so a handbook without the schedule still yields the base size).
+            let count = num(ch.count, 1);
+            if (ch.countByLevel) {
+              let best = -1;
+              for (const k of Object.keys(ch.countByLevel)) { const lv = num(k); if (lv <= clvl && lv > best) { best = lv; count = num(ch.countByLevel[k], count); } }
+            }
+            out.push({ id: ch.id, kind, count, from, category: ch.category, prompt: ch.prompt, source: { type: 'feature', id: fslim.id, level: srcLevel } });
           }
         }
       }

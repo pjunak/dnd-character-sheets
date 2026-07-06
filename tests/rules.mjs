@@ -32,6 +32,17 @@ test('rules: feature-record grants expand fromCategory into pool choices', () =>
   assert.ok(!model.collectChoices([{ classId: 'sorcerer', level: 1, subclass: '' }], fake).find((c) => c.id === 'metamagic'), 'level-gated');
 });
 
+test('rules: option-pool count grows with level (countByLevel)', () => {
+  const fake = makeFake();
+  const num = (v, d = 0) => { const n = Number(v); return Number.isFinite(n) ? n : d; };
+  const model = makeEngine({ num, host: {}, NS: 'x', ABILITIES: [], SKILLS: [], abilityMod: () => 0, sheetOf: () => ({}) });
+  const at = (lvl) => model.collectChoices([{ classId: 'sorcerer', level: lvl, subclass: '' }], fake).find((c) => c.id === 'metamagic');
+  assert.equal(at(2).count, 2, 'L2 → 2 metamagic options known');
+  assert.equal(at(9).count, 2, 'L9 → still 2 (before the L10 step)');
+  assert.equal(at(10).count, 4, 'L10 → 4');
+  assert.equal(at(17).count, 6, 'L17 → 6');
+});
+
 test('rules: provides a versioned rules API', () => {
   const { ok, rec, error } = dryRunRegister(register, META);
   assert.ok(ok, error);
