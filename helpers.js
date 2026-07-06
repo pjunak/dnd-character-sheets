@@ -25,6 +25,22 @@ export const SKILLS = Object.entries(SKILL_ABILITY).map(([id, ability]) => ({ id
 export const signed = (n) => (n >= 0 ? '+' + n : String(n));
 export const titleize = (id) => String(id || '').replace(/[-_:]/g, ' ').replace(/\b\w/g, (ch) => ch.toUpperCase());
 
+// Href into the Player's Handbook compendium (the handbook addon owns the
+// `/compendium` route; addon routes are global hash routes, so a plain anchor
+// reaches it). Callers gate on a resolved record id — without the book the name
+// stays plain text (no dead link).
+export const compendiumHref = (kind, id) => `#/compendium/${kind}:${id}`;
+
+// First paragraph of a markdown body, flattened for a hover legend's `desc`
+// (statTip renders desc as ESCAPED plain text): drop a leading heading + emphasis
+// markers, collapse whitespace, cap the length so the card stays compact. Full
+// prose stays on the compendium detail page.
+export function firstPara(md) {
+  const body = String(md || '').replace(/\r/g, '').replace(/^#{1,6}\s+[^\n]*\n+/, '').trim();
+  const para = (body.split(/\n\s*\n/)[0] || '').replace(/\*\*/g, '').replace(/\s+/g, ' ').trim();
+  return para.length > 300 ? para.slice(0, 297) + '…' : para;
+}
+
 /** A blank sheet — the v2 shape stored under addonData[NS]. Only player
  *  decisions are stored; in standalone (no engine) the entered numbers ARE
  *  the decisions. The future engine layers computed values + overrides over

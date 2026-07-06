@@ -54,7 +54,7 @@
 import { t } from './i18n.js';
 import {
   ABILITIES, COINS, LOCATIONS, SKILLS,
-  num, abilityMod, signed, titleize, clampHp, blank, makeHelpers,
+  num, abilityMod, signed, titleize, clampHp, blank, makeHelpers, compendiumHref, firstPara,
   POINT_BUY, pointCost, pointsSpent,
 } from './helpers.js';
 import { makeEngine } from './model.js';
@@ -77,7 +77,7 @@ export default function register(host) {
   const ctx = {
     host, t, NS,
     ABILITIES, COINS, LOCATIONS, SKILLS,
-    num, abilityMod, signed, titleize, clampHp, blank, uid, sheetOf,
+    num, abilityMod, signed, titleize, clampHp, blank, uid, sheetOf, compendiumHref, firstPara,
     POINT_BUY, pointCost, pointsSpent,
   };
   ctx.engine = makeEngine(ctx);

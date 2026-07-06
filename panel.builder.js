@@ -11,15 +11,10 @@
 // ═══════════════════════════════════════════════════════════════
 
 export function makeBuilderPanel(ctx) {
-  const { host, t, ABILITIES, SKILLS, num, signed, abilityMod, titleize, ui, engine: E, POINT_BUY, pointCost, pointsSpent } = ctx;
+  const { host, t, ABILITIES, SKILLS, num, signed, abilityMod, titleize, firstPara, ui, engine: E, POINT_BUY, pointCost, pointsSpent } = ctx;
   const { esc, dataAction, dataOn } = host.h;
-  const { section, miniStat, selectBox, fieldRow, choiceBlock, warningsBlock, numField, statTip } = ui;
+  const { section, miniStat, selectBox, fieldRow, choiceBlock, warningsBlock, numField, entityRef } = ui;
   const { builderModel, collectChoices } = E;
-
-  // Href into the Player's Handbook compendium (the handbook addon owns the
-  // `/compendium` route). Callers gate on a resolved record, so without the book
-  // the name stays plain text (no dead link).
-  const compendiumHref = (kind, id) => `#/compendium/${kind}:${id}`;
 
   function panelBuilder(c, s, editable, comp, warnings, engine) {
     if (!engine) return panelBuilderStub();
@@ -229,15 +224,6 @@ export function makeBuilderPanel(ctx) {
     return choiceBlock(label, `${selectBox(mode, modeOpts, dataOn('change', host.action('builderChoose'), c.id, key, '$value'), t('builder.choose'), ro)}${detail}`);
   }
 
-  // First paragraph of a feature's prose, flattened for the hover card. statTip
-  // renders `desc` as ESCAPED plain text, so drop a leading heading + emphasis
-  // markers and collapse whitespace; cap the length so the card stays compact.
-  function firstPara(md) {
-    const body = String(md || '').replace(/\r/g, '').replace(/^#{1,6}\s+[^\n]*\n+/, '').trim();
-    const para = (body.split(/\n\s*\n/)[0] || '').replace(/\*\*/g, '').replace(/\s+/g, ' ').trim();
-    return para.length > 300 ? para.slice(0, 297) + '…' : para;
-  }
-
   // Resolve a shown feature (class OR subclass) → its `feature` record, for the
   // hover card + link. Subclass features resolve within the selected subclass (by
   // name, then by local id). Class features join by (classId, level, name) with a
@@ -281,13 +267,10 @@ export function makeBuilderPanel(ctx) {
           .map((f) => {
             const name = f.name || titleize(f.id);
             const recF = featureRecordFor(engine, cl, l, f);
-            // When the feature resolves to a record, its name links to the compendium
-            // detail page; otherwise (no book / unresolved) it stays plain text.
-            const inner = (recF && recF.id)
-              ? `<a href="${esc(compendiumHref('feature', recF.id))}">${esc(name)}</a>`
-              : `<span>${esc(name)}</span>`;
+            // Resolved → the name links to its compendium detail page + hover card;
+            // unresolved (no book / predates records) → plain text, no dead link.
             const legend = recF && recF.text ? { title: recF.name || name, desc: firstPara(recF.text), aria: name } : null;
-            return statTip(inner, legend, { underline: true });
+            return entityRef('feature', recF && recF.id, name, legend);
           });
         rows.push(`<div style="display:flex;gap:var(--space-2);padding:var(--space-1) 0;border-bottom:1px solid rgba(var(--gold-muted),.1);font-size:var(--text-sm)">
           <span style="color:var(--text-muted);min-width:2.5rem">L${esc(String(charLvl))}</span>

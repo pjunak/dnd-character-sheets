@@ -21,7 +21,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 export function makeUI(ctx) {
-  const { host, t, num, signed } = ctx;
+  const { host, t, num, signed, compendiumHref } = ctx;
   const { esc } = host.h;
 
   // ── Scoped stylesheet (tokens only) ──────────────────────────────
@@ -194,6 +194,18 @@ export function makeUI(ctx) {
       + `<span class="codex-pop" role="tooltip"><span class="codex-pop-title">${esc(legend.title || '')}</span>${desc}${formula}${terms}${total}</span></span>`;
   }
 
+  // ── A record name that (when resolvable) links to its compendium detail page
+  //    AND carries a hover legend — the shared "click-to-go + hover" primitive
+  //    (B1/B2). Gates on `id`: with no id the name stays plain text (no dead link),
+  //    mirroring the Builder log. `legend` is a statTip legend (or null → link
+  //    only, no card). The dotted "has-info" underline shows only with a legend. ──
+  function entityRef(kind, id, name, legend, opts) {
+    opts = opts || {};
+    const label = esc(String(name == null ? '' : name));
+    const inner = id ? `<a href="${esc(compendiumHref(kind, id))}">${label}</a>` : label;
+    return statTip(inner, legend || null, { underline: !!legend, ...opts });
+  }
+
   // ── Engine-mode "manual override" control pair (ARCH-3). Type a value to beat
   //    the computed one; ↺ clears back to auto; a faint line flags divergence. ──
   function overrideControls(cid, field, label, numeric, autoVal, isOver) {
@@ -280,7 +292,7 @@ export function makeUI(ctx) {
   return {
     S, styleTag, section, card, sectionLabel, subLabel,
     heroTile, abilityTile, profDot, profRow, rowLine, overrideControls,
-    numField, statTip, statBox, miniStat,
+    numField, statTip, entityRef, statBox, miniStat,
     selectBox, fieldRow, choiceBlock, spellChip, warningsBlock, attacksBlock,
   };
 }
