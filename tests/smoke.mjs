@@ -523,6 +523,43 @@ test('sheets: printSheet builds a self-contained print sheet (B4.6)', () => {
   assert.match(captured, /Spellbook/, 'inventory is listed');
 });
 
+test('sheets: exportSheet serializes the character to JSON (B4.6)', () => {
+  const char = { id: 'ce', name: 'Frodo', addonData: { 'dnd55e-sheets': { className: 'Rogue', level: 3, abilities: { DEX: 16 } } } };
+  const { rec } = dryRunRegister(register, META, { ...PHB(), fixtures: { characters: [char] } });
+  let captured = '';
+  const oB = globalThis.Blob, oU = globalThis.URL, oD = globalThis.document;
+  globalThis.Blob = function (parts) { captured = String((parts && parts[0]) || ''); };
+  globalThis.URL = { createObjectURL: () => 'blob:x', revokeObjectURL() {} };
+  globalThis.document = { createElement: () => ({ href: '', download: '', click() {}, remove() {} }), body: { appendChild() {}, removeChild() {} } };
+  try { rec.actions.find((a) => a.name === 'exportSheet').fn('ce'); }
+  finally { globalThis.Blob = oB; globalThis.URL = oU; globalThis.document = oD; }
+  const parsed = JSON.parse(captured);
+  assert.equal(parsed.className, 'Rogue', 'exported JSON carries the sheet data');
+  assert.equal(parsed.abilities.DEX, 16, 'and the abilities');
+});
+
+test('sheets: the import modal renders a paste area (B4.6)', () => {
+  globalThis.localStorage = { getItem: (k) => (String(k).startsWith('dse-import:') ? 'open' : null), setItem() {}, removeItem() {} };
+  try {
+    const { rec } = dryRunRegister(register, META, PHB());
+    const out = renderBody(rec, { id: 'cim', name: 'Sam', addonData: { 'dnd55e-sheets': { className: 'Fighter' } } });
+    assert.match(out, /Import character/, 'the import modal title');
+    assert.match(out, /dse-import-cim/, 'the paste textarea');
+    assert.match(out, /importApply/, 'the import action');
+  } finally { clearLocalStorage(); }
+});
+
+test('sheets: import parses safely — valid + garbage JSON never throw (B4.6)', () => {
+  const { rec } = dryRunRegister(register, META, PHB());
+  const act = (n, ...a) => rec.actions.find((x) => x.name === n).fn(...a);
+  assert.doesNotThrow(() => act('importOpen', 'c1'));
+  assert.doesNotThrow(() => act('importClose', 'c1'));
+  globalThis.document = { getElementById: () => ({ value: '{"className":"Bard","abilities":{"CHA":15}}' }) };
+  try { assert.doesNotThrow(() => act('importApply', 'c1')); } finally { delete globalThis.document; }
+  globalThis.document = { getElementById: () => ({ value: 'not valid json {{{' }) };
+  try { assert.doesNotThrow(() => act('importApply', 'c1')); } finally { delete globalThis.document; }
+});
+
 test('sheets: recorded spell swaps show as a linked history in the Spellbook (B4.5)', () => {
   mockLocalStorage('spellbook');
   try {

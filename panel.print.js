@@ -12,7 +12,27 @@
 
 export function makePrintPanel(ctx) {
   const { host, t, ABILITIES, SKILLS, num, signed, abilityMod, titleize, viewModel } = ctx;
-  const { esc } = host.h;
+  const { esc, dataAction } = host.h;
+
+  // Import modal (B4.6) — a floating overlay to paste a previously-exported JSON
+  // and overwrite THIS character. The explicit "Import" button is the confirmation
+  // (it replaces the sheet). Rendered at the fragment root when the flag is set.
+  function importModal(c) {
+    const cid = c.id;
+    return `<div class="addon-wizard-overlay">
+      <div style="position:absolute;inset:0" title="${esc(t('action.cancel'))}"${dataAction(host.action('importClose'), cid)}></div>
+      <div class="addon-wizard" role="dialog" aria-modal="true" aria-label="${esc(t('data.importTitle'))}" style="position:relative;z-index:1">
+        <div class="addon-wizard-head"><h3>&#11014; ${esc(t('data.importTitle'))}</h3>
+          <button class="inline-create-btn" title="${esc(t('action.cancel'))}"${dataAction(host.action('importClose'), cid)}>✕</button></div>
+        <div class="addon-wizard-body">
+          <div style="color:var(--text-muted);font-size:var(--text-sm);margin-bottom:var(--space-2)">${esc(t('data.importHint'))}</div>
+          <textarea id="dse-import-${esc(cid)}" class="edit-input" spellcheck="false" style="width:100%;min-height:9rem;font-family:var(--font-mono,monospace);font-size:var(--text-xs)" placeholder="${esc(t('data.importPlaceholder'))}"></textarea>
+          <div style="display:flex;gap:var(--space-2);justify-content:flex-end;margin-top:var(--space-2)">
+            <button class="inline-create-btn"${dataAction(host.action('importClose'), cid)}>${esc(t('action.cancel'))}</button>
+            <button class="edit-save-btn"${dataAction(host.action('importApply'), cid)}>${esc(t('data.importConfirm'))}</button>
+          </div>
+        </div></div></div>`;
+  }
 
   const spellName = (engine, ref) => {
     const r = engine && engine.getItem ? engine.getItem('spell', ref) : null;
@@ -114,5 +134,5 @@ export function makePrintPanel(ctx) {
     </body></html>`;
   }
 
-  return { buildPrintHtml };
+  return { buildPrintHtml, importModal };
 }
