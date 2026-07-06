@@ -283,6 +283,7 @@ export default {
   'action.hpPlus':    'Heal 1 HP',
   'action.remove':    'Remove',
   'action.cancel':    'Cancel',
+  'action.print':     'Print',
   'misc.notSet':      '—',
   'misc.unnamed':     '(unnamed)',
   'misc.unknown':     '(unknown)',

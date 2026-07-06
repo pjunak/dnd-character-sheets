@@ -506,6 +506,23 @@ test('sheets: a recorded spell swap shows in the class spine at its level (B4.5b
   } finally { clearLocalStorage(); }
 });
 
+test('sheets: printSheet builds a self-contained print sheet (B4.6)', () => {
+  const char = { id: 'cp', name: 'Gandalf', addonData: { 'dnd55e-sheets': {
+    classes: [{ classId: 'wizard', level: 5, subclass: '' }], abilities: { INT: 16, DEX: 14, CON: 14 },
+    preparedSpells: { wizard: ['fireball'] }, cantrips: { wizard: ['fire-bolt'] },
+    inventory: [{ id: 'i1', name: 'Spellbook', qty: 1, location: 'pack' }], currency: { gp: 25 } } } };
+  const { rec } = dryRunRegister(register, META, { ...PHB(), fixtures: { characters: [char] } });
+  let captured = '';
+  globalThis.window = { open: () => ({ document: { open() {}, write(h) { captured = h; }, close() {} }, focus() {}, print() {} }) };
+  try { rec.actions.find((a) => a.name === 'printSheet').fn('cp'); } finally { delete globalThis.window; }
+  assert.match(captured, /<!doctype html>/i, 'a standalone HTML document (opens in a new window)');
+  assert.match(captured, /Gandalf/, 'the character name');
+  assert.match(captured, /Ability Scores/, 'the abilities section');
+  assert.match(captured, /Fireball/, 'a prepared spell is listed');
+  assert.match(captured, /Fire Bolt/, 'a cantrip is listed');
+  assert.match(captured, /Spellbook/, 'inventory is listed');
+});
+
 test('sheets: recorded spell swaps show as a linked history in the Spellbook (B4.5)', () => {
   mockLocalStorage('spellbook');
   try {

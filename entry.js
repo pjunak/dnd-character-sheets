@@ -67,6 +67,7 @@ import { makeSheetPanel } from './panel.sheet.js';
 import { makeSpellbookPanel } from './panel.spellbook.js';
 import { makeBackpackPanel } from './panel.backpack.js';
 import { makeBuilderPanel } from './panel.builder.js';
+import { makePrintPanel } from './panel.print.js';
 
 export default function register(host) {
   const { esc } = host.h;
@@ -98,10 +99,11 @@ export default function register(host) {
     ...makeSpellbookPanel(ctx),
     ...makeBackpackPanel(ctx),
     ...makeBuilderPanel(ctx),
+    ...makePrintPanel(ctx),
   };
 
   const { getRules, safeHydrate, decisionsOf, mutate } = ctx.engine;
-  const { vitalsBar, panelOverview, panelSheet, panelSpellbook, panelBackpack, panelBuilder, restModal, spellSwapModal, spellbookMgrModal } = ctx.panels;
+  const { vitalsBar, panelOverview, panelSheet, panelSpellbook, panelBackpack, panelBuilder, restModal, spellSwapModal, spellbookMgrModal, buildPrintHtml } = ctx.panels;
 
   // ── Tab model ────────────────────────────────────────────────────
   //  Overview (lore) + the mechanical tabs. Spellbook only when the character has
@@ -193,7 +195,11 @@ export default function register(host) {
       try { if (engine && editable && spellbookMgrModal) spellMgrMode = localStorage.getItem('dse-spellmgr:' + c.id) || null; } catch (_) {}
       const spellMgrOverlay = (spellMgrMode === 'copy' || spellMgrMode === 'other') ? spellbookMgrModal(c, s, comp, engine, spellMgrMode) : '';
 
-      return `<div class="addon-dnd55e-sheets" style="display:flex;flex-direction:column">${ctx.ui.styleTag}${tabBar}
+      // Sheet-wide toolbar (right-aligned): Print / PDF (B4.6). Available to anyone
+      // who can view the sheet — it opens a read-only print window.
+      const toolbar = `<div style="display:flex;justify-content:flex-end;gap:var(--space-1);margin-bottom:var(--space-1)"><button class="inline-create-btn"${host.h.dataAction(host.action('printSheet'), c.id)}>🖨 ${esc(t('action.print'))}</button></div>`;
+
+      return `<div class="addon-dnd55e-sheets" style="display:flex;flex-direction:column">${ctx.ui.styleTag}${toolbar}${tabBar}
         <div role="tabpanel" id="${esc(pid)}" aria-labelledby="${esc(tabBtnId(c.id, active))}" tabindex="0">${vitals}${panel}</div>${restOverlay}${swapOverlay}${spellMgrOverlay}</div>`;
     },
   });
@@ -671,6 +677,20 @@ export default function register(host) {
   });
   host.registerAction('builderExtraFeatRemove', (cid, id) => {
     builderMutate(cid, (s) => { s.extraFeats = (Array.isArray(s.extraFeats) ? s.extraFeats : []).filter((f) => f.id !== id); });
+  });
+  // Print / PDF (B4.6): build a self-contained sheet and open it in a new window,
+  // which auto-opens the browser's print dialog (→ paper or Save as PDF). Isolated
+  // from host chrome + theme. No-ops safely without a DOM (tests / headless).
+  host.registerAction('printSheet', (cid) => {
+    const ent = host.store.getCharacters().find((x) => x && x.id === cid) || { id: cid };
+    const s = sheetOf(ent);
+    const engine = getRules();
+    const r = engine ? safeHydrate(engine, decisionsOf(s, engine)) : null;
+    const html = buildPrintHtml(ent, s, r && r.sheet, engine);
+    try {
+      const w = window.open('', '_blank');
+      if (w && w.document) { w.document.open(); w.document.write(html); w.document.close(); w.focus(); w.print(); }
+    } catch (_) {}
   });
   host.registerAction('builderBgAsi', (cid, value) => {
     builderMutate(cid, (s) => {
