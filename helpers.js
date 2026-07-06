@@ -41,6 +41,28 @@ export function firstPara(md) {
   return para.length > 300 ? para.slice(0, 297) + '…' : para;
 }
 
+/** Resolve a shown feature (class OR subclass) → its `feature` record, for a link +
+ *  hover. Subclass features resolve within the selected subclass (by name, then local
+ *  id). Class features join by (classId, level, name) with a level-agnostic and a
+ *  shared-generic (ASI / Epic Boon, classId null) fallback. `cl` supplies classId for
+ *  class features. null when the book addon predates feature records. (Shared by the
+ *  Builder log + the read-tab Features summary.) */
+export function featureRecordFor(engine, cl, level, f) {
+  if (!engine || !engine.listFeatures || !engine.getFeature) return null;
+  const norm = (x) => String(x || '').trim().toLowerCase();
+  const name = f.name || titleize(f.id);   // class features carry the name in `id` (no `name`)
+  if (f.source && f.source.type === 'subclass') {
+    const subs = engine.listFeatures({ subclassId: f.source.id });
+    const hit = subs.find((x) => norm(x.name) === norm(name)) || subs.find((x) => x.localId === f.id);
+    return hit ? engine.getFeature(hit.id) : null;
+  }
+  const owned = engine.listFeatures({ classId: cl && cl.classId });
+  const hit = owned.find((x) => !x.subclassId && x.level === level && norm(x.name) === norm(name))
+           || owned.find((x) => !x.subclassId && norm(x.name) === norm(name))
+           || engine.listFeatures().find((x) => x.classId == null && norm(x.name) === norm(name));
+  return hit ? engine.getFeature(hit.id) : null;
+}
+
 /** A blank sheet — the v2 shape stored under addonData[NS]. Only player
  *  decisions are stored; in standalone (no engine) the entered numbers ARE
  *  the decisions. The future engine layers computed values + overrides over
@@ -57,6 +79,8 @@ export const blank = () => ({
   saveProf: {}, skillProf: {},
   spells: [],      // manual/extra + copied spell entries [{id,name,level,school,origin}] (SP-1/SP-15)
   preparedSpells: {}, // engine mode: { <classId>: [spellRef,…] } prepared picks (SP-2)
+  spellbook: {},      // engine mode: { <classId>: [spellRef,…] } the Wizard's LEARNED pool — prepared draws from this subset, not the whole class list (SP-5)
+  spellSwaps: [],  // engine mode: [{level, classId, out, in}] recorded level-up spell swaps (FE-4)
   cantrips: {},       // engine mode: { <classId>: [spellRef,…] } cantrip picks (SP-7)
   grantChoices: {},   // engine mode: { '<src>:<id>:<grantId>': [spellRef,…] } resolved choose-grants (SP-10)
   inventory: [],   // [{id, name, qty, location, notes}]
@@ -74,6 +98,7 @@ export const blank = () => ({
   abilityGrants: [],      // [{id, source, assign:{STR:+2,…}}] background ASI / half-feats (AB-1)
   featureChoices: {},     // { <choiceId>: <value> } generic choice resolutions (ARCH-9/FE-1)
   feats: [],              // [{featId, source}] chosen feats
+  extraFeats: [],         // level-independent feats from a custom source: [{id, featId?|name, sourceNote}] — compendium featIds feed the engine; free-text is tracked (B4.5b)
   notes: '',
 });
 
@@ -105,6 +130,8 @@ export function makeHelpers(host) {
       overrides: { ...(s.overrides || {}) },
       spells:    Array.isArray(s.spells) ? s.spells : [],
       preparedSpells: { ...(s.preparedSpells || {}) },
+      spellbook: { ...(s.spellbook || {}) },
+      spellSwaps: Array.isArray(s.spellSwaps) ? s.spellSwaps : [],
       cantrips:  { ...(s.cantrips || {}) },
       grantChoices: { ...(s.grantChoices || {}) },
       inventory: Array.isArray(s.inventory) ? s.inventory : [],
@@ -115,6 +142,7 @@ export function makeHelpers(host) {
       abilityGrants: Array.isArray(s.abilityGrants) ? s.abilityGrants : [],
       featureChoices: { ...(s.featureChoices || {}) },
       feats:     Array.isArray(s.feats) ? s.feats : [],
+      extraFeats: Array.isArray(s.extraFeats) ? s.extraFeats : [],
     };
   };
 

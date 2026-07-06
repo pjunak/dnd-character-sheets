@@ -13,7 +13,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 export function makeSheetPanel(ctx) {
-  const { host, t, num, signed, titleize, firstPara, ui, viewModel, legends, abilityRail, vitalsBar } = ctx;
+  const { host, t, num, signed, titleize, firstPara, featureRecordFor, ui, viewModel, legends, abilityRail, vitalsBar } = ctx;
   const { esc, dataAction, dataOn } = host.h;
   const { section, card, subLabel, attacksBlock, numField, statTip, entityRef } = ui;
 
@@ -221,6 +221,28 @@ export function makeSheetPanel(ctx) {
     </div>`;
   }
 
+  // Read-tab Features summary — the character's class + subclass features, grouped by
+  // level, each linking to its compendium page + a description hover (reuses the shared
+  // resolver + entityRef). Review your features without opening the Builder.
+  function featuresSummary(comp, engine) {
+    const features = (comp && comp.features) || [];
+    if (!features.length || !engine || !engine.listFeatures) return '';
+    const byLevel = {};
+    for (const f of features) {
+      const level = num(f.source && f.source.level, 0);
+      const cl = { classId: (f.source && f.source.type === 'class') ? f.source.id : null };
+      const rec = featureRecordFor(engine, cl, level, f);
+      const name = f.name || titleize(f.id);
+      const legend = rec && rec.text ? { title: rec.name || name, desc: firstPara(rec.text), aria: name } : null;
+      (byLevel[level] = byLevel[level] || []).push(entityRef('feature', rec && rec.id, name, legend));
+    }
+    const groups = Object.keys(byLevel).map(Number).sort((a, b) => a - b).map((lvl) =>
+      `<div style="display:flex;gap:var(--space-2);padding:var(--space-1) 0;border-bottom:1px solid rgba(var(--gold-muted),.1);font-size:var(--text-sm)">
+        <span style="color:var(--text-muted);min-width:2.5rem">L${esc(String(lvl))}</span>
+        <span style="color:var(--text-parchment);flex:1">${byLevel[lvl].join(', ')}</span></div>`).join('');
+    return section(t('sheet.features'), groups, { icon: '🎯' });
+  }
+
   function panelSheet(c, s, edit, comp, engine) {
     const engineAttacks = attacksBlock(comp);   // '' when no comp.weapons
     const attacks = engineAttacks
@@ -234,6 +256,7 @@ export function makeSheetPanel(ctx) {
       ${attacks}
       ${combatSpells(c, s, comp, engine)}
       ${trackers(c, s, edit, comp, engine)}
+      ${featuresSummary(comp, engine)}
     </div>`;
 
     return `<div class="dse-cols">

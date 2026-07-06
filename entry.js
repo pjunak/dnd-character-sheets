@@ -54,7 +54,7 @@
 import { t } from './i18n.js';
 import {
   ABILITIES, COINS, LOCATIONS, SKILLS,
-  num, abilityMod, signed, titleize, clampHp, blank, makeHelpers, compendiumHref, firstPara,
+  num, abilityMod, signed, titleize, clampHp, blank, makeHelpers, compendiumHref, firstPara, featureRecordFor,
   POINT_BUY, pointCost, pointsSpent,
 } from './helpers.js';
 import { makeEngine } from './model.js';
@@ -77,9 +77,14 @@ export default function register(host) {
   const ctx = {
     host, t, NS,
     ABILITIES, COINS, LOCATIONS, SKILLS,
-    num, abilityMod, signed, titleize, clampHp, blank, uid, sheetOf, compendiumHref, firstPara,
+    num, abilityMod, signed, titleize, clampHp, blank, uid, sheetOf, compendiumHref, firstPara, featureRecordFor,
     POINT_BUY, pointCost, pointsSpent,
   };
+  // Builder UI state, per character id: { tab: 'character'|<classId>, open: '<classId>:<level>'|null }.
+  // In-memory (shared via ctx → the Builder panel reads it; actions below mutate it) — deliberately
+  // NOT persisted: the Builder is only opened to create/level a character, so it defaults to the
+  // Character tab each load, and this saves any localStorage plumbing (B4.5b).
+  ctx.builderState = {};
   ctx.engine = makeEngine(ctx);
   ctx.viewModel = ctx.engine.viewModel;     // hot path — promote for panel destructuring
   ctx.ui = makeUI(ctx);
@@ -96,7 +101,7 @@ export default function register(host) {
   };
 
   const { getRules, safeHydrate, decisionsOf, mutate } = ctx.engine;
-  const { vitalsBar, panelOverview, panelSheet, panelSpellbook, panelBackpack, panelBuilder, restModal } = ctx.panels;
+  const { vitalsBar, panelOverview, panelSheet, panelSpellbook, panelBackpack, panelBuilder, restModal, spellSwapModal, spellbookMgrModal } = ctx.panels;
 
   // ── Tab model ────────────────────────────────────────────────────
   //  Overview (lore) + the mechanical tabs. Spellbook only when the character has
@@ -177,9 +182,19 @@ export default function register(host) {
       let restOpen = false;
       try { restOpen = !!(engine && editable && restModal && localStorage.getItem('dse-rest:' + c.id) === 'open'); } catch (_) {}
       const restOverlay = restOpen ? restModal(c, s, comp) : '';
+      // Level-up spell-swap modal (same floating-overlay pattern; the flag stores the
+      // classId being swapped). Engine + editor only.
+      let swapClass = null;
+      try { if (engine && editable && spellSwapModal) swapClass = localStorage.getItem('dse-swap:' + c.id) || null; } catch (_) {}
+      const swapOverlay = swapClass ? spellSwapModal(c, s, comp, engine, swapClass) : '';
+      // Spellbook-management modal — same floating pattern; the flag value is the
+      // mode ('copy' | 'other'), so each of the two buttons opens the right form.
+      let spellMgrMode = null;
+      try { if (engine && editable && spellbookMgrModal) spellMgrMode = localStorage.getItem('dse-spellmgr:' + c.id) || null; } catch (_) {}
+      const spellMgrOverlay = (spellMgrMode === 'copy' || spellMgrMode === 'other') ? spellbookMgrModal(c, s, comp, engine, spellMgrMode) : '';
 
       return `<div class="addon-dnd55e-sheets" style="display:flex;flex-direction:column">${ctx.ui.styleTag}${tabBar}
-        <div role="tabpanel" id="${esc(pid)}" aria-labelledby="${esc(tabBtnId(c.id, active))}" tabindex="0">${vitals}${panel}</div>${restOverlay}</div>`;
+        <div role="tabpanel" id="${esc(pid)}" aria-labelledby="${esc(tabBtnId(c.id, active))}" tabindex="0">${vitals}${panel}</div>${restOverlay}${swapOverlay}${spellMgrOverlay}</div>`;
     },
   });
 
@@ -324,6 +339,76 @@ export default function register(host) {
   host.registerAction('unlearnCantrip', (cid, classId, ref) => { mutate(cid, (s) => { delRef(s, 'cantrips', classId, ref); return s; }); });
   host.registerAction('prepSpell', (cid, classId, ref) => { mutate(cid, (s) => { addRef(s, 'preparedSpells', classId, ref); return s; }); });
   host.registerAction('unprepSpell', (cid, classId, ref) => { mutate(cid, (s) => { delRef(s, 'preparedSpells', classId, ref); return s; }); });
+  // Wizard spellbook (SP-5): learn a spell into the book / remove it. Forgetting a
+  // spell also unprepares it (you can't prepare a spell that's no longer in your book).
+  host.registerAction('spellbookLearn', (cid, classId, ref) => { mutate(cid, (s) => { addRef(s, 'spellbook', classId, ref); return s; }); });
+  host.registerAction('spellbookForget', (cid, classId, ref) => { mutate(cid, (s) => { delRef(s, 'spellbook', classId, ref); delRef(s, 'preparedSpells', classId, ref); return s; }); });
+  // Spellbook management popup (unified add/remove) — a floating overlay to COPY a
+  // spell into the book (scroll + gp; spellbook casters only) or add a CUSTOM
+  // homebrew spell, and to remove either. Flag in localStorage like the swap modal.
+  // The flag VALUE is the mode: 'copy' (scroll → book, spellbook casters) or
+  // 'other' (a spell from a feat / item / homebrew). Two buttons, one modal.
+  const spellMgrKey = (cid) => 'dse-spellmgr:' + cid;
+  host.registerAction('spellMgrOpen', (cid, mode) => { try { localStorage.setItem(spellMgrKey(cid), mode || 'other'); } catch (_) {} host.ui.rerender(); });
+  host.registerAction('spellMgrClose', (cid) => { try { localStorage.removeItem(spellMgrKey(cid)); } catch (_) {} host.ui.rerender(); });
+  // Copy a spell into the book: read the picked spell (+ optional scroll) at click
+  // time, charge 50 gp × spell level (2024 copying cost), consume the scroll if one
+  // was chosen, and add the ref to s.spellbook[classId] (→ preparable via B4.2b).
+  host.registerAction('spellCopy', (cid, classId) => {
+    let ref = '', scrollId = '';
+    try { const sp = document.getElementById('dse-copy-spell-' + cid); const sc = document.getElementById('dse-copy-scroll-' + cid); ref = sp && sp.value; scrollId = sc && sc.value; } catch (_) {}
+    if (!ref) { host.ui.rerender(); return; }
+    const engine = getRules();
+    const rec = engine && engine.getItem ? engine.getItem('spell', ref) : null;
+    const cost = 50 * Math.max(1, num(rec && rec.level, 1));
+    mutate(cid, (s) => {
+      addRef(s, 'spellbook', classId, ref);
+      s.currency = { ...s.currency, gp: Math.max(0, num(s.currency.gp, 0) - cost) };
+      if (scrollId) s.inventory = s.inventory
+        .map((it) => (it.id === scrollId ? { ...it, qty: num(it.qty, 1) - 1 } : it))
+        .filter((it) => !(it.id === scrollId && num(it.qty, 0) <= 0));
+      return s;
+    });
+  });
+  // Add a spell "from another source" (feat / magic item / homebrew) — read the
+  // form at click time; a name is required. `castWithSlots` (2024/SP-10): a
+  // spellcaster can cast such a spell using their spell slots, so it joins the
+  // castable repertoire rather than being a display-only note.
+  host.registerAction('spellCustomAdd', (cid) => {
+    let name = '', level = 0, school = '', note = '', slots = false;
+    try {
+      name = (document.getElementById('dse-custom-name-' + cid) || {}).value || '';
+      level = (document.getElementById('dse-custom-level-' + cid) || {}).value || 0;
+      school = (document.getElementById('dse-custom-school-' + cid) || {}).value || '';
+      note = (document.getElementById('dse-custom-note-' + cid) || {}).value || '';
+      slots = !!(document.getElementById('dse-custom-slots-' + cid) || {}).checked;
+    } catch (_) {}
+    if (!String(name).trim()) { host.ui.rerender(); return; }
+    mutate(cid, (s) => { s.spells = s.spells.concat([{ id: uid('spell'), name: String(name).trim(), level: num(level, 0), school: String(school), prepared: false, origin: 'other', sourceNote: String(note), castWithSlots: slots }]); return s; });
+  });
+  // Level-up spell swap (FE-4): open/close the floating picker (the flag stores the
+  // classId); apply reads the two <select>s at click time (like hpApply) → records
+  // {level,classId,out,in}, swaps `out`→`in` in prepared, then closes. Forget drops a row.
+  const swapKey = (cid) => 'dse-swap:' + cid;
+  host.registerAction('spellSwapOpen', (cid, classId) => { try { localStorage.setItem(swapKey(cid), String(classId)); } catch (_) {} host.ui.rerender(); });
+  host.registerAction('spellSwapClose', (cid) => { try { localStorage.removeItem(swapKey(cid)); } catch (_) {} host.ui.rerender(); });
+  host.registerAction('spellSwapApply', (cid, classId) => {
+    let out = '', inRef = '';
+    try { const o = document.getElementById('dse-swap-out-' + cid); const i = document.getElementById('dse-swap-in-' + cid); out = o && o.value; inRef = i && i.value; } catch (_) {}
+    try { localStorage.removeItem(swapKey(cid)); } catch (_) {}
+    if (!out || !inRef || out === inRef) { host.ui.rerender(); return; }
+    mutate(cid, (s) => {
+      delRef(s, 'preparedSpells', classId, out);
+      addRef(s, 'preparedSpells', classId, inRef);
+      // Stamp BOTH the total level (legacy display) and the class level, so the Builder
+      // spine can place the swap at the right class-tab row even when multiclassing (B4.5b).
+      const cl = (s.classes || []).find((x) => x.classId === String(classId));
+      const classLevel = cl ? num(cl.level, 1) : num(s.level, 1);
+      s.spellSwaps = (s.spellSwaps || []).concat([{ level: num(s.level, 1), classLevel, classId: String(classId), out: String(out), in: String(inRef) }]);
+      return s;
+    });
+  });
+  host.registerAction('spellSwapForget', (cid, idx) => { mutate(cid, (s) => { s.spellSwaps = (s.spellSwaps || []).filter((_, i) => i !== num(idx)); return s; }); });
   // Drag-and-drop prep via the host drag seam.
   let _dragRef = null;
   host.registerAction('spellDragStart', (ev, ref) => {
@@ -333,7 +418,8 @@ export default function register(host) {
   host.registerAction('spellDrop', (cid, classId, kind) => {
     const ref = _dragRef; _dragRef = null;
     if (!ref) return;
-    mutate(cid, (s) => { addRef(s, kind === 'cantrip' ? 'cantrips' : 'preparedSpells', classId, ref); return s; });
+    const bag = kind === 'cantrip' ? 'cantrips' : kind === 'spellbook' ? 'spellbook' : 'preparedSpells';
+    mutate(cid, (s) => { addRef(s, bag, classId, ref); return s; });
   });
   // Choose-grant picks (Magic Initiate / Fey Touched / lineage cantrip).
   host.registerAction('grantPick', (cid, key, ref) => {
@@ -495,7 +581,7 @@ export default function register(host) {
   });
 
   // ── Builder (engine mode) — edit the rich decision model + materialize ────
-  const { builderMutate } = ctx.engine;
+  const { builderMutate, reconcile } = ctx.engine;
   const parseAssign = (str) => { const a = {}; String(str || '').split(',').forEach((p) => { const [k, v] = p.split(':'); if (k && v) a[k.trim()] = num(v); }); return a; };
   const removeGrant = (s, id) => { s.abilityGrants = (s.abilityGrants || []).filter((g) => g.id !== id); };
   const upsertGrant = (s, id, source, assign) => { removeGrant(s, id); if (assign && Object.keys(assign).length) s.abilityGrants = (s.abilityGrants || []).concat([{ id, source, assign }]); };
@@ -537,20 +623,54 @@ export default function register(host) {
       s.baseStats = base;
     });
   });
+  // Structural edits (class/level/subclass/remove) can orphan level- or
+  // owner-scoped decisions (ASI picks, pool picks) — reconcile prunes them so a
+  // stale abilityGrant can't keep bumping scores (grants apply unconditionally).
   host.registerAction('builderClassSet', (cid, idx, classId) => {
-    builderMutate(cid, (s) => { if (s.classes[idx]) { s.classes[idx] = { ...s.classes[idx], classId: String(classId), subclass: '' }; } });
+    builderMutate(cid, (s, engine) => { if (s.classes[idx]) { s.classes[idx] = { ...s.classes[idx], classId: String(classId), subclass: '' }; } if (engine) reconcile(s, engine); });
   });
   host.registerAction('builderLevelSet', (cid, idx, value) => {
-    builderMutate(cid, (s) => { if (s.classes[idx]) s.classes[idx] = { ...s.classes[idx], level: Math.max(1, Math.min(20, num(value, 1))) }; });
+    builderMutate(cid, (s, engine) => { if (s.classes[idx]) s.classes[idx] = { ...s.classes[idx], level: Math.max(1, Math.min(20, num(value, 1))) }; if (engine) reconcile(s, engine); });
   });
   host.registerAction('builderSubclassSet', (cid, idx, subclass) => {
-    builderMutate(cid, (s) => { if (s.classes[idx]) s.classes[idx] = { ...s.classes[idx], subclass: String(subclass) }; });
+    builderMutate(cid, (s, engine) => { if (s.classes[idx]) s.classes[idx] = { ...s.classes[idx], subclass: String(subclass) }; if (engine) reconcile(s, engine); });
   });
   host.registerAction('builderAddClass', (cid) => {
     builderMutate(cid, (s) => { s.classes = s.classes.concat([{ classId: '', level: 1, subclass: '' }]); });
   });
   host.registerAction('builderRemoveClass', (cid, idx) => {
-    builderMutate(cid, (s) => { if (s.classes.length > 1) s.classes = s.classes.filter((_, i) => i !== idx); });
+    builderMutate(cid, (s, engine) => { if (s.classes.length > 1) s.classes = s.classes.filter((_, i) => i !== idx); if (engine) reconcile(s, engine); });
+  });
+  // Builder sub-tab switch (Character | <classId>) — in-memory, clears any open level row.
+  host.registerAction('builderTab', (cid, tab) => { ctx.builderState[cid] = { ...(ctx.builderState[cid] || {}), tab: String(tab), open: null }; host.ui.rerender(); });
+  // Expand/collapse one level row (accordion — one open at a time; click again to close).
+  host.registerAction('builderToggleLevel', (cid, key) => { const st = ctx.builderState[cid] || {}; ctx.builderState[cid] = { ...st, open: st.open === String(key) ? null : String(key) }; host.ui.rerender(); });
+  // Level a class up/down by one (guided add-a-level). Adding a level focuses (opens)
+  // the new top level so its choices are right there to resolve.
+  host.registerAction('builderLevelStep', (cid, classId, dir) => {
+    let newLevel = 1;
+    builderMutate(cid, (s, engine) => {
+      const cl = (s.classes || []).find((x) => x.classId === String(classId));
+      if (cl) { cl.level = Math.max(1, Math.min(20, num(cl.level, 1) + num(dir, 0))); newLevel = cl.level; }
+      if (engine) reconcile(s, engine);
+    });
+    if (num(dir, 0) > 0) { ctx.builderState[cid] = { ...(ctx.builderState[cid] || {}), tab: String(classId), open: classId + ':' + newLevel }; host.ui.rerender(); }
+  });
+  // Level-independent extra feats (B4.5b) — read the picker + optional custom name +
+  // note at click time. A compendium featId feeds the engine (mechanics apply); a
+  // free-text name is tracked. builderMutate so a real feat re-materializes the sheet.
+  host.registerAction('builderExtraFeatAdd', (cid) => {
+    let featId = '', name = '', note = '';
+    try {
+      featId = (document.getElementById('dse-xfeat-id-' + cid) || {}).value || '';
+      name = (document.getElementById('dse-xfeat-name-' + cid) || {}).value || '';
+      note = (document.getElementById('dse-xfeat-note-' + cid) || {}).value || '';
+    } catch (_) {}
+    if (!featId && !String(name).trim()) { host.ui.rerender(); return; }
+    builderMutate(cid, (s) => { s.extraFeats = (Array.isArray(s.extraFeats) ? s.extraFeats : []).concat([{ id: uid('xfeat'), featId: String(featId) || null, name: featId ? '' : String(name).trim(), sourceNote: String(note) }]); });
+  });
+  host.registerAction('builderExtraFeatRemove', (cid, id) => {
+    builderMutate(cid, (s) => { s.extraFeats = (Array.isArray(s.extraFeats) ? s.extraFeats : []).filter((f) => f.id !== id); });
   });
   host.registerAction('builderBgAsi', (cid, value) => {
     builderMutate(cid, (s) => {

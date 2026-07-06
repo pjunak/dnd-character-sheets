@@ -43,6 +43,74 @@ test('rules: option-pool count grows with level (countByLevel)', () => {
   assert.equal(at(17).count, 6, 'L17 → 6');
 });
 
+test('rules: ASI-opportunity levels are per-class and include class extras (B4.0 item 3)', () => {
+  const fake = makeFake();
+  const num = (v, d = 0) => { const n = Number(v); return Number.isFinite(n) ? n : d; };
+  const model = makeEngine({ num, host: {}, NS: 'x', ABILITIES: [], SKILLS: [], abilityMod: () => 0, sheetOf: () => ({}) });
+  // Per-class timing: Fighter 4 / Wizard 1 → Fighter's L4 ASI, nothing for the L1 Wizard.
+  const mc = model.collectChoices([{ classId: 'fighter', level: 4, subclass: '' }, { classId: 'wizard', level: 1, subclass: '' }], fake).filter((c) => c.kind === 'asiMode');
+  assert.ok(mc.some((c) => c.id === 'asi:fighter:4'), 'Fighter L4 ASI present (per-class, not character-level)');
+  assert.ok(!mc.some((c) => c.id.startsWith('asi:wizard')), 'the level-1 Wizard contributes no ASI');
+  // Class extras come from the class progression: a mock class declaring ASI at 6 & 14.
+  const withProg = { getItem: (k, id) => (k === 'class' && id === 'ftr') ? { id: 'ftr', name: 'F', progression: [{ level: 6, features: ['Ability Score Improvement'] }, { level: 14, features: ['Ability Score Improvement'] }] } : null, getItemByName: () => null, listFeatures: () => [] };
+  const lv = model.collectChoices([{ classId: 'ftr', level: 20, subclass: '' }], withProg).filter((c) => c.kind === 'asiMode').map((c) => c.level);
+  assert.ok(lv.includes(6) && lv.includes(14), 'progression-declared extra ASIs (Fighter 6 & 14) are included');
+  assert.ok([4, 8, 12, 16, 19].every((l) => lv.includes(l)), 'base ASI levels still present (union — no regression)');
+});
+
+test('rules: reconcile drops orphaned choices + ability grants after a structural change (B4.0 item 4)', () => {
+  const fake = makeFake();
+  const num = (v, d = 0) => { const n = Number(v); return Number.isFinite(n) ? n : d; };
+  const model = makeEngine({ num, host: {}, NS: 'x', ABILITIES: [], SKILLS: [], abilityMod: () => 0, sheetOf: () => ({}) });
+  // Was Fighter 8 (ASI at 4 & 8), picked +2 CHA at L8; then dropped to Fighter 4.
+  const s = {
+    classes: [{ classId: 'fighter', level: 4, subclass: '' }],
+    featureChoices: { 'asi:fighter:4': 'asi', 'asi:fighter:4:ability': 'STR', 'asi:fighter:8': 'asi', 'asi:fighter:8:ability': 'CHA' },
+    abilityGrants: [
+      { id: 'asi:fighter:4:ability', source: { type: 'asi' }, assign: { STR: 2 } },
+      { id: 'asi:fighter:8:ability', source: { type: 'asi' }, assign: { CHA: 2 } },
+    ],
+  };
+  model.reconcile(s, fake);
+  assert.ok(s.abilityGrants.some((g) => g.id === 'asi:fighter:4:ability'), 'the valid L4 grant is kept');
+  assert.ok(!s.abilityGrants.some((g) => g.id === 'asi:fighter:8:ability'), 'the orphaned L8 grant is pruned (no phantom +2 CHA)');
+  assert.ok(s.featureChoices['asi:fighter:4'], 'the valid L4 choice is kept');
+  assert.ok(!s.featureChoices['asi:fighter:8'], 'the orphaned L8 choice is pruned');
+});
+
+test('rules: a half-feat ability pick bumps the score (B4.0 item 2 / AB-2)', () => {
+  const { rec } = withFake();
+  // A multi-option half-feat's chosen +1 reaches the engine as a feat-type abilityGrant.
+  const sheet = rec.provided.hydrate({ baseStats: { INT: 15 }, className: 'Wizard',
+    abilityGrants: [{ id: 'asi:wizard:4:featability', source: { type: 'feat' }, assign: { INT: 1 } }] }).sheet;
+  assert.equal(sheet.abilities.INT.score, 16, '15 + 1 (half-feat ability pick applied)');
+});
+
+test('rules: per-class prepared spell level is capped by that class in a multiclass (B4.2)', () => {
+  const { rec } = withFake();
+  const sc = rec.provided.hydrate({ classes: [
+    { classId: 'wizard', level: 5, subclass: '' },
+    { classId: 'paladin', level: 2, subclass: '' },
+  ] }).sheet.spellcasting;
+  const wiz = sc.perClass.find((p) => p.classId === 'wizard');
+  const pal = sc.perClass.find((p) => p.classId === 'paladin');
+  assert.equal(wiz.maxSpellLevel, 3, 'Wizard 5 prepares up to 3rd-level spells');
+  assert.equal(pal.maxSpellLevel, 1, 'Paladin 2 caps at 1st-level (NOT the combined pool max)');
+  assert.ok(sc.slots.length >= 3, 'the combined slot pool still reaches 3rd level');
+});
+
+test('rules: Warlock Pact Magic — short-rest slots, own level cap, no slot combine (B4.3)', () => {
+  const { rec } = withFake();
+  const sheet = rec.provided.hydrate({ classes: [{ classId: 'warlock', level: 5, subclass: '' }] }).sheet;
+  const wl = sheet.spellcasting.perClass.find((p) => p.classId === 'warlock');
+  assert.deepEqual(wl.pact, { slots: 2, level: 3 }, 'L5 Warlock → 2 pact slots at 3rd level');
+  assert.equal(wl.maxSpellLevel, 3, 'the prepare cap follows the pact slot level');
+  assert.deepEqual(sheet.spellcasting.slots, [], 'no standard Spellcasting slots (Pact Magic is separate)');
+  const res = (sheet.resources || []).find((r) => r.key === 'pact-slot');
+  assert.ok(res && res.max === 2, 'a pact-slot resource is emitted (max 2)');
+  assert.equal(res.recharge[0].on, 'short', 'pact slots recharge on a SHORT rest');
+});
+
 test('rules: provides a versioned rules API', () => {
   const { ok, rec, error } = dryRunRegister(register, META);
   assert.ok(ok, error);
@@ -84,6 +152,9 @@ test('rules: derives HP / AC / saves / slots / mastery from content', () => {
   assert.equal(sheet.spellcasting.perClass[0].preparedLimit, 9, 'L5 wizard prepared');  // SP-2
   assert.equal(sheet.spellcasting.perClass[0].saveDC, 14, '8 + PB 3 + INT +3');          // SP-4
   assert.deepEqual(sheet.spellcasting.slots, [4, 3, 2], 'caster level 5 slots');         // MC-2
+  assert.equal(sheet.spellcasting.perClass[0].prepares, 'spellbook', 'wizard prepares from a spellbook');   // SP-5
+  assert.equal(sheet.spellcasting.perClass[0].spellbookKnown, 14, 'L5 wizard learns 6 + 2×4 = 14 free');    // SP-5
+  assert.equal(sheet.spellcasting.perClass[0].level, 5, 'perClass carries the class level');
   assert.equal(sheet.weaponMastery.slots, 2, 'wizard weapon mastery');                   // EQ-4
 });
 
@@ -107,6 +178,8 @@ test('rules: a third-caster subclass (classes[] shape) gets spells from the subc
   assert.equal(sheet.spellcasting.perClass.length, 1, 'EK grants spellcasting');     // SP-8
   assert.equal(sheet.spellcasting.perClass[0].type, 'third');
   assert.equal(sheet.spellcasting.perClass[0].preparedLimit, 3);
+  assert.equal(sheet.spellcasting.perClass[0].prepares, 'list', 'EK prepares from the list, not a spellbook');  // SP-5
+  assert.equal(sheet.spellcasting.perClass[0].spellbookKnown, 0, 'non-spellbook caster: no book allotment');    // SP-5
   assert.deepEqual(sheet.spellcasting.slots, [2], 'caster level ⌊3/3⌋ = 1');           // MC-2
   assert.equal(sheet.weaponMastery.slots, 3, 'fighter mastery');
 });

@@ -11,7 +11,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 export function makeBuilderPanel(ctx) {
-  const { host, t, ABILITIES, SKILLS, num, signed, abilityMod, titleize, firstPara, ui, engine: E, POINT_BUY, pointCost, pointsSpent } = ctx;
+  const { host, t, ABILITIES, SKILLS, num, signed, abilityMod, titleize, firstPara, featureRecordFor, ui, engine: E, POINT_BUY, pointCost, pointsSpent, builderState } = ctx;
   const { esc, dataAction, dataOn } = host.h;
   const { section, miniStat, selectBox, fieldRow, choiceBlock, warningsBlock, numField, entityRef } = ui;
   const { builderModel, collectChoices } = E;
@@ -32,16 +32,174 @@ export function makeBuilderPanel(ctx) {
       miniStat(t('builder.totalLevel'), totalLevel),
     ].join('');
 
+    // Internal sub-tabs: a Character tab (level-independent) + one per class. State
+    // is in-memory (ctx.builderState) and defaults to Character on load (B4.5b).
+    const st = (builderState && builderState[c.id]) || {};
+    const classTabs = classes.filter((cl) => cl.classId);
+    const active = classTabs.some((cl) => cl.classId === st.tab) ? st.tab : 'character';
+
+    const body = active === 'character'
+      ? `${builderAbilities(c, s, base, comp, ro)}
+         ${builderIdentity(c, s, engine, ro)}
+         ${builderClasses(c, classes, engine, ro)}
+         ${builderCreationChoices(c, s, engine, ro)}
+         ${builderExtraFeats(c, s, engine, ro)}`
+      : builderClassTab(c, s, active, classes, engine, comp, ro);
+
     return `
       <div style="display:flex;flex-direction:column;gap:var(--space-5)">
         ${warningsBlock(warnings)}
         <div style="display:flex;flex-wrap:wrap;gap:var(--space-2)">${summary}</div>
-        ${builderAbilities(c, s, base, comp, ro)}
-        ${builderIdentity(c, s, engine, ro)}
-        ${builderClasses(c, classes, engine, ro)}
-        ${builderChoices(c, s, classes, engine, comp, ro)}
-        ${builderLog(classes, engine, comp)}
+        ${builderTabStrip(c, classTabs, active, engine)}
+        ${body}
       </div>`;
+  }
+
+  // Sub-tab strip: Character + one tab per (set) class. Switching is a plain action
+  // that flips the in-memory state; the active tab gets the gold underline.
+  function builderTabStrip(c, classTabs, active, engine) {
+    const tab = (id, label, on) => `<button class="inline-create-btn" style="border:none;border-bottom:2px solid ${on ? 'var(--accent-gold)' : 'transparent'};border-radius:0;color:${on ? 'var(--text-parchment)' : 'var(--text-muted)'};font-weight:${on ? '600' : '400'};padding:var(--space-1) var(--space-3)"${dataAction(host.action('builderTab'), c.id, id)}>${esc(label)}</button>`;
+    const tabs = [tab('character', t('builder.tabCharacter'), active === 'character')];
+    for (const cl of classTabs) {
+      const rec = engine.getItem('class', cl.classId);
+      tabs.push(tab(cl.classId, (rec ? rec.name : cl.classId) + ' ' + num(cl.level, 1), active === cl.classId));
+    }
+    return `<div style="display:flex;flex-wrap:wrap;gap:2px;border-bottom:1px solid rgba(var(--gold-muted),.2)">${tabs.join('')}</div>`;
+  }
+
+  // One class's progression spine — a row per class level: features gained + the
+  // choices made at that level (as chips). Rows with choices are click-to-expand
+  // (accordion, one open at a time via ctx.builderState.open) into that level's
+  // editors; unresolved levels get a soft "needs choices" flag (never blocks — FE-7).
+  function builderClassTab(c, s, classId, classes, engine, comp, ro) {
+    const cl = classes.find((x) => x.classId === classId);
+    if (!cl) return '';
+    const idx = classes.findIndex((x) => x.classId === classId);
+    const rec = engine.getItem('class', classId);
+    const clsName = rec ? rec.name : classId;
+    const features = (comp && comp.features) || [];
+    const chDescs = collectChoices([cl], engine);   // this class's choices, each tagged with source.level
+    const subclassLevel = rec ? num(rec.subclassLevel, 3) : 3;
+    const hasSubclasses = (engine.listSubclasses(classId) || []).length > 0;
+    const st = (builderState && builderState[c.id]) || {};
+    const lvl = num(cl.level, 1);
+    const rows = [];
+    for (let l = 1; l <= lvl; l++) {
+      const feats = spineFeatureLinks(cl, l, features, engine);
+      const levelChoices = chDescs.filter((ch) => num(ch.source && ch.source.level) === l);
+      const isSubLevel = hasSubclasses && l === subclassLevel;
+      const chips = [];
+      let unresolved = 0;
+      // The subclass (structural `cl.subclass`) surfaces as the first choice at the
+      // subclass level: a chip when chosen, a dropdown when the row is expanded.
+      if (isSubLevel) {
+        if (cl.subclass) { const sr = engine.getItem('subclass', cl.subclass); chips.push(chipHtml((sr && sr.name) || titleize(cl.subclass))); }
+        else unresolved++;
+      }
+      for (const ch of levelChoices) {
+        const sum = choiceSummary(ch, s, engine);
+        if (sum.text) chips.push(chipHtml(sum.text));
+        if (!sum.done) unresolved++;
+      }
+      // Recorded spell swaps done at this class level (FE-4) — shown where they happened.
+      for (const sw of (s.spellSwaps || [])) {
+        if (sw.classId === classId && num(sw.classLevel != null ? sw.classLevel : sw.level) === l) chips.push(swapChip(sw, engine));
+      }
+      const key = classId + ':' + l;
+      const expandable = (levelChoices.length > 0 || isSubLevel) && !ro;
+      const open = expandable && st.open === key;
+      let editors = '';
+      if (open) {
+        const eds = [];
+        if (isSubLevel) {
+          const subOpts = engine.listSubclasses(classId).map((o) => ({ value: o.id, label: o.name }));
+          eds.push(choiceBlock(t('builder.subclass'), selectBox(cl.subclass, subOpts, dataOn('change', host.action('builderSubclassSet'), c.id, idx, '$value'), t('builder.subclass'), ro)));
+        }
+        for (const ch of levelChoices) eds.push(renderDescriptor(c, s, ch, engine, ro));
+        editors = `<div style="padding:var(--space-1) 0 var(--space-2) 3.5rem;display:flex;flex-direction:column;gap:var(--space-2)">${eds.join('')}</div>`;
+      }
+      rows.push(spineRow(c, key, l, feats, chips, unresolved, expandable, open, editors, ro));
+    }
+    return section(clsName, `${levelStepper(c, classId, lvl, ro)}${rows.join('')}`);
+  }
+
+  // Level a class up/down (+/-) — the guided add-a-level control at the top of a class tab.
+  function levelStepper(c, classId, lvl, ro) {
+    if (ro) return `<div style="color:var(--text-muted);font-size:var(--text-xs);margin-bottom:var(--space-2)">${esc(t('field.level'))} ${esc(String(lvl))}</div>`;
+    const btn = (dir, sym, on) => `<button class="inline-create-btn" style="min-width:1.9rem;opacity:${on ? '1' : '.35'}"${on ? dataAction(host.action('builderLevelStep'), c.id, classId, dir) : ' disabled'}>${sym}</button>`;
+    return `<div style="display:flex;align-items:center;gap:var(--space-2);margin-bottom:var(--space-3)">
+      <span style="color:var(--text-muted);font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.03em">${esc(t('field.level'))}</span>
+      ${btn(-1, '−', lvl > 1)}<strong style="min-width:1.5rem;text-align:center;font-variant-numeric:tabular-nums">${esc(String(lvl))}</strong>${btn(1, '＋', lvl < 20)}
+    </div>`;
+  }
+
+  // A summary chip (collapsed spine row) — small, muted, plain text.
+  function chipHtml(txt) {
+    return `<span style="display:inline-flex;align-items:center;background:var(--bg-raised);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);padding:0 var(--space-1);font-size:var(--text-xs);color:var(--text-light)">${esc(txt)}</span>`;
+  }
+
+  // A recorded spell-swap chip (out → in), both linked to the compendium + hovered.
+  // Read-only here — swaps are made/removed on the Spellbook tab; the spine just shows
+  // them at the level they happened (FE-4 / B4.5b).
+  function swapChip(sw, engine) {
+    const nm = (ref) => { const r = engine.getItem && engine.getItem('spell', ref); return r ? r.name : String(ref); };
+    const leg = (ref) => { const r = engine.getItem && engine.getItem('spell', ref); return r && r.text ? { title: r.name, desc: firstPara(r.text), aria: r.name } : null; };
+    return `<span style="display:inline-flex;align-items:center;gap:2px;background:var(--bg-raised);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);padding:0 var(--space-1);font-size:var(--text-xs);color:var(--text-light)">🔄 ${entityRef('spell', sw.out, nm(sw.out), leg(sw.out))} → ${entityRef('spell', sw.in, nm(sw.in), leg(sw.in))}</span>`;
+  }
+
+  // Human label for a resolved choice value (skill / feature-pool / weapon / feat).
+  function labelValue(ch, v, engine) {
+    if (ch.kind === 'skills' || ch.kind === 'expertise') return t('skill.' + v) || titleize(v);
+    const fr = engine.getFeature && engine.getFeature(v); if (fr && fr.name) return fr.name;
+    if (ch.kind === 'weaponMastery') { const w = engine.getItem && engine.getItem('weapon', v); if (w) return w.name; }
+    if (ch.kind === 'feat') { const f = engine.getItem && engine.getItem('feat', v); if (f) return f.name; }
+    return titleize(v);
+  }
+
+  // Summarize a choice's resolved value(s) for the collapsed row + whether it's fully
+  // resolved (drives the "needs choices" flag). asiMode: mode + its ability/feat pick.
+  function choiceSummary(ch, s, engine) {
+    const fc = s.featureChoices || {};
+    if (ch.kind === 'asiMode') {
+      const mode = fc[ch.id];
+      if (mode === 'feat') { const f = fc[ch.id + ':feat']; return { text: f ? ((engine.getItem('feat', f) || {}).name || titleize(f)) : t('builder.featOption'), done: !!f }; }
+      if (mode === 'asi') { const a = fc[ch.id + ':ability']; return { text: a ? '+2 ' + t('ability.' + a) : t('builder.asiOption'), done: !!a }; }
+      return { text: null, done: false };
+    }
+    const count = Math.max(1, num(ch.count, 1));
+    const vals = [];
+    for (let i = 0; i < count; i++) { const v = fc[count > 1 ? ch.id + '#' + i : ch.id]; if (v && !vals.includes(v)) vals.push(v); }
+    return { text: vals.length ? vals.map((v) => labelValue(ch, v, engine)).join(', ') : null, done: vals.length >= count };
+  }
+
+  // One spine row: a caret+level toggle (when the level has choices), the features
+  // gained (compendium links), the made-choice chips + optional "needs choices" flag,
+  // then the expanded editors below when open. Feature links stay clickable — only
+  // the caret toggles, so a link click never doubles as an expand.
+  function spineRow(c, key, l, feats, chips, unresolved, expandable, open, editors, ro) {
+    const lvlLabel = expandable
+      ? `<button class="inline-create-btn" style="border:none;background:none;padding:2px 4px;min-width:3.5rem;text-align:left;color:var(--text-muted)"${dataAction(host.action('builderToggleLevel'), c.id, key)}>${open ? '▾' : '▸'} L${esc(String(l))}</button>`
+      : `<span style="color:var(--text-muted);min-width:3.5rem;padding-left:calc(4px + 1ch)">L${esc(String(l))}</span>`;
+    const badge = (unresolved && !ro) ? `<span style="background:rgba(var(--accent-gold-rgb),.15);color:var(--accent-gold);border-radius:var(--radius-sm);padding:0 var(--space-1);font-size:var(--text-xs)">${esc(t('builder.needsChoices'))}</span>` : '';
+    const head = `<div style="display:flex;gap:var(--space-2);align-items:center;padding:var(--space-1) 0;font-size:var(--text-sm)">
+      ${lvlLabel}
+      <span style="color:var(--text-parchment);flex:1">${feats.length ? feats.join(', ') : '<span style="color:var(--text-muted)">—</span>'}</span>
+      <span style="display:flex;flex-wrap:wrap;gap:var(--space-1);align-items:center">${chips.join('')}${badge}</span>
+    </div>`;
+    return `<div style="border-bottom:1px solid rgba(var(--gold-muted),.1)">${head}${editors}</div>`;
+  }
+
+  // Feature names gained by a class (or its subclass) at a given class level, each a
+  // compendium link + hover card. Shared by the class spine and the Character-tab log.
+  function spineFeatureLinks(cl, l, features, engine) {
+    return features
+      .filter((f) => f.source && num(f.source.level) === l && (f.source.type === 'subclass' ? f.source.id === cl.subclass : f.source.id === cl.classId))
+      .map((f) => {
+        const name = f.name || titleize(f.id);
+        const recF = featureRecordFor(engine, cl, l, f);
+        const legend = recF && recF.text ? { title: recF.name || name, desc: firstPara(recF.text), aria: name } : null;
+        return entityRef('feature', recF && recF.id, name, legend);
+      });
   }
 
   function panelBuilderStub() {
@@ -114,22 +272,21 @@ export function makeBuilderPanel(ctx) {
     return section(t('builder.identity'), rows.join(''));
   }
 
-  // Classes: ordered classes[] with class / level / subclass + add/remove.
+  // Class roster: which classes the character has. Pick/change the class + remove;
+  // the LEVEL (+/-) and SUBCLASS now live in each class's own tab (its spine), so the
+  // roster shows the level read-only and points you to the tab to level up.
   function builderClasses(c, classes, engine, ro) {
     const classOpts = engine.listClasses().map((o) => ({ value: o.id, label: o.name }));
     const rows = classes.map((cl, idx) => {
       const rec = cl.classId ? engine.getItem('class', cl.classId) : null;
-      const subLevel = rec ? num(rec.subclassLevel, 3) : 3;
-      const subOpts = engine.listSubclasses(cl.classId).map((o) => ({ value: o.id, label: o.name }));
-      const showSub = rec && num(cl.level, 1) >= subLevel;
-      const levelCtl = ro
-        ? `<span style="color:var(--text-parchment)">${esc(String(num(cl.level, 1)))}</span>`
-        : numField(dataOn('change', host.action('builderLevelSet'), c.id, idx, '$value'), num(cl.level, 1), { min: 1, max: 20, ariaLabel: t('field.level') });
+      const sub = cl.subclass ? (engine.getItem('subclass', cl.subclass) || {}).name : '';
+      const lvlHint = cl.classId
+        ? `<span style="color:var(--text-muted);font-size:var(--text-xs)">${esc(t('field.level'))} ${esc(String(num(cl.level, 1)))}${sub ? ' · ' + esc(sub) : ''}</span>`
+        : '';
       const removeBtn = (!ro && classes.length > 1) ? `<button class="inline-create-btn" title="${esc(t('action.remove'))}"${dataAction(host.action('builderRemoveClass'), c.id, idx)}>✕</button>` : '';
       return `<div style="display:flex;flex-wrap:wrap;gap:var(--space-2);align-items:center;padding:var(--space-1) 0;border-bottom:1px solid rgba(var(--gold-muted),.12)">
         <div style="min-width:9rem">${selectBox(cl.classId, classOpts, dataOn('change', host.action('builderClassSet'), c.id, idx, '$value'), t('builder.choose'), ro)}</div>
-        <span style="color:var(--text-muted);font-size:var(--text-xs)">${esc(t('field.level'))}</span> ${levelCtl}
-        ${showSub ? `<div style="min-width:9rem">${selectBox(cl.subclass, subOpts, dataOn('change', host.action('builderSubclassSet'), c.id, idx, '$value'), t('builder.subclass'), ro)}</div>` : ''}
+        ${lvlHint}
         ${removeBtn}
       </div>`;
     }).join('');
@@ -137,28 +294,47 @@ export function makeBuilderPanel(ctx) {
     return section(t('builder.classes'), rows + addBtn);
   }
 
-  // Choices: background ASI + per-class grant choices + ASI-level feat/ASI.
-  // Collected from the build; resolutions persist in featureChoices / grants.
-  function builderChoices(c, s, classes, engine, comp, ro) {
-    const blocks = [];
-
-    // Background ASI (AB-1).
+  // Creation-time choices on the Character tab: the background ASI (AB-1) + the
+  // origin-feat note. Per-class / per-level choices (skills, grants, ASI/feat, pools)
+  // now live in each class tab's spine (bucketed by source.level), not a flat list.
+  function builderCreationChoices(c, s, engine, ro) {
     const bgRec = s.background ? (engine.getItemByName('background', s.background) || engine.getItem('background', s.background)) : null;
-    if (bgRec && Array.isArray(bgRec.abilityScores) && bgRec.abilityScores.length) {
-      const abil = bgRec.abilityScores;
-      const splits = [];
-      for (const x of abil) for (const y of abil) if (x !== y) splits.push({ value: `${x}:2,${y}:1`, label: `+2 ${x}, +1 ${y}` });
-      splits.push({ value: abil.map((a) => a + ':1').join(','), label: '+1 ' + abil.join(', +1 ') });
-      const cur = s.featureChoices['bgasi'] || '';
-      blocks.push(choiceBlock(t('builder.bgAsi', { bg: bgRec.name }), selectBox(cur, splits, dataOn('change', host.action('builderBgAsi'), c.id, '$value'), t('builder.choose'), ro)));
-      if (bgRec.originFeat) blocks.push(`<div style="color:var(--text-muted);font-size:var(--text-xs)">${esc(t('builder.originFeat', { feat: titleize(bgRec.originFeat) }))}</div>`);
-    }
-
-    // Per-class choices (skills / grants / ASI levels) from the shared collector.
-    for (const ch of collectChoices(classes, engine)) blocks.push(renderDescriptor(c, s, ch, engine, ro));
-
-    if (!blocks.length) return '';
+    if (!(bgRec && Array.isArray(bgRec.abilityScores) && bgRec.abilityScores.length)) return '';
+    const abil = bgRec.abilityScores;
+    const splits = [];
+    for (const x of abil) for (const y of abil) if (x !== y) splits.push({ value: `${x}:2,${y}:1`, label: `+2 ${x}, +1 ${y}` });
+    splits.push({ value: abil.map((a) => a + ':1').join(','), label: '+1 ' + abil.join(', +1 ') });
+    const cur = s.featureChoices['bgasi'] || '';
+    const blocks = [choiceBlock(t('builder.bgAsi', { bg: bgRec.name }), selectBox(cur, splits, dataOn('change', host.action('builderBgAsi'), c.id, '$value'), t('builder.choose'), ro))];
+    if (bgRec.originFeat) blocks.push(`<div style="color:var(--text-muted);font-size:var(--text-xs)">${esc(t('builder.originFeat', { feat: titleize(bgRec.originFeat) }))}</div>`);
     return section(t('builder.choices'), `<div style="display:flex;flex-direction:column;gap:var(--space-2)">${blocks.join('')}</div>`);
+  }
+
+  // Level-independent extra feats (B4.5b) — feats from a boon / magic item / homebrew,
+  // separate from leveling. Pick a compendium feat (its mechanics apply via the engine)
+  // or type a custom name (tracked only); each carries an optional source note. Remove
+  // any of them. This is the "extras" home the maintainer asked for on the Character tab.
+  function builderExtraFeats(c, s, engine, ro) {
+    const list = Array.isArray(s.extraFeats) ? s.extraFeats : [];
+    if (!list.length && ro) return '';
+    const rows = list.map((ef) => {
+      const rec = ef.featId ? engine.getItem('feat', ef.featId) : null;
+      const nm = rec ? rec.name : (ef.name || titleize(ef.featId || 'feat'));
+      const leg = rec && rec.text ? { title: rec.name, desc: firstPara(rec.text), aria: rec.name } : null;
+      const label = ef.featId ? entityRef('feat', ef.featId, nm, leg) : esc(nm);
+      const note = ef.sourceNote ? ` <span style="color:var(--text-muted);font-size:var(--text-xs);font-style:italic">— ${esc(ef.sourceNote)}</span>` : '';
+      const rm = ro ? '' : `<button class="inline-create-btn" title="${esc(t('action.remove'))}"${dataAction(host.action('builderExtraFeatRemove'), c.id, ef.id)}>✕</button>`;
+      return `<div style="display:flex;align-items:center;gap:var(--space-2);font-size:var(--text-sm)"><span style="flex:1">${label}${note}</span>${rm}</div>`;
+    }).join('');
+    const featOpts = (engine.listFeats ? engine.listFeats() : []).map((f) => `<option value="${esc(f.id)}">${esc(f.name)}</option>`).join('');
+    const adder = ro ? '' : `<div style="display:flex;flex-wrap:wrap;gap:var(--space-1);align-items:center;margin-top:var(--space-2)">
+      <select id="dse-xfeat-id-${esc(c.id)}" class="edit-input" style="max-width:12rem"><option value="">${esc(t('builder.pickFeat'))}</option>${featOpts}</select>
+      <input id="dse-xfeat-name-${esc(c.id)}" class="edit-input" style="max-width:10rem" placeholder="${esc(t('builder.customFeatName'))}">
+      <input id="dse-xfeat-note-${esc(c.id)}" class="edit-input" style="max-width:10rem" placeholder="${esc(t('spell.sourceNote'))}">
+      <button class="inline-create-btn"${dataAction(host.action('builderExtraFeatAdd'), c.id)}>＋ ${esc(t('builder.addExtraFeat'))}</button>
+    </div>`;
+    const body = rows || `<div style="color:var(--text-muted);font-size:var(--text-xs)">${esc(t('builder.noExtraFeats'))}</div>`;
+    return section(t('builder.extraFeats'), `${body}${adder}`);
   }
 
   // Render one choice descriptor from collectChoices (skills / expertise /
@@ -185,10 +361,21 @@ export function makeBuilderPanel(ctx) {
     if (!options || !options.length) {
       return choiceBlock(label, `<span style="color:var(--text-muted);font-size:var(--text-xs)">${esc(t('builder.contentPending'))}</span>`);
     }
+    // Uniqueness across a multi-pick choice (FE-7): a value taken in ANOTHER box is
+    // excluded here, so the same option can't be chosen twice. You can still change
+    // THIS box to any free option, and changing another box frees its value — the
+    // whole-state editor never locks you out of correcting an earlier pick (which is
+    // also how a level-up "swap" works: just edit the box). A value that duplicates
+    // an earlier box (e.g. legacy stored data) renders empty, to be re-picked.
+    const picks = [];
+    for (let i = 0; i < count; i++) picks.push(s.featureChoices[count > 1 ? ch.id + '#' + i : ch.id] || '');
     const pickers = [];
     for (let i = 0; i < count; i++) {
       const key = count > 1 ? ch.id + '#' + i : ch.id;
-      pickers.push(`<div style="min-width:9rem">${selectBox(s.featureChoices[key] || '', options, dataOn('change', host.action('builderChoose'), c.id, key, '$value'), t('builder.choose'), ro)}</div>`);
+      const mine = picks.slice(0, i).includes(picks[i]) ? '' : picks[i];
+      const taken = new Set(picks.filter((p, j) => j !== i && p));
+      const opts = options.filter((o) => o.value === mine || !taken.has(o.value));
+      pickers.push(`<div style="min-width:9rem">${selectBox(mine, opts, dataOn('change', host.action('builderChoose'), c.id, key, '$value'), t('builder.choose'), ro)}</div>`);
     }
     return choiceBlock(count > 1 ? label + ' (' + count + ')' : label, `<div style="display:flex;flex-wrap:wrap;gap:var(--space-1)">${pickers.join('')}</div>`);
   }
@@ -210,11 +397,14 @@ export function makeBuilderPanel(ctx) {
       const featKey = key + ':feat';
       const chosenFeat = s.featureChoices[featKey] || '';
       const featOpts = engine.listFeats({ category: 'general' }).map((f) => ({ value: f.id, label: f.name }));
-      detail = `<div style="margin-top:var(--space-1);min-width:12rem">${selectBox(chosenFeat, featOpts, dataOn('change', host.action('builderChoose'), c.id, featKey, '$value'), t('builder.choose'), ro)}</div>`;
+      const featRec = chosenFeat ? engine.getItem('feat', chosenFeat) : null;
+      // Chosen feat → a ↗ link to its compendium page (+ summary hover) beside the
+      // picker, since a <select><option> can't itself be a link (B2.2, folded in).
+      const featLink = featRec ? ' ' + entityRef('feat', chosenFeat, '↗', featRec.text ? { title: featRec.name, desc: firstPara(featRec.text), aria: featRec.name } : null) : '';
+      detail = `<div style="margin-top:var(--space-1);min-width:12rem">${selectBox(chosenFeat, featOpts, dataOn('change', host.action('builderChoose'), c.id, featKey, '$value'), t('builder.choose'), ro)}${featLink}</div>`;
       // Half-feat with a CHOICE of ability → ability sub-pick (AB-2). A fixed
       // single-option bump is auto-applied in builderChoose; granted spells +
       // the applied bump flow through the engine via abilityGrants.
-      const featRec = chosenFeat ? engine.getItem('feat', chosenFeat) : null;
       const asi = featRec && featRec.grants && featRec.grants.abilityScoreIncrease;
       if (asi && Array.isArray(asi.from) && asi.from.length > 1) {
         const abilKey = key + ':featability';
@@ -222,65 +412,6 @@ export function makeBuilderPanel(ctx) {
       }
     }
     return choiceBlock(label, `${selectBox(mode, modeOpts, dataOn('change', host.action('builderChoose'), c.id, key, '$value'), t('builder.choose'), ro)}${detail}`);
-  }
-
-  // Resolve a shown feature (class OR subclass) → its `feature` record, for the
-  // hover card + link. Subclass features resolve within the selected subclass (by
-  // name, then by local id). Class features join by (classId, level, name) with a
-  // level-agnostic and a shared-generic (ASI / Epic Boon, classId null) fallback.
-  // Returns null (→ statTip shows a plain name) when the book addon predates
-  // feature records.
-  function featureRecordFor(engine, cl, level, f) {
-    if (!engine.listFeatures || !engine.getFeature) return null;
-    const norm = (x) => String(x || '').trim().toLowerCase();
-    const name = f.name || titleize(f.id);   // class features carry the name in `id` (no `name`)
-    if (f.source && f.source.type === 'subclass') {
-      const subs = engine.listFeatures({ subclassId: f.source.id });
-      const hit = subs.find((x) => norm(x.name) === norm(name)) || subs.find((x) => x.localId === f.id);
-      return hit ? engine.getFeature(hit.id) : null;
-    }
-    const owned = engine.listFeatures({ classId: cl.classId });
-    const hit = owned.find((x) => !x.subclassId && x.level === level && norm(x.name) === norm(name))
-             || owned.find((x) => !x.subclassId && norm(x.name) === norm(name))
-             || engine.listFeatures().find((x) => x.classId == null && norm(x.name) === norm(name));
-    return hit ? engine.getFeature(hit.id) : null;
-  }
-
-  // Progression log — what each level granted (the "when did I choose what").
-  function builderLog(classes, engine, comp) {
-    const features = (comp && comp.features) || [];
-    const rows = [];
-    let charLvl = 0;
-    for (const cl of classes) {
-      const rec = cl.classId ? engine.getItem('class', cl.classId) : null;
-      const clsName = rec ? rec.name : (cl.classId || '?');
-      for (let l = 1; l <= num(cl.level, 1); l++) {
-        charLvl++;
-        // Feature names for this class-level, each wrapped in a hover card that
-        // reveals the feature's prose (statTip degrades to the bare name if the
-        // record is missing). Each name is esc()'d inside the trigger, so the
-        // joined result is HTML and must NOT be re-escaped.
-        // This class's features at this level: CLASS features (source.id = classId)
-        // AND the selected subclass's features (source.id = the subclass id).
-        const feats = features
-          .filter((f) => f.source && num(f.source.level) === l && (f.source.type === 'subclass' ? f.source.id === cl.subclass : f.source.id === cl.classId))
-          .map((f) => {
-            const name = f.name || titleize(f.id);
-            const recF = featureRecordFor(engine, cl, l, f);
-            // Resolved → the name links to its compendium detail page + hover card;
-            // unresolved (no book / predates records) → plain text, no dead link.
-            const legend = recF && recF.text ? { title: recF.name || name, desc: firstPara(recF.text), aria: name } : null;
-            return entityRef('feature', recF && recF.id, name, legend);
-          });
-        rows.push(`<div style="display:flex;gap:var(--space-2);padding:var(--space-1) 0;border-bottom:1px solid rgba(var(--gold-muted),.1);font-size:var(--text-sm)">
-          <span style="color:var(--text-muted);min-width:2.5rem">L${esc(String(charLvl))}</span>
-          <span style="color:var(--text-light);min-width:7rem">${esc(clsName)} ${esc(String(l))}</span>
-          <span style="color:var(--text-parchment);flex:1">${feats.length ? feats.join(', ') : '<span style="color:var(--text-muted)">—</span>'}</span>
-        </div>`);
-      }
-    }
-    if (!rows.length) return '';
-    return section(t('builder.progression'), rows.join(''));
   }
 
   return { panelBuilder };

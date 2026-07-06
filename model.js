@@ -40,6 +40,18 @@ export function makeEngine(ctx) {
     return { baseStats, classes };
   };
 
+  // ASI-opportunity levels for a class. The 2024 base is 4/8/12/16/19; some
+  // classes get extras (Fighter 6 & 14, Rogue 10) declared in the class's
+  // `progression` (levels whose features include an "Ability Score Improvement").
+  // Union with the base so extras are ADDED without dropping anything.
+  const ASI_BASE = [4, 8, 12, 16, 19];
+  const asiLevelsFor = (rec) => {
+    const set = new Set(ASI_BASE);
+    for (const p of (Array.isArray(rec && rec.progression) ? rec.progression : []))
+      if ((p.features || []).some((f) => /ability score improvement/i.test(String(f)))) { const n = num(p.level); if (n > 0) set.add(n); }
+    return [...set].sort((a, b) => a - b);
+  };
+
   /** The choice descriptors for a build — the SINGLE source used by BOTH the
    *  Builder UI (to render pickers) and resolveChoices (to apply resolutions),
    *  so the two never drift. Background ASI is handled separately (its split UI).
@@ -93,7 +105,7 @@ export function makeEngine(ctx) {
           }
         }
       }
-      for (const lvl of [4, 8, 12, 16, 19]) if (lvl <= clvl) out.push({ id: 'asi:' + cl.classId + ':' + lvl, kind: 'asiMode', classId: cl.classId, level: lvl, source: { type: 'class', id: cl.classId, level: lvl } });
+      for (const lvl of asiLevelsFor(rec)) if (lvl <= clvl) out.push({ id: 'asi:' + cl.classId + ':' + lvl, kind: 'asiMode', classId: cl.classId, level: lvl, source: { type: 'class', id: cl.classId, level: lvl } });
     }
     return out;
   };
@@ -106,11 +118,16 @@ export function makeEngine(ctx) {
     const skillProficiencies = [], feats = [], weaponMasteryChoices = [];
     const skillExpertise = {};
     const valsOf = (ch) => {
-      if (num(ch.count, 1) > 1) { const a = []; for (let i = 0; i < ch.count; i++) { const v = fc[ch.id + '#' + i]; if (v) a.push(v); } return a; }
+      // Dedup across boxes (FE-7): a value picked twice counts once, so duplicate
+      // legacy data never double-applies (skills/expertise/weaponMastery/feats).
+      if (num(ch.count, 1) > 1) { const a = []; for (let i = 0; i < ch.count; i++) { const v = fc[ch.id + '#' + i]; if (v && !a.includes(v)) a.push(v); } return a; }
       const v = fc[ch.id]; return v ? [v] : [];
     };
     const bgRec = s.background ? (engine.getItemByName('background', s.background) || engine.getItem('background', s.background)) : null;
     if (bgRec && bgRec.originFeat) feats.push(bgRec.originFeat);
+    // Level-independent extra feats from a custom source (B4.5b): a compendium featId
+    // applies its mechanics via the engine; free-text (no featId) is tracked only.
+    for (const ef of (Array.isArray(s.extraFeats) ? s.extraFeats : [])) if (ef && ef.featId) feats.push(ef.featId);
     for (const ch of collectChoices(classes, engine)) {
       const vals = valsOf(ch);
       if (ch.kind === 'skills') skillProficiencies.push(...vals);
@@ -120,6 +137,24 @@ export function makeEngine(ctx) {
       else if (ch.kind === 'asiMode') { if (fc[ch.id] === 'feat' && fc[ch.id + ':feat']) feats.push(fc[ch.id + ':feat']); }
     }
     return { skillProficiencies, skillExpertise, feats: feats.map((f) => ({ featId: f })), weaponMasteryChoices };
+  };
+
+  /** Prune orphaned decisions after a structural change (class/subclass/level/
+   *  class-removal): featureChoices + abilityGrants whose owning choice no longer
+   *  exists in the current build. CRITICAL because abilityGrants apply
+   *  UNCONDITIONALLY in hydrate — a stale ASI / half-feat grant from a dropped
+   *  class or lowered level would keep bumping ability scores otherwise. Mutates `s`.
+   *  (Complements builderChoose's mode-switch cleanup, which handles ASI↔feat.) */
+  const reconcile = (s, engine) => {
+    if (!engine || !s) return;
+    const classes = Array.isArray(s.classes) ? s.classes : [];
+    const valid = new Set(collectChoices(classes, engine).map((c) => c.id));
+    const bgRec = s.background ? (engine.getItemByName('background', s.background) || engine.getItem('background', s.background)) : null;
+    if (bgRec && Array.isArray(bgRec.abilityScores) && bgRec.abilityScores.length) valid.add('bgasi');
+    const baseOf = (k) => String(k).replace(/#\d+$/, '').replace(/:(ability|feat|featability)$/, '');
+    const fc = s.featureChoices || {};
+    for (const k of Object.keys(fc)) if (!valid.has(baseOf(k))) delete fc[k];
+    if (Array.isArray(s.abilityGrants)) s.abilityGrants = s.abilityGrants.filter((g) => valid.has(baseOf(g.id)));
   };
 
   /** The decisions object the engine hydrates: the Builder's rich model + the
@@ -260,7 +295,7 @@ export function makeEngine(ctx) {
   };
 
   return {
-    builderModel, collectChoices, resolveChoices, decisionsOf,
+    builderModel, collectChoices, resolveChoices, reconcile, decisionsOf,
     safeHydrate, materializeInto, getRules, rulesApi, viewModel, mutate, builderMutate,
   };
 }

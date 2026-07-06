@@ -68,7 +68,17 @@ function casterContribution(type, level) {
   if (type === 'full') return level;
   if (type === 'half') return Math.floor(level / 2);
   if (type === 'third') return Math.floor(level / 3);
-  return 0;
+  return 0;   // 'pact' contributes 0 — Warlock Pact Magic never combines (see pactMagic)
+}
+
+/** 2024 Warlock Pact Magic: a small pool of slots, ALL at one level, recharged on a
+ *  SHORT rest — distinct from Spellcasting slots and NOT combined in multiclass.
+ *  Slots: 1 (L1), 2 (L2–10), 3 (L11–16), 4 (L17+); slot level: min(5, ⌈level/2⌉).
+ *  Derived by level (the class progression carries no pact table). null below L1. */
+export function pactMagic(level) {
+  const L = Math.max(0, Math.floor(num(level, 0)));
+  if (L < 1) return null;
+  return { slots: L >= 17 ? 4 : L >= 11 ? 3 : L >= 2 ? 2 : 1, level: Math.min(5, Math.ceil(L / 2)) };
 }
 
 /** Pick the progression row at `level` (or the highest row ≤ level — handles the
@@ -382,6 +392,18 @@ export function hydrate(decisions, api) {
     sheet.derived.passivePerception = sheet.passives.perception;
   });
 
+  // Highest spell level a class can prepare/cast on its OWN progression — the cap
+  // for that class's preparable pool, so a multiclass low-level caster can't prepare
+  // high-level spells off the COMBINED slot pool (a Cleric 1 / Wizard 5 prepares
+  // Cleric spells only to L1). From the printed `spellSlots` when present, else the
+  // caster-level heuristic (multiclass slot-table length) by casting fraction.
+  const maxSpellLevelFor = (type, level, prog) => {
+    const own = prog && Array.isArray(prog.spellSlots) ? prog.spellSlots : null;
+    if (own) { let m = 0; for (let i = 0; i < own.length; i++) if (num(own[i]) > 0) m = i + 1; return m; }
+    const d = type === 'full' ? 1 : type === 'half' ? 2 : type === 'third' ? 3 : 0;
+    return d ? multiclassSlots(Math.ceil(num(level) / d)).length : 0;
+  };
+
   // Spellcasting (MC-2/MC-3/SP-2/SP-4): per-class prepared limit + DC/attack,
   // plus the combined multiclass slot pool.
   step(() => {
@@ -399,11 +421,23 @@ export function hydrate(decisions, api) {
       // Stash the resolved progression row on the caster so the single-class slot
       // path can read its authoritative per-level `spellSlots` directly.
       casters.push({ type: eff.type, level: c.level, prog });
+      // Warlock Pact Magic slots (short-rest, all one level) — derived by level; drives
+      // the per-class prepare cap and a short-rest slot resource (below).
+      const pact = eff.type === 'pact' ? pactMagic(c.level) : null;
+      // Wizard-style spellbook (SP-5): prepared is chosen from a LEARNED pool, not
+      // the whole class list. The free-learn allotment isn't in the class table, so
+      // derive the 2024 rule (6 spells at L1, +2 per Wizard level after → 2·L+4).
+      // Guidance only — copying from scrolls/other books grows the book beyond it.
+      const prepares = eff.prepares || 'list';
+      const spellbookKnown = prepares === 'spellbook' ? 2 * num(c.level) + 4 : 0;
       per.push({
-        classId: c.classId, ability, type: eff.type, prepares: eff.prepares || 'list', ritual: !!eff.ritual,
+        classId: c.classId, level: num(c.level), ability, type: eff.type, prepares, ritual: !!eff.ritual,
         saveDC: 8 + pb + mod, spellAttack: pb + mod,
         preparedLimit: prog ? num(prog.preparedSpells, 0) : 0,
         cantripsKnown: prog ? num(prog.cantripsKnown, 0) : 0,
+        spellbookKnown,
+        maxSpellLevel: pact ? pact.level : maxSpellLevelFor(eff.type, c.level, prog),
+        pact,
       });
     }
 
@@ -601,6 +635,13 @@ export function hydrate(decisions, api) {
         recharge: [{ on: 'long', amount: 'full' }], source: { type: 'spellcasting' },
       });
     });
+    // Pact Magic slots (Warlock): a small pool ALL at one level, SHORT-rest recharge.
+    for (const p of (sheet.spellcasting && sheet.spellcasting.perClass) || []) {
+      if (p.pact && num(p.pact.slots) > 0) resources.push({
+        key: 'pact-slot', name: 'Pact Slots (' + (ORD[p.pact.level - 1] || p.pact.level + 'th') + ')', max: num(p.pact.slots), kind: 'slot',
+        recharge: [{ on: 'short', amount: 'full' }], source: { type: 'pactMagic', id: p.classId },
+      });
+    }
     // 4. Granted free/limited casts (feat / species / subclass) → charges.
     const parseFreq = (f) => { const m = /(\d+)\s*\/\s*(short|long)/i.exec(String(f || '')); return m ? { max: num(m[1], 1), on: m[2].toLowerCase() } : { max: 1, on: 'long' }; };
     for (const g of (sheet.spellcasting && sheet.spellcasting.granted) || []) {

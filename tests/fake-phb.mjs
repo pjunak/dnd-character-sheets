@@ -66,6 +66,11 @@ export function makeFake() {
         spellcasting: { ability: 'CHA', type: 'full', prepares: 'list' }, weaponMastery: { count: 0 }, acFormulas: [],
         progression: [{ level: 2, features: ['Metamagic'] }],
       },
+      warlock: {
+        id: 'warlock', name: 'Warlock', kind: 'class', hitDie: 'd8', savingThrows: ['WIS', 'CHA'],
+        spellcasting: { ability: 'CHA', type: 'pact', prepares: 'list' }, weaponMastery: { count: 0 }, acFormulas: [],
+        progression: [{ level: 1, cantripsKnown: 2, preparedSpells: 2 }, { level: 5, cantripsKnown: 3, preparedSpells: 6 }],
+      },
     },
     weapon: {
       longsword: { id: 'longsword', name: 'Longsword', kind: 'weapon', category: 'martial', range: 'melee', damage: '1d8', damageType: 'slashing', properties: ['versatile'], versatileDamage: '1d10', mastery: 'Sap' },
@@ -107,6 +112,7 @@ export function makeFake() {
       'fire-bolt': { id: 'fire-bolt', name: 'Fire Bolt', level: 0, school: 'Evocation', classes: ['wizard'] },
       'mage-armor': { id: 'mage-armor', name: 'Mage Armor', level: 1, school: 'Abjuration', classes: ['wizard'] },
       fireball: { id: 'fireball', name: 'Fireball', level: 3, school: 'Evocation', classes: ['wizard'] },
+      'detect-magic': { id: 'detect-magic', name: 'Detect Magic', level: 1, school: 'Divination', classes: ['wizard'], ritual: true },
     },
     armor: {
       breastplate: { id: 'breastplate', name: 'Breastplate', kind: 'armor', armorType: 'medium', baseAC: 14, dexCap: 2, acBonus: 0 },
