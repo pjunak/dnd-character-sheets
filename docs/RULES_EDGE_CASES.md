@@ -165,6 +165,22 @@ These aren't D&D rules — they're the structural decisions that make the rules 
 | **FE-5** ★ `[R][C]` | **Subclass timing & subclass-changes-everything.** All 2024 subclasses chosen at L3; switching subclass mid-build invalidates dependent choices/spells. | Offering subclass features before L3, or leaving orphaned thief-only picks after switching to assassin. | Gate the subclass choice at the class's subclass level; on subclass change, re-run choice validation and prune/flag orphans (mirrors SP-14). |
 | **FE-6** ★ `[R]` | **Features that grant feats / Epic Boons.** Some L19 features grant an Epic Boon (a feat category with its own prereqs). | A feat granted by a feature shouldn't consume an ASI slot. | Feat grants carry provenance `source:'feature'` vs the ASI-slot feats; engine doesn't bill them against ASI count. |
 | **FE-7** ★ `[S]` | **Option-pool picks must be unique (TODO — not yet enforced).** A pool choice that grants N picks (Metamagic / maneuvers / invocations / expertise), especially the single picker that GROWS with level via `countByLevel`, must not allow the same option in two of its boxes. | `collectChoices` renders N `<select>`s over the same `from[]` list and does not cross-reference the sibling picks, so duplicates are currently selectable. | De-dupe within a choice: each box excludes options already chosen in its siblings (and, for swappable pools, options already known at a lower level); flag/repair pre-existing duplicate picks on load. |
+| **FE-8** ★ `[R][C]` | **Features own their mechanics (DEFERRED — architecture bet; see note below).** Migrate per-feature effects (resource pools, AC formulas, choice grants, always-prepared spells, scaling numbers) from the class/subclass records ONTO the `feature` records as structured `grants`, so a feature is the single source of truth for its prose AND its effects. | Today effects are scattered across `class.classResources` / `class.acFormulas` / `class.grants` / `subclass.spells`, linked to a feature only by a name/key convention. Unifying gives real provenance (ARCH-2) + a uniform 5etools-style model — **but** it's only a partial win at real cost (see note). | Consumer-driven + narrow: features carry `grants`; engine PREFERS them but FALLS BACK to the class-level data; migrate ONE effect type at a time (start `acFormula`, ~2 records), tests locked each step. Do NOT big-bang. |
+
+> **FE-8 — why it's deferred (the honest tradeoff).** Tempting as "single source of truth +
+> provenance," but: **(1) only partial** — spell slots, prepared counts, caster progression and
+> multiclass are inherently class/character-level and can't live on one feature, so the engine
+> would read effects from TWO places (class tables + feature grants), not one. **(2) High blast
+> radius** — re-homing effect collection rewrites the most-tested path in `hydrate`; a subtle slip
+> yields wrong sheets. **(3) Transition duplication/drift** — to keep "works without the book"
+> (ARCH-4) and independent cherry-picks, the class-level data must remain as a fallback, so the
+> same effect lives in two places and can drift. **(4) Open-ended vocabulary** — resources/AC/
+> grants/scaling are tractable, but a long tail (advantage-on-saves, +speed, resistances, condition
+> immunities) isn't modeled today; structuring *all* features is near-unbounded, structuring *some*
+> leaves the model as mixed as it already is. **(5) Latent value** — the payoff only lands once a
+> consumer needs it (per-source AC/HP breakdown, feature-mechanics display); until then it's
+> plumbing with opportunity cost vs. user-facing work. **Revisit when a provenance-dependent
+> feature actually demands it**, then do the narrow pilot above.
 
 ---
 
