@@ -40,11 +40,14 @@ Concise dev roadmap (agent-maintained). Repo guide: [`AGENTS.md`](AGENTS.md); ed
   pools, **spell swaps out→in at their level**); **click a row to expand it in place** (accordion, one open at a time)
   into that level's editors; **level via +/-** (a + opens the new level); soft "needs choices" flag (never blocks).
   Sub-tab + open-row are in-memory (default Character, not persisted). Swaps stamp the class level for placement.
-- CI: Node 26, `setup-node@v5`; 80 tests green (`node --test tests/smoke.mjs tests/rules.mjs`).
+- **B4.6 Export / print / share** — a sheet-wide toolbar: **🖨 Print** (self-contained `panel.print.js` render opened in
+  a new window → browser print dialog → paper or Save-as-PDF; own light-theme styles, pulls from the computed sheet via
+  viewModel), **⬇ Export** (download the normalized sheet as `<name>.json`), **⬆ Import** (editor-only — paste an
+  exported JSON in a modal → overwrite, parse-guarded). "Share" is host-provided (per-character visibility).
+- CI: Node 26, `setup-node@v5`; 84 tests green (`node --test tests/smoke.mjs tests/rules.mjs`).
 
 ## Remaining (in order)
-1. **B4.6 — Export / print / share** a sheet.
-2. **B5 — UI polish.** Record images; accessibility (focus-visible, aria-live, `<label>`, keyboard nav); responsive;
+1. **B5 — UI polish.** Record images; accessibility (focus-visible, aria-live, `<label>`, keyboard nav); responsive;
    skeletons.
 
 ## Deferred / tech-debt
