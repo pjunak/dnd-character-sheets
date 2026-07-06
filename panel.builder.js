@@ -16,6 +16,11 @@ export function makeBuilderPanel(ctx) {
   const { section, miniStat, selectBox, fieldRow, choiceBlock, warningsBlock, numField, statTip } = ui;
   const { builderModel, collectChoices } = E;
 
+  // Href into the Player's Handbook compendium (the handbook addon owns the
+  // `/compendium` route). Callers gate on a resolved record, so without the book
+  // the name stays plain text (no dead link).
+  const compendiumHref = (kind, id) => `#/compendium/${kind}:${id}`;
+
   function panelBuilder(c, s, editable, comp, warnings, engine) {
     if (!engine) return panelBuilderStub();
     const ro = !editable;
@@ -276,8 +281,13 @@ export function makeBuilderPanel(ctx) {
           .map((f) => {
             const name = f.name || titleize(f.id);
             const recF = featureRecordFor(engine, cl, l, f);
+            // When the feature resolves to a record, its name links to the compendium
+            // detail page; otherwise (no book / unresolved) it stays plain text.
+            const inner = (recF && recF.id)
+              ? `<a href="${esc(compendiumHref('feature', recF.id))}">${esc(name)}</a>`
+              : `<span>${esc(name)}</span>`;
             const legend = recF && recF.text ? { title: recF.name || name, desc: firstPara(recF.text), aria: name } : null;
-            return statTip(`<span>${esc(name)}</span>`, legend, { underline: true });
+            return statTip(inner, legend, { underline: true });
           });
         rows.push(`<div style="display:flex;gap:var(--space-2);padding:var(--space-1) 0;border-bottom:1px solid rgba(var(--gold-muted),.1);font-size:var(--text-sm)">
           <span style="color:var(--text-muted);min-width:2.5rem">L${esc(String(charLvl))}</span>

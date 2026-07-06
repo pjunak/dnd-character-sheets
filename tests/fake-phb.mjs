@@ -64,6 +64,7 @@ export function makeFake() {
       sorcerer: {
         id: 'sorcerer', name: 'Sorcerer', kind: 'class', hitDie: 'd6', savingThrows: ['CON', 'CHA'],
         spellcasting: { ability: 'CHA', type: 'full', prepares: 'list' }, weaponMastery: { count: 0 }, acFormulas: [],
+        progression: [{ level: 2, features: ['Metamagic'] }],
       },
     },
     weapon: {

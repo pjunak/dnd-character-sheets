@@ -150,6 +150,18 @@ test('sheets: Builder progression log shows SUBCLASS features (A4)', () => {
   } finally { clearLocalStorage(); }
 });
 
+test('sheets: Builder log links resolved feature names to the compendium (B1.2)', () => {
+  mockLocalStorage('builder');
+  try {
+    const { rec } = dryRunRegister(register, META, PHB());
+    // Sorcerer L2 shows the "Metamagic" feature (fake sorcerer progression); it resolves to
+    // the sorcerer-metamagic feature record, so the name links to the compendium detail page.
+    const out = renderBody(rec, { id: 'cbl', name: 'Sorc', addonData: { 'dnd55e-sheets': {
+      classes: [{ classId: 'sorcerer', level: 2, subclass: '' }], abilities: { CHA: 15 } } } });
+    assert.match(out, /href="#\/compendium\/feature:sorcerer-metamagic"/, 'resolved feature name links to its compendium page');
+  } finally { clearLocalStorage(); }
+});
+
 test('sheets: featureChoices resolve into engine inputs (skill prof + expertise)', () => {
   // Adapter-level: decisionsOf maps stored featureChoices → the canonical
   // engine input fields. Uses a minimal local fake (a class with a skill
