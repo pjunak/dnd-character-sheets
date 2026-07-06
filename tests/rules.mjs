@@ -43,6 +43,49 @@ test('rules: option-pool count grows with level (countByLevel)', () => {
   assert.equal(at(17).count, 6, 'L17 → 6');
 });
 
+test('rules: ASI-opportunity levels are per-class and include class extras (B4.0 item 3)', () => {
+  const fake = makeFake();
+  const num = (v, d = 0) => { const n = Number(v); return Number.isFinite(n) ? n : d; };
+  const model = makeEngine({ num, host: {}, NS: 'x', ABILITIES: [], SKILLS: [], abilityMod: () => 0, sheetOf: () => ({}) });
+  // Per-class timing: Fighter 4 / Wizard 1 → Fighter's L4 ASI, nothing for the L1 Wizard.
+  const mc = model.collectChoices([{ classId: 'fighter', level: 4, subclass: '' }, { classId: 'wizard', level: 1, subclass: '' }], fake).filter((c) => c.kind === 'asiMode');
+  assert.ok(mc.some((c) => c.id === 'asi:fighter:4'), 'Fighter L4 ASI present (per-class, not character-level)');
+  assert.ok(!mc.some((c) => c.id.startsWith('asi:wizard')), 'the level-1 Wizard contributes no ASI');
+  // Class extras come from the class progression: a mock class declaring ASI at 6 & 14.
+  const withProg = { getItem: (k, id) => (k === 'class' && id === 'ftr') ? { id: 'ftr', name: 'F', progression: [{ level: 6, features: ['Ability Score Improvement'] }, { level: 14, features: ['Ability Score Improvement'] }] } : null, getItemByName: () => null, listFeatures: () => [] };
+  const lv = model.collectChoices([{ classId: 'ftr', level: 20, subclass: '' }], withProg).filter((c) => c.kind === 'asiMode').map((c) => c.level);
+  assert.ok(lv.includes(6) && lv.includes(14), 'progression-declared extra ASIs (Fighter 6 & 14) are included');
+  assert.ok([4, 8, 12, 16, 19].every((l) => lv.includes(l)), 'base ASI levels still present (union — no regression)');
+});
+
+test('rules: reconcile drops orphaned choices + ability grants after a structural change (B4.0 item 4)', () => {
+  const fake = makeFake();
+  const num = (v, d = 0) => { const n = Number(v); return Number.isFinite(n) ? n : d; };
+  const model = makeEngine({ num, host: {}, NS: 'x', ABILITIES: [], SKILLS: [], abilityMod: () => 0, sheetOf: () => ({}) });
+  // Was Fighter 8 (ASI at 4 & 8), picked +2 CHA at L8; then dropped to Fighter 4.
+  const s = {
+    classes: [{ classId: 'fighter', level: 4, subclass: '' }],
+    featureChoices: { 'asi:fighter:4': 'asi', 'asi:fighter:4:ability': 'STR', 'asi:fighter:8': 'asi', 'asi:fighter:8:ability': 'CHA' },
+    abilityGrants: [
+      { id: 'asi:fighter:4:ability', source: { type: 'asi' }, assign: { STR: 2 } },
+      { id: 'asi:fighter:8:ability', source: { type: 'asi' }, assign: { CHA: 2 } },
+    ],
+  };
+  model.reconcile(s, fake);
+  assert.ok(s.abilityGrants.some((g) => g.id === 'asi:fighter:4:ability'), 'the valid L4 grant is kept');
+  assert.ok(!s.abilityGrants.some((g) => g.id === 'asi:fighter:8:ability'), 'the orphaned L8 grant is pruned (no phantom +2 CHA)');
+  assert.ok(s.featureChoices['asi:fighter:4'], 'the valid L4 choice is kept');
+  assert.ok(!s.featureChoices['asi:fighter:8'], 'the orphaned L8 choice is pruned');
+});
+
+test('rules: a half-feat ability pick bumps the score (B4.0 item 2 / AB-2)', () => {
+  const { rec } = withFake();
+  // A multi-option half-feat's chosen +1 reaches the engine as a feat-type abilityGrant.
+  const sheet = rec.provided.hydrate({ baseStats: { INT: 15 }, className: 'Wizard',
+    abilityGrants: [{ id: 'asi:wizard:4:featability', source: { type: 'feat' }, assign: { INT: 1 } }] }).sheet;
+  assert.equal(sheet.abilities.INT.score, 16, '15 + 1 (half-feat ability pick applied)');
+});
+
 test('rules: provides a versioned rules API', () => {
   const { ok, rec, error } = dryRunRegister(register, META);
   assert.ok(ok, error);

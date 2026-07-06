@@ -495,7 +495,7 @@ export default function register(host) {
   });
 
   // ── Builder (engine mode) — edit the rich decision model + materialize ────
-  const { builderMutate } = ctx.engine;
+  const { builderMutate, reconcile } = ctx.engine;
   const parseAssign = (str) => { const a = {}; String(str || '').split(',').forEach((p) => { const [k, v] = p.split(':'); if (k && v) a[k.trim()] = num(v); }); return a; };
   const removeGrant = (s, id) => { s.abilityGrants = (s.abilityGrants || []).filter((g) => g.id !== id); };
   const upsertGrant = (s, id, source, assign) => { removeGrant(s, id); if (assign && Object.keys(assign).length) s.abilityGrants = (s.abilityGrants || []).concat([{ id, source, assign }]); };
@@ -537,20 +537,23 @@ export default function register(host) {
       s.baseStats = base;
     });
   });
+  // Structural edits (class/level/subclass/remove) can orphan level- or
+  // owner-scoped decisions (ASI picks, pool picks) — reconcile prunes them so a
+  // stale abilityGrant can't keep bumping scores (grants apply unconditionally).
   host.registerAction('builderClassSet', (cid, idx, classId) => {
-    builderMutate(cid, (s) => { if (s.classes[idx]) { s.classes[idx] = { ...s.classes[idx], classId: String(classId), subclass: '' }; } });
+    builderMutate(cid, (s, engine) => { if (s.classes[idx]) { s.classes[idx] = { ...s.classes[idx], classId: String(classId), subclass: '' }; } if (engine) reconcile(s, engine); });
   });
   host.registerAction('builderLevelSet', (cid, idx, value) => {
-    builderMutate(cid, (s) => { if (s.classes[idx]) s.classes[idx] = { ...s.classes[idx], level: Math.max(1, Math.min(20, num(value, 1))) }; });
+    builderMutate(cid, (s, engine) => { if (s.classes[idx]) s.classes[idx] = { ...s.classes[idx], level: Math.max(1, Math.min(20, num(value, 1))) }; if (engine) reconcile(s, engine); });
   });
   host.registerAction('builderSubclassSet', (cid, idx, subclass) => {
-    builderMutate(cid, (s) => { if (s.classes[idx]) s.classes[idx] = { ...s.classes[idx], subclass: String(subclass) }; });
+    builderMutate(cid, (s, engine) => { if (s.classes[idx]) s.classes[idx] = { ...s.classes[idx], subclass: String(subclass) }; if (engine) reconcile(s, engine); });
   });
   host.registerAction('builderAddClass', (cid) => {
     builderMutate(cid, (s) => { s.classes = s.classes.concat([{ classId: '', level: 1, subclass: '' }]); });
   });
   host.registerAction('builderRemoveClass', (cid, idx) => {
-    builderMutate(cid, (s) => { if (s.classes.length > 1) s.classes = s.classes.filter((_, i) => i !== idx); });
+    builderMutate(cid, (s, engine) => { if (s.classes.length > 1) s.classes = s.classes.filter((_, i) => i !== idx); if (engine) reconcile(s, engine); });
   });
   host.registerAction('builderBgAsi', (cid, value) => {
     builderMutate(cid, (s) => {
