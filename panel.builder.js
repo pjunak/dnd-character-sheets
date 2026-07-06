@@ -233,18 +233,25 @@ export function makeBuilderPanel(ctx) {
     return para.length > 300 ? para.slice(0, 297) + '…' : para;
   }
 
-  // Resolve a shown class-feature name → its `feature` record (Phase-2 hover).
-  // Joins by (classId, level, name) — the progression string is NOT a record id —
-  // then falls back to a level-agnostic match and finally a shared generic
-  // (Ability Score Improvement / Epic Boon, classId null). Returns null (→ statTip
-  // degrades to a plain name) when the book addon predates feature records.
-  function featureRecordFor(engine, classId, level, name) {
+  // Resolve a shown feature (class OR subclass) → its `feature` record, for the
+  // hover card + link. Subclass features resolve within the selected subclass (by
+  // name, then by local id). Class features join by (classId, level, name) with a
+  // level-agnostic and a shared-generic (ASI / Epic Boon, classId null) fallback.
+  // Returns null (→ statTip shows a plain name) when the book addon predates
+  // feature records.
+  function featureRecordFor(engine, cl, level, f) {
     if (!engine.listFeatures || !engine.getFeature) return null;
     const norm = (x) => String(x || '').trim().toLowerCase();
-    const owned = engine.listFeatures({ classId });
-    let hit = owned.find((f) => !f.subclassId && f.level === level && norm(f.name) === norm(name))
-           || owned.find((f) => !f.subclassId && norm(f.name) === norm(name))
-           || engine.listFeatures().find((f) => f.classId == null && norm(f.name) === norm(name));
+    const name = f.name || titleize(f.id);   // class features carry the name in `id` (no `name`)
+    if (f.source && f.source.type === 'subclass') {
+      const subs = engine.listFeatures({ subclassId: f.source.id });
+      const hit = subs.find((x) => norm(x.name) === norm(name)) || subs.find((x) => x.localId === f.id);
+      return hit ? engine.getFeature(hit.id) : null;
+    }
+    const owned = engine.listFeatures({ classId: cl.classId });
+    const hit = owned.find((x) => !x.subclassId && x.level === level && norm(x.name) === norm(name))
+             || owned.find((x) => !x.subclassId && norm(x.name) === norm(name))
+             || engine.listFeatures().find((x) => x.classId == null && norm(x.name) === norm(name));
     return hit ? engine.getFeature(hit.id) : null;
   }
 
@@ -262,11 +269,13 @@ export function makeBuilderPanel(ctx) {
         // reveals the feature's prose (statTip degrades to the bare name if the
         // record is missing). Each name is esc()'d inside the trigger, so the
         // joined result is HTML and must NOT be re-escaped.
+        // This class's features at this level: CLASS features (source.id = classId)
+        // AND the selected subclass's features (source.id = the subclass id).
         const feats = features
-          .filter((f) => f.source && f.source.id === cl.classId && num(f.source.level) === l)
+          .filter((f) => f.source && num(f.source.level) === l && (f.source.type === 'subclass' ? f.source.id === cl.subclass : f.source.id === cl.classId))
           .map((f) => {
             const name = f.name || titleize(f.id);
-            const recF = featureRecordFor(engine, cl.classId, l, name);
+            const recF = featureRecordFor(engine, cl, l, f);
             const legend = recF && recF.text ? { title: recF.name || name, desc: firstPara(recF.text), aria: name } : null;
             return statTip(`<span>${esc(name)}</span>`, legend, { underline: true });
           });

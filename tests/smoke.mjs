@@ -137,6 +137,19 @@ test('sheets: Builder tab renders the guided form when book data is present', ()
   } finally { clearLocalStorage(); }
 });
 
+test('sheets: Builder progression log shows SUBCLASS features (A4)', () => {
+  mockLocalStorage('builder');
+  try {
+    const { rec } = dryRunRegister(register, META, PHB());
+    // Eldritch Knight (fighter subclass in the fake) grants "War Bond" at level 3;
+    // its sheet.features source.id is the subclass id, so the log filter must match
+    // it against cl.subclass — not cl.classId — for it to appear.
+    const out = renderBody(rec, { id: 'cbs', name: 'EK', addonData: { 'dnd55e-sheets': {
+      classes: [{ classId: 'fighter', level: 3, subclass: 'eldritch-knight' }], abilities: { STR: 15 } } } });
+    assert.match(out, /War Bond/, 'subclass feature appears in the progression log');
+  } finally { clearLocalStorage(); }
+});
+
 test('sheets: featureChoices resolve into engine inputs (skill prof + expertise)', () => {
   // Adapter-level: decisionsOf maps stored featureChoices → the canonical
   // engine input fields. Uses a minimal local fake (a class with a skill
