@@ -357,6 +357,18 @@ test('sheets: Combat attacks link the weapon to the compendium (B2.3)', () => {
   } finally { clearLocalStorage(); }
 });
 
+test('sheets: header class + subclass link to the compendium (B2.4)', () => {
+  mockLocalStorage('combat');
+  try {
+    const { rec } = dryRunRegister(register, META, PHB());
+    const out = renderBody(rec, { id: 'chd', name: 'Knight', addonData: { 'dnd55e-sheets': {
+      className: 'Fighter', subclass: 'Eldritch Knight', level: 3,
+      classes: [{ classId: 'fighter', level: 3, subclass: 'eldritch-knight' }], abilities: { STR: 15 } } } });
+    assert.match(out, /href="#\/compendium\/class:fighter"/, 'header class name links to its compendium page');
+    assert.match(out, /href="#\/compendium\/subclass:eldritch-knight"/, 'header subclass name links to its compendium page');
+  } finally { clearLocalStorage(); }
+});
+
 test('sheets: Backpack add-item + attune actions do not throw', () => {
   const { rec } = dryRunRegister(register, META, PHB());
   const act = (name, ...args) => rec.actions.find(a => a.name === name).fn(...args);

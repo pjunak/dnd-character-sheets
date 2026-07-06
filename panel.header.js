@@ -16,9 +16,9 @@
 // ═══════════════════════════════════════════════════════════════
 
 export function makeHeaderPanel(ctx) {
-  const { host, t, num, signed, ui, viewModel, legends } = ctx;
+  const { host, t, num, signed, firstPara, ui, viewModel, legends } = ctx;
   const { esc, dataAction } = host.h;
-  const { heroTile, numField, statTip } = ui;
+  const { heroTile, numField, statTip, entityRef } = ui;
 
   const hpColor = (cur, max) => {
     if (max <= 0) return 'var(--text-parchment)';
@@ -45,12 +45,23 @@ export function makeHeaderPanel(ctx) {
     const cid = c.id;
     const cur = num(s.hp, 0), max = vm.maxHp, temp = num(s.tempHp, 0);
 
-    // D&D identity line — class / level / subclass (NOT host fields).
-    const clsBits = [s.className, s.subclass ? '(' + s.subclass + ')' : ''].filter(Boolean).join(' ');
-    const dndLine = clsBits ? t('sheet.summary', { level: num(s.level, 1), cls: clsBits }).trim() : '';
-    const idHtml = dndLine
-      ? `<div style="color:var(--text-light);font-size:var(--text-sm);font-weight:600;letter-spacing:.02em">${esc(dndLine)}</div>`
-      : '';
+    // D&D identity line — class / level / subclass (NOT host fields). Class +
+    // subclass names link to their compendium pages when the book resolves them
+    // (engine mode); we format via the i18n template with a placeholder token, then
+    // splice the linked HTML in AFTER escaping the surrounding translated text.
+    const clsPlain = [s.className, s.subclass ? '(' + s.subclass + ')' : ''].filter(Boolean).join(' ');
+    let idHtml = '';
+    if (clsPlain) {
+      const byName = (kind, name) => (engine && name && engine.getItemByName) ? engine.getItemByName(kind, name) : null;
+      const mkLegend = (rec) => (rec && rec.text) ? { title: rec.name, desc: firstPara(rec.text), aria: rec.name } : null;
+      const clsRec = byName('class', s.className);
+      const subRec = byName('subclass', s.subclass);
+      const clsHtml = s.className ? entityRef('class', clsRec && clsRec.id, s.className, mkLegend(clsRec)) : '';
+      const subHtml = s.subclass ? ' (' + entityRef('subclass', subRec && subRec.id, s.subclass, mkLegend(subRec)) + ')' : '';
+      const TOKEN = '@@CLS@@';
+      const line = t('sheet.summary', { level: num(s.level, 1), cls: TOKEN }).trim();
+      idHtml = `<div style="color:var(--text-light);font-size:var(--text-sm);font-weight:600;letter-spacing:.02em">${esc(line).replace(TOKEN, (clsHtml + subHtml).trim())}</div>`;
+    }
 
     const strip = [
       hpTile(cid, cur, max, temp, editable, vm, L),
