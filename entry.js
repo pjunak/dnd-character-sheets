@@ -590,7 +590,7 @@ export default function register(host) {
   });
 
   // ── Builder (engine mode) — edit the rich decision model + materialize ────
-  const { builderMutate, reconcile } = ctx.engine;
+  const { builderMutate, reconcile, builderModel } = ctx.engine;
   const parseAssign = (str) => { const a = {}; String(str || '').split(',').forEach((p) => { const [k, v] = p.split(':'); if (k && v) a[k.trim()] = num(v); }); return a; };
   const removeGrant = (s, id) => { s.abilityGrants = (s.abilityGrants || []).filter((g) => g.id !== id); };
   const upsertGrant = (s, id, source, assign) => { removeGrant(s, id); if (assign && Object.keys(assign).length) s.abilityGrants = (s.abilityGrants || []).concat([{ id, source, assign }]); };
@@ -666,6 +666,33 @@ export default function register(host) {
   });
   // Builder sub-tab switch (Character | <classId>) — in-memory, clears any open level row.
   host.registerAction('builderTab', (cid, tab) => { ctx.builderState[cid] = { ...(ctx.builderState[cid] || {}), tab: String(tab), open: null }; host.ui.rerender(); });
+  // Roving-tabindex keyboard nav across the Builder sub-tabs (Character + one per
+  // class), mirroring the top tab bar's `tabKey`: Arrow keys move + focus follows.
+  host.registerAction('builderTabKey', (ev, cid, tabId) => {
+    const key = ev && ev.key;
+    if (key !== 'ArrowLeft' && key !== 'ArrowRight' && key !== 'Home' && key !== 'End') return;
+    if (ev.preventDefault) ev.preventDefault();
+    const engine = getRules();
+    if (!engine) return;
+    const s = sheetOf(host.store.getCharacters().find((x) => x && x.id === cid) || {});
+    const classes = builderModel(s, engine).classes || [];
+    const ids = ['character', ...classes.filter((cl) => cl.classId).map((cl) => cl.classId)];
+    const cur = ids.indexOf(String(tabId));
+    if (cur < 0) return;
+    let next = cur;
+    if (key === 'ArrowLeft') next = (cur - 1 + ids.length) % ids.length;
+    else if (key === 'ArrowRight') next = (cur + 1) % ids.length;
+    else if (key === 'Home') next = 0;
+    else if (key === 'End') next = ids.length - 1;
+    ctx.builderState[cid] = { ...(ctx.builderState[cid] || {}), tab: ids[next], open: null };
+    host.ui.rerender();
+    // Move focus to the newly-active tab after the re-render (DOM only — guarded so
+    // the async callback never throws in a headless/test env).
+    if (typeof document !== 'undefined') {
+      const fid = 'dse-btab-' + cid + '-' + ids[next];
+      setTimeout(() => { try { const el = document.getElementById(fid); if (el) el.focus(); } catch (_) {} }, 0);
+    }
+  });
   // Expand/collapse one level row (accordion — one open at a time; click again to close).
   host.registerAction('builderToggleLevel', (cid, key) => { const st = ctx.builderState[cid] || {}; ctx.builderState[cid] = { ...st, open: st.open === String(key) ? null : String(key) }; host.ui.rerender(); });
   // Level-independent extra feats (B4.5b) — read the picker + optional custom name +

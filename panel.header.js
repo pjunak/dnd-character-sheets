@@ -32,6 +32,17 @@ export function makeHeaderPanel(ctx) {
   };
   const icon = (name) => `<svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" style="display:block;margin:0 auto;fill:none;stroke:var(--text-muted);stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round">${ICONS[name] || ''}</svg>`;
 
+  // Shield-equipped indicator for the AC tile: a filled circle when a shield contributes
+  // to AC, an outline circle when it doesn't (mirrors the proficiency dots). Engine-only
+  // (the bonus comes from comp.ac.shield); standalone AC is hand-entered, so it's omitted.
+  const shieldDot = (equipped) => {
+    const c = equipped
+      ? `<circle cx="8" cy="8" r="4.2" fill="var(--accent-gold)"/>`
+      : `<circle cx="8" cy="8" r="3.6" fill="none" stroke="var(--text-muted)" stroke-width="1.6"/>`;
+    const svg = `<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" style="display:block">${c}</svg>`;
+    return `<span title="${esc(equipped ? t('stat.shieldOn') : t('stat.shieldOff'))}" style="display:inline-flex;align-items:center;gap:3px">${svg}${esc(t('stat.shield'))}</span>`;
+  };
+
   const hpColor = (cur, max) => {
     if (max <= 0) return 'var(--text-parchment)';
     if (cur <= 0 || cur / max <= 0.35) return 'var(--color-danger)';
@@ -48,7 +59,7 @@ export function makeHeaderPanel(ctx) {
       ? `<div style="margin-top:var(--space-1);display:flex;justify-content:center">${numField(host.h.dataOn('change', host.action('setField'), cid, field, '$value'), num(display), { min: field === 'speed' ? 0 : null, ariaLabel: label })}</div>`
       : '';
     const valueHtml = statTip(`<span>${esc(String(display))}</span>`, legend, { align: opts.align, underline: true });
-    return heroTile(label, valueHtml, { accent: opts.accent, editHtml, icon: opts.icon });
+    return heroTile(label, valueHtml, { accent: opts.accent, editHtml, icon: opts.icon, sub: opts.sub });
   }
 
   function vitalsBar(c, s, comp, editable, engine) {
@@ -77,7 +88,7 @@ export function makeHeaderPanel(ctx) {
 
     const strip = [
       hpTile(cid, cur, max, temp, editable, vm, L),
-      vital(cid, t('stat.ac'), 'ac', vm.ac, vm, editable, L.ac(), { accent: true, align: 'l', icon: icon('ac') }),
+      vital(cid, t('stat.ac'), 'ac', vm.ac, vm, editable, L.ac(), { accent: true, align: 'l', icon: icon('ac'), sub: (comp && comp.ac) ? shieldDot(num(comp.ac.shield, 0) > 0) : '' }),
       vital(cid, t('stat.init'), 'initiative', signed(vm.init), vm, editable, L.init(), { icon: icon('init') }),
       vital(cid, t('stat.speed'), 'speed', vm.speed, vm, editable, L.speed(), { icon: icon('speed') }),
       vital(cid, t('stat.pb'), 'profBonus', signed(vm.pb), vm, editable, L.pb(), { align: 'r', icon: icon('pb') }),

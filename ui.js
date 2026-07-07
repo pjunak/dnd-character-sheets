@@ -40,7 +40,12 @@ export function makeUI(ctx) {
     .addon-dnd55e-sheets .dse-cols { display:flex; gap:var(--space-4); align-items:flex-start; flex-wrap:wrap }
     .addon-dnd55e-sheets .dse-cards { display:flex; flex-direction:column; gap:var(--space-3); flex:0 1 17rem; min-width:14rem }
     .addon-dnd55e-sheets .dse-cols-main { flex:1 1 20rem; min-width:0 }
-    @media (max-width:720px){ .addon-dnd55e-sheets .dse-cards { flex-basis:100% } }`;
+    @media (max-width:720px){ .addon-dnd55e-sheets .dse-cards { flex-basis:100% } }
+    /* Progression spine row — the full-row overlay toggle. A hover/focus tint makes
+       the whole-row click target discoverable; focus-visible draws a keyboard ring. */
+    .addon-dnd55e-sheets .dse-spine-toggle { border-radius:var(--radius-sm); transition:background var(--dur-fast) var(--ease-out); }
+    .addon-dnd55e-sheets .dse-spine-toggle:hover { background:rgba(var(--accent-gold-rgb),0.07); }
+    .addon-dnd55e-sheets .dse-spine-toggle:focus-visible { outline:2px solid rgba(var(--accent-gold-rgb),0.5); outline-offset:-2px; }`;
   const styleTag = `<style>${STYLE}</style>`;
 
   // ── Hoisted style strings (M8) — tokens only, reused verbatim. ────
@@ -66,7 +71,7 @@ export function makeUI(ctx) {
     // Misc labels
     sectionLabel: 'font-size:var(--text-xs);color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:var(--space-2)',
     subLabel: 'color:var(--text-muted);font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.04em;margin-bottom:var(--space-1)',
-    chip: 'display:flex;align-items:center;gap:var(--space-1);border-radius:var(--radius-sm);padding:var(--space-1) var(--space-2);min-width:8.5rem',
+    chip: 'display:flex;align-items:center;gap:var(--space-2);border-radius:var(--radius-sm);padding:var(--space-1) var(--space-2);min-width:8.5rem;min-height:2.15rem',
     // Legacy compact tiles (Builder summary still uses these)
     statBox: 'background:var(--bg-raised);border-radius:var(--radius);padding:var(--space-2) var(--space-3);min-width:4.5rem;text-align:center',
     statBoxLabel: 'font-size:var(--text-xs);color:var(--text-muted)',
@@ -131,14 +136,23 @@ export function makeUI(ctx) {
 
   // ── Saving-throw / skill line. `state` ∈ none|prof|exp drives the trained dot.
   //    `dotAttr` (optional) makes the dot a clickable toggle (standalone edit). ──
+  // Proficiency indicator, 3 states: none = a small outline circle, proficient = a
+  // small filled circle, expertise ("mastery") = a LARGER outline ring with a filled
+  // centre. Inline SVG (not glyphs) so the mastery ring reads bigger and fill/stroke
+  // track the theme. Clickable (dotAttr) to toggle proficiency in standalone edit.
   function profDot(state, dotAttr) {
-    const sym = state === 'exp' ? '◉' : state === 'prof' ? '●' : '○';
-    const col = state === 'none' ? 'var(--text-muted)' : 'var(--accent-gold)';
+    const gold = 'var(--accent-gold)', muted = 'var(--text-muted)';
+    const shape = state === 'exp'
+      ? `<circle cx="8" cy="8" r="6.6" fill="none" stroke="${gold}" stroke-width="1.6"/><circle cx="8" cy="8" r="3.1" fill="${gold}"/>`
+      : state === 'prof'
+        ? `<circle cx="8" cy="8" r="4.2" fill="${gold}"/>`
+        : `<circle cx="8" cy="8" r="3.6" fill="none" stroke="${muted}" stroke-width="1.6"/>`;
+    const svg = `<svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" style="display:block">${shape}</svg>`;
     const title = state === 'exp' ? t('misc.expertise') : state === 'prof' ? t('misc.proficient') : t('misc.notProficient');
     if (dotAttr) {
-      return `<button class="dse-dot" title="${esc(title)}" style="background:none;border:none;cursor:pointer;padding:0;font-size:var(--text-base);line-height:1;color:${col}"${dotAttr}>${sym}</button>`;
+      return `<button class="dse-dot" title="${esc(title)}" aria-pressed="${state !== 'none' ? 'true' : 'false'}" style="background:none;border:none;cursor:pointer;padding:0;line-height:0"${dotAttr}>${svg}</button>`;
     }
-    return `<span title="${esc(title)}" style="color:${col};font-size:var(--text-base);line-height:1">${sym}</span>`;
+    return `<span title="${esc(title)}" style="line-height:0">${svg}</span>`;
   }
   function profRow(state, labelHtml, totalText, opts) {
     opts = opts || {};

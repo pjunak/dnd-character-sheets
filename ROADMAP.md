@@ -37,19 +37,39 @@ a shared point budget — enabling the previously-impossible +1/+1 split).
 - **Backpack folded into the Character Sheet tab** (`689527e`). Retired the standalone Backpack tab; inventory + currency
   render full-width at the bottom of the Character Sheet under a 🎒 heading. Strip: Overview / Character Sheet / Combat /
   (Spellbook) / (Builder).
+- **Row hover / focus feedback** (`c4dd507`; handbook `400cac2`). The whole-row click targets now read as interactive — a
+  gold hover tint + keyboard focus-visible ring on the builder spine-row toggle (`.dse-spine-toggle` in `ctx.ui.styleTag`)
+  and on the compendium browse rows + index tiles (`.phb-row`/`.phb-tile` in a new `COMPENDIUM_STYLE`). The earlier
+  "needs a host CSS capability" note was wrong — an addon-injected `<style>` handles it.
+- **3-state proficiency dots + AC shield indicator** (`f23c489`). Skill dots are now inline SVG — none (small outline) /
+  proficient (small filled) / mastery=expertise (larger ring + filled centre), so mastery reads distinctly. The AC tile
+  shows a shield-equipped circle (filled when a shield counts toward AC, outline when not; engine-only).
+- **Builder sub-tab keyboard nav** (`0ceb88d`). The sub-tabs are a proper ARIA tablist — roving tabindex + Arrow/Home/End
+  via `builderTabKey`, focus follows the active tab (guarded for headless).
+- **Chip comfort height** (`ae0c7f4`). Closes round-2 click targets: audit found chips OK (✕ = host `.inline-create-btn`,
+  names = standard links, builder summary chips are read-only/row-toggled); gave `S.chip` a `min-height` so single-line
+  spell chips are a comfortable, consistent target.
 
 ## Remaining (in order)
 
-1. **B5 — remaining UI polish.**
-   - **Hover / focus-visible feedback** on the builder spine rows + compendium browse rows — NOW ACHIEVABLE (earlier notes
-     wrongly said blocked): the sheet injects a `<style>` via `ctx.ui.styleTag`, so `:hover`/`:focus-visible` rules can ship
-     addon-side; the handbook can add the same to its route render.
-   - **Bigger click targets, round 2.** Audit chips + proficiency dots for the same tiny-hit-area problem.
-   - Record **images** (render seam exists; nothing ships images — needs an image source); **accessibility** (`aria-live`
-     on the budget/point counts, keyboard tab-nav on the builder sub-tabs); **skeleton** loading. The PB icon (+badge) may
-     want a less "add"-like glyph. Full **mobile** layout is out of scope (needs a dedicated redesign — maintainer's call).
+1. **B5 — remaining UI polish (small / optional).**
+   - Record **images** (blocked — no image source); **skeleton** loading. The PB icon (+badge) may want a less "add"-like
+     glyph (pending a look at the icons). Full **mobile** layout is out of scope (needs a dedicated redesign).
 
 ## Deferred / tech-debt
+- **Hoist remaining reusable UI into `ttrpg-codex` (unified-UI TODO).** The *controls* now consume host components
+  (`.codex-tab-strip`/`.codex-tab`, `.codex-stepper` via `ui.numField`, `.codex-tile`, `.codex-tip`, `.edit-input`), but
+  some reusable UI is still addon-local because the host exposes no equivalent and is reference-only for the agent
+  (agent doesn't modify `ttrpg-codex`): (a) the **vital icon set** (shield/bolt/chevrons/+badge/eye/heart SVGs in
+  `panel.header.js`) + the pre-existing **save shield** (`panel.rail.js`) → candidates for a host `.codex-icon` set; (b)
+  `ui.js` **composition helpers** (`heroTile`/`abilityTile`) that wrap host classes but add addon-side layout; (c) the
+  injected **`ctx.ui.styleTag`** layout CSS. Per `ttrpg-codex/web/css/STYLE.md`, the host's shared classes were themselves
+  *"hoisted from the D&D sheet addon once they proved generic"* — so the pipeline is prototype-in-addon → **maintainer
+  promotes to the host**, then addons consume it. Action for the maintainer: promote the icon set (+ helpers if generic)
+  into `ttrpg-codex`; the addon then references them instead of defining them.
+- **`aria-live` budget counts (deferred).** Announcing point-buy/ASI "N pts left" changes to screen readers needs a
+  *persistent* live region, but every edit re-renders the whole panel (no stable element survives), so `aria-live` there
+  wouldn't announce reliably. Revisit if the panels move to a targeted-update / stable-live-region model.
 - **B4.5b hover-preview (maybe):** the guided spine expands rows on **click**. A future option — hover a collapsed row
   for a **read-only** preview, click to pin into edit — was deferred (hover-expand with native `<select>` + full
   re-render is fragile; a two-state design that cuts against "less code"). Revisit if the quick-glance proves worth it.

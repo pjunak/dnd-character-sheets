@@ -138,6 +138,21 @@ test('sheets: vital tiles use icons with the full label kept as aria-label (UI p
   } finally { clearLocalStorage(); }
 });
 
+test('sheets: 3-state SVG proficiency dots + AC shield-equipped indicator (UI polish)', () => {
+  mockLocalStorage('stats');
+  try {
+    const { rec } = dryRunRegister(register, META, PHB());
+    // Sage background grants Arcana + History proficiency → a proficient dot to assert.
+    const out = renderBody(rec, { id: 'cui', name: 'Mage', addonData: { 'dnd55e-sheets': { className: 'Wizard', background: 'Sage', abilities: { DEX: 14 } } } });
+    // Dots are inline SVG: none = small outline circle, proficient = small filled circle
+    // (mastery = a larger ring + filled centre, same helper).
+    assert.match(out, /<circle cx="8" cy="8" r="3\.6" fill="none"/, 'unproficient skills → small outline dot');
+    assert.match(out, /<circle cx="8" cy="8" r="4\.2" fill="var\(--accent-gold\)"/, 'a proficient skill → small filled dot');
+    // AC tile carries a shield-equipped indicator (this Wizard has none → off-state).
+    assert.match(out, /No shield equipped/, 'AC shows the shield indicator');
+  } finally { clearLocalStorage(); }
+});
+
 test('sheets: anonymous viewer gets a read-only sheet (no Builder, no inputs)', () => {
   mockLocalStorage('stats');
   try {
@@ -387,6 +402,28 @@ test('sheets: builder spine rows are whole-row click targets, inner links stay l
     // compendium links are re-enabled (pointer-events:auto) so they still navigate.
     assert.match(out, /pointer-events:none/, 'content layer passes dead-space clicks through');
     assert.match(out, /pointer-events:auto/, 'inner links remain interactive');
+    // The row toggle reads as interactive: a hover/focus tint + keyboard focus ring.
+    assert.match(out, /class="dse-spine-toggle"/, 'the row toggle carries the hover/focus class');
+    assert.match(out, /\.dse-spine-toggle:hover/, 'the injected style gives the row a hover tint');
+    assert.match(out, /\.dse-spine-toggle:focus-visible/, 'and a keyboard focus ring');
+  } finally { clearLocalStorage(); }
+});
+
+test('sheets: builder sub-tabs support roving-tabindex arrow-key nav (a11y)', () => {
+  mockLocalStorage('builder');
+  try {
+    const char = { id: 'ctk', name: 'Mage', addonData: { 'dnd55e-sheets': { classes: [{ classId: 'wizard', level: 1, subclass: '' }], abilities: { INT: 15 } } } };
+    const { rec } = dryRunRegister(register, META, { ...PHB(), fixtures: { characters: [char] } });
+    const act = (n, ...a) => rec.actions.find((x) => x.name === n).fn(...a);
+    const out = renderBody(rec, char);
+    // ARIA tablist wiring: the active tab is the sole roving tab stop + keydown-wired.
+    assert.match(out, /id="dse-btab-ctk-character"[^>]*tabindex="0"/, 'Character sub-tab is the roving tab stop');
+    assert.match(out, /id="dse-btab-ctk-wizard"[^>]*tabindex="-1"/, 'inactive sub-tab is skipped by Tab');
+    assert.match(out, /builderTabKey/, 'sub-tabs wire arrow-key navigation');
+    // ArrowRight from Character moves the active tab to the Wizard class tab.
+    act('builderTabKey', { key: 'ArrowRight', preventDefault() {} }, 'ctk', 'character');
+    const out2 = renderBody(rec, char);
+    assert.match(out2, /id="dse-btab-ctk-wizard"[^>]*aria-selected="true"/, 'ArrowRight activates the next (Wizard) sub-tab');
   } finally { clearLocalStorage(); }
 });
 
@@ -404,6 +441,7 @@ test('sheets: Spellbook separates granted from picks + shows the available pool'
     } } });
     assert.match(out, /Always prepared/, 'granted section header');
     assert.match(out, /Bless/, 'granted (always-prepared) spell shown');
+    assert.match(out, /min-height:2\.15rem/, 'spell chips are a comfortable, consistent height (UI polish)');
     assert.match(out, /Fireball/, 'prepared pick shown');
     // B2.1: spell names link to their compendium detail page (prepared pick + granted).
     assert.match(out, /href="#\/compendium\/spell:fireball"/, 'prepared spell links to its compendium page (B2.1)');

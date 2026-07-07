@@ -61,7 +61,9 @@ export function makeBuilderPanel(ctx) {
     // Host `.codex-tab-strip` / `.codex-tab` component (widgets.css) — same tablist
     // the sheet's top tab bar uses (entry.js), so the Builder's sub-tabs share the
     // unified style + gold active indicator rather than a hand-rolled look-alike.
-    const tab = (id, label, on) => `<button role="tab" class="codex-tab${on ? ' is-active' : ''}" aria-selected="${on ? 'true' : 'false'}"${dataAction(host.action('builderTab'), c.id, id)}>${esc(label)}</button>`;
+    // Roving tabindex + arrow-key nav (ArrowLeft/Right/Home/End via builderTabKey),
+    // matching the sheet's top tab bar — the active tab is the only Tab stop.
+    const tab = (id, label, on) => `<button role="tab" id="dse-btab-${esc(c.id)}-${esc(id)}" class="codex-tab${on ? ' is-active' : ''}" aria-selected="${on ? 'true' : 'false'}" tabindex="${on ? '0' : '-1'}"${dataAction(host.action('builderTab'), c.id, id)}${dataOn('keydown', host.action('builderTabKey'), '$ev', c.id, id)}>${esc(label)}</button>`;
     const tabs = [tab('character', t('builder.tabCharacter'), active === 'character')];
     for (const cl of classTabs) {
       const rec = engine.getItem('class', cl.classId);
@@ -203,7 +205,7 @@ export function makeBuilderPanel(ctx) {
       <span style="display:flex;flex-wrap:wrap;gap:var(--space-1);align-items:center">${chips.join('')}${badge}</span>
     </div>`;
     if (!expandable) return `<div style="border-bottom:1px solid rgba(var(--gold-muted),.1)">${content}${editors}</div>`;
-    const toggle = `<button aria-expanded="${open ? 'true' : 'false'}" aria-label="${esc(t('builder.levelAria', { n: l }))}" style="position:absolute;inset:0;background:none;border:none;padding:0;margin:0;cursor:pointer;border-radius:var(--radius-sm)"${dataAction(host.action('builderToggleLevel'), c.id, key)}></button>`;
+    const toggle = `<button class="dse-spine-toggle" aria-expanded="${open ? 'true' : 'false'}" aria-label="${esc(t('builder.levelAria', { n: l }))}" style="position:absolute;inset:0;background:none;border:none;padding:0;margin:0;cursor:pointer"${dataAction(host.action('builderToggleLevel'), c.id, key)}></button>`;
     return `<div style="border-bottom:1px solid rgba(var(--gold-muted),.1)"><div style="position:relative">${toggle}${content}</div>${editors}</div>`;
   }
 

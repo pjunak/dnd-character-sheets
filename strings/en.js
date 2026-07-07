@@ -65,6 +65,9 @@ export default {
   'stat.passivePerc': 'Passive Perception',
   'stat.passivePercAbbr': 'Pass. Perc.',
   'stat.temp':        'Temp',
+  'stat.shield':      'Shield',
+  'stat.shieldOn':    'Shield equipped (counted in AC)',
+  'stat.shieldOff':   'No shield equipped',
 
   // ── Header / sections ────────────────────────────────────────────
   'header.details':   'Details',
