@@ -41,6 +41,9 @@ panel.overview.js   ⚠ renders the CHARACTER SHEET tab (id `stats`) — entry.j
 panel.sheet.js      ⚠ renders the COMBAT tab
 panel.spellbook.js / panel.backpack.js / panel.builder.js / editor.js
 panel.print.js      print/PDF sheet (new-window, self-contained) + JSON import modal
+ui.js               shared render helpers — statTip/entityRef are THE hover+link
+                    primitives; heroTile/abilityTile compose host classes; styleTag
+helpers.js          compendiumHref / firstPara / featureRecordFor
 rules/              the PURE engine (host-free, unit-tested): engine.js + api.js
 tests/              smoke.mjs + rules.mjs (+ fake-phb.mjs fixture data)
 ```
@@ -68,8 +71,27 @@ not persisted). A sheet-wide toolbar offers Print / Export / Import (B4.6).
   repo ships no rulebook data; `tests/fake-phb.mjs` fakes it for engine-mode
   tests.
 
+## Current state (high level; detail = git log + README)
+
+Feature-complete through the B4/B5 arcs: engine mode (book data present) with
+the guided per-level **tabbed Builder** (progression spines, ASI ± steppers over
+a shared budget, reconcile-on-change), the **spellbook** (Wizard learned pool,
+copy-from-scroll, Warlock Pact Magic), **print/PDF + JSON export/import**, and
+the full **UI polish** pass — whole-row click targets with hover/focus rings,
+editable-HP tile, host stat glyphs on the vitals (PB = `medal`), 3-state
+proficiency dots + AC shield indicator, keyboard-navigable sub-tabs, host
+`.codex-chip` spell/inventory chips. All repeatable UI renders host `.codex-*`
+components; standalone (no book) degrades to a hand-filled sheet (DEG-1).
+
 ## Working here — the facts that bite
 
+- **Branch workflow**: ALL agent work on the long-lived **`agentic-dev`** branch
+  (never per-task branches); the maintainer integrates → `main`. Verify
+  `git branch --show-current` == `agentic-dev` immediately before EVERY commit
+  (post-integration syncs land the checkout back on `main` — a guard has caught
+  real slips). Sync `agentic-dev` onto `main` before each new batch. When a
+  batch spans the host, integrate **`ttrpg-codex` first** — addon CI checks out
+  `ttrpg-codex@main` for the test harness.
 - **Sibling checkouts assumed**: `../ttrpg-codex` (harness + dev-install),
   `../dnd55e-players-handbook` (the data this consumes; its `data/SCHEMA.md`
   is the record-shape contract behind `rules/api.js`), `../Living-scroll`
@@ -111,6 +133,12 @@ not persisted). A sheet-wide toolbar offers Print / Export / Import (B4.6).
   `agentic-dev`) rather than copying it between addons — that's how the `.codex-*`
   family grew; domain *semantics* (save shields, prof dots) stay addon-side,
   built from host tokens.
+- **What deliberately stays addon-local** (boundary, not debt): composition
+  helpers (`ui.js` `heroTile`/`abilityTile` — layout arrangements OF host
+  components), the sheet's page-layout CSS (`ctx.ui.styleTag`, scoped under
+  `.addon-dnd55e-sheets`), and domain indicators (save-shield fill, 3-state
+  proficiency dots, AC shield dot — game semantics, not reusable chrome).
+  All token-built, so themes still apply.
 - `register(host)` side-effect-free except `register*`; renderers must survive
   sparse/empty input (blobs from older schema versions included — `model.js`
   forward-migrates on read).
@@ -125,3 +153,6 @@ not persisted). A sheet-wide toolbar offers Print / Export / Import (B4.6).
   engine merged in); stored `overrides[field]` always beats computed (ARCH-3).
 - When the engine is present, editing flows through the Builder; inline edits
   cover the standalone mode.
+- **Whole-state Builder** — every choice stays freely editable at any time;
+  never lock out corrections (guide, don't block: warnings are advisory,
+  unaffordable actions clamp instead of refusing).
