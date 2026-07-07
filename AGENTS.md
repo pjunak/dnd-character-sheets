@@ -101,9 +101,16 @@ not persisted). A sheet-wide toolbar offers Print / Export / Import (B4.6).
   (renders the host `.codex-stepper`); tabs → `.codex-tab-strip` / `.codex-tab`
   (+ `.is-active`); stat tiles → `.codex-tile`; fields → `.edit-input`; hover
   legends → `ui.statTip` / `entityRef` (`.codex-tip` / `.codex-pop`); warnings →
-  `.codex-warnings`. Do NOT hand-roll a look-alike (custom −/＋ buttons, a bespoke
-  tab underline): budget/live-play logic can live addon-side, but the *control* is
-  the host's. Quick-adjust action buttons (HP ±, tracker ±) use `.inline-create-btn`.
+  `.codex-warnings`; stat glyphs → `host.h.icon(name)` (`.codex-icon`; feature-
+  detect and fall back to text); browse rows/tiles + skeletons → `.codex-link-row`
+  / `.codex-link-tile` / `.codex-skel`. Do NOT hand-roll a look-alike (custom −/＋
+  buttons, a bespoke tab underline, a local SVG glyph set): budget/live-play logic
+  can live addon-side, but the *control* is the host's. Quick-adjust action
+  buttons (HP ±, tracker ±) use `.inline-create-btn`. When something addon-local
+  proves generic (a 2nd consumer appears), promote it INTO `ttrpg-codex` (its
+  `agentic-dev`) rather than copying it between addons — that's how the `.codex-*`
+  family grew; domain *semantics* (save shields, prof dots) stay addon-side,
+  built from host tokens.
 - `register(host)` side-effect-free except `register*`; renderers must survive
   sparse/empty input (blobs from older schema versions included — `model.js`
   forward-migrates on read).

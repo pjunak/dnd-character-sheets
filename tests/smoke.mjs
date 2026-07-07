@@ -127,14 +127,31 @@ test('sheets: HP is a directly-editable stepper — no heal/damage-by-amount fie
   } finally { clearLocalStorage(); }
 });
 
-test('sheets: vital tiles use icons with the full label kept as aria-label (UI polish)', () => {
+test('sheets: vital tiles use the HOST stat glyphs with the full label kept as aria-label', () => {
   mockLocalStorage('stats');
   try {
     const { rec } = dryRunRegister(register, META, PHB());
     const out = renderBody(rec, { id: 'cvi', name: 'Mage', addonData: { 'dnd55e-sheets': { className: 'Wizard', abilities: { DEX: 14 } } } });
-    // A stat name is now a compact inline SVG icon; the word stays as aria-label (a11y).
+    // A stat name is a compact glyph from the host icon set (h.icon → .codex-icon,
+    // promoted from this addon); the word stays as aria-label (a11y).
     assert.match(out, /class="codex-tile-label" role="img" aria-label="/, 'a vital tile labels its icon for screen readers');
-    assert.match(out, /<svg viewBox="0 0 24 24"[^>]*stroke:var\(--text-muted\)/, 'the icon is a theme-styled inline SVG');
+    assert.match(out, /<svg class="codex-icon"/, 'the glyph is the host icon component');
+    // The old addon-local vitals SVG carried its stroke styling inline — gone.
+    // (The save shield + proficiency dots keep theirs: domain indicators, not glyphs.)
+    assert.doesNotMatch(out, /margin:0 auto;fill:none;stroke:var\(--text-muted\)/, 'no addon-local vitals SVG remains');
+  } finally { clearLocalStorage(); }
+});
+
+test('sheets: vitals degrade to text labels on a host without h.icon', () => {
+  mockLocalStorage('stats');
+  try {
+    // Simulate an older host: same mock, minus the icon facade.
+    const { host, rec } = createMockHost(META, PHB());
+    delete host.h.icon;
+    register(host);
+    const out = renderBody(rec, { id: 'cvo', name: 'Mage', addonData: { 'dnd55e-sheets': { className: 'Wizard' } } });
+    assert.doesNotMatch(out, /codex-icon/, 'no glyphs without the facade');
+    assert.match(out, /class="codex-tile-label">Hit Points</, 'the HP tile falls back to its text label');
   } finally { clearLocalStorage(); }
 });
 

@@ -19,18 +19,14 @@ export function makeHeaderPanel(ctx) {
   const { esc } = host.h;
   const { heroTile, numField, statTip, entityRef } = ui;
 
-  // Small inline SVG glyphs for the vitals — stroke-styled to match the save shields
-  // + the gold theme. A compact icon reads faster and sits narrower than a spelled-out
-  // stat name (the tile keeps the full label as its title + the icon's aria-label).
-  const ICONS = {
-    hp:      '<path d="M12 20.3C12 20.3 4.2 14.8 4.2 9 4.2 6.3 6.2 4.4 8.5 4.4 10.1 4.4 11.4 5.4 12 6.7 12.6 5.4 13.9 4.4 15.5 4.4 17.8 4.4 19.8 6.3 19.8 9 19.8 14.8 12 20.3 12 20.3Z"/>',
-    ac:      '<path d="M12 2.6 19 5.3V11C19 15.6 16 19.4 12 21.4 8 19.4 5 15.6 5 11V5.3Z"/>',
-    init:    '<path d="M13 2.5 6 13.5H11L10.5 21.5 18 9.5H12.5Z"/>',
-    speed:   '<path d="M5 6.5 11 12 5 17.5"/><path d="M12 6.5 18 12 12 17.5"/>',
-    pb:      '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.8V16.2M7.8 12H16.2"/>',
-    passive: '<path d="M2.6 12C6.5 6.6 17.5 6.6 21.4 12 17.5 17.4 6.5 17.4 2.6 12Z"/><circle cx="12" cy="12" r="2.6"/>',
-  };
-  const icon = (name) => `<svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" style="display:block;margin:0 auto;fill:none;stroke:var(--text-muted);stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round">${ICONS[name] || ''}</svg>`;
+  // Vitals glyphs come from the host's shared stat-icon set (`h.icon` → a
+  // `.codex-icon` SVG, stroke:currentColor — inside the tile label slot it
+  // inherits the muted label colour). A compact icon reads faster and sits
+  // narrower than a spelled-out stat name (the tile keeps the full label as
+  // its title + the slot's aria-label). Feature-detected: on an older host
+  // icon() returns '' and every call site falls back to its text label.
+  const GLYPH = { hp: 'heart', ac: 'shield', init: 'bolt', speed: 'chevrons', pb: 'plus-circle', passive: 'eye' };
+  const icon = (name) => (typeof host.h.icon === 'function') ? host.h.icon(GLYPH[name] || name) : '';
 
   // Shield-equipped indicator for the AC tile: a filled circle when a shield contributes
   // to AC, an outline circle when it doesn't (mirrors the proficiency dots). Engine-only
@@ -110,12 +106,16 @@ export function makeHeaderPanel(ctx) {
     const hpVal = statTip(
       `<span style="color:${hpColor(cur, max)}">${esc(String(cur))}</span><span style="color:var(--text-muted);font-size:var(--text-lg)"> / ${esc(String(max))}</span>`,
       L.hp(), { align: 'l' });
+    const hpGlyph = icon('hp');
+    const hpLabel = hpGlyph
+      ? `<div class="codex-tile-label" role="img" aria-label="${esc(t('stat.hp'))}" style="line-height:0">${hpGlyph}</div>`
+      : `<div class="codex-tile-label">${esc(t('stat.hp'))}</div>`;
 
     // Read view (anonymous): just the number + temp, no controls.
     if (!editable) {
       const tempSub = temp > 0 ? `<div style="font-size:var(--text-xs);color:var(--color-success);margin-top:1px">+${esc(String(temp))} ${esc(t('stat.temp'))}</div>` : '';
       return `<div class="codex-tile codex-tile-accent codex-tile-wide">
-        <div class="codex-tile-label" role="img" aria-label="${esc(t('stat.hp'))}" style="line-height:0">${icon('hp')}</div>
+        ${hpLabel}
         <div class="codex-tile-value">${hpVal}</div>${tempSub}</div>`;
     }
 
@@ -134,7 +134,7 @@ export function makeHeaderPanel(ctx) {
     const fields = `<div style="display:flex;gap:var(--space-3);justify-content:center;flex-wrap:wrap;margin-top:var(--space-2)">${maxEd}${tempEd}</div>`;
 
     return `<div class="codex-tile codex-tile-accent codex-tile-wide" style="min-width:9.5rem">
-      <div class="codex-tile-label" role="img" aria-label="${esc(t('stat.hp'))}" style="line-height:0">${icon('hp')}</div>
+      ${hpLabel}
       ${hpRow}${fields}</div>`;
   }
 

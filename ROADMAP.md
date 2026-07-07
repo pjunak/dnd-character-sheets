@@ -17,56 +17,39 @@ Shipped history lives in git + `AGENTS.md` — it is not repeated here.
 Everything through **B4.6** is integrated to `main`: feature-kind consumption, hover+link per entity, builder
 correctness (reconcile/FE-7), the spellbook (Wizard learned-pool + copy-from-scroll / add-from-another-source), Warlock
 Pact Magic, the guided per-level tabbed Builder, and print/PDF + JSON export/import. Detail is in git history +
-`AGENTS.md`. CI: Node 26, `setup-node@v5`; 89 tests (`node --test tests/smoke.mjs tests/rules.mjs`). **Now on `main`:** the
-L1 duplicate-skill dedupe (bogus "content pending" row gone), B5 whole-row click targets (full-row overlay `<button>`,
-keyboard + `aria-expanded`), and ASI number-pickers (background + every ASI level + half-feat sub-pick as ± steppers over
-a shared point budget — enabling the previously-impossible +1/+1 split).
+`AGENTS.md`. CI: Node 26, `setup-node@v5`. **Also on `main`:** the L1 duplicate-skill dedupe and the whole **B5
+UI-polish batch** — whole-row click targets + hover/focus feedback, ASI number-pickers (shared budget, +1/+1 splits),
+unified-UI compliance (host tab strip + steppers), the editable-HP tile redesign, vital icons, Backpack folded into the
+Character Sheet tab, 3-state proficiency dots + AC shield indicator, builder sub-tab keyboard nav, chip comfort height.
 
-**Fixed on `agentic-dev` (awaiting integration to `main`; 92 tests):**
-- **Unified-UI compliance** (`8bf1c3d`, `01a0d8e`). Per the repo principle that repeatable UI lives in `ttrpg-codex` and
-  addons only consume it: the builder sub-tab strip now uses the host `.codex-tab-strip`/`.codex-tab` (like the sheet's top
-  tab bar), and all three builder steppers (point-buy, ASI, class level) render the host `.codex-stepper` via `ui.numField`
-  instead of hand-rolled ± buttons. Dir-based step actions became value-based set actions; orphaned actions removed.
-  Principle recorded in `AGENTS.md`.
-- **HP tile redesign** (`a58f367`). Current HP is a directly-editable host `.codex-stepper` (type, or ± by 1, clamped
-  `[0,max]`); Max + Temp HP are small steppers beneath. Dropped the wasted vertical ± AND the separate heal/damage-by-
-  amount field (+ its dead action/strings). A red stepper border flags bloodied (≤35%).
-- **Vital icons** (`65aefdc`). AC / Init / Speed / Proficiency / Passive / HP now show a compact inline-SVG glyph
-  (shield / bolt / chevrons / +badge / eye / heart, gold-theme stroke) in the `.codex-tile` label slot; the full stat name
-  stays as the tile title + the icon's `aria-label`. `ui.heroTile` gained an `icon` option.
-- **Backpack folded into the Character Sheet tab** (`689527e`). Retired the standalone Backpack tab; inventory + currency
-  render full-width at the bottom of the Character Sheet under a 🎒 heading. Strip: Overview / Character Sheet / Combat /
-  (Spellbook) / (Builder).
-- **Row hover / focus feedback** (`c4dd507`; handbook `400cac2`). The whole-row click targets now read as interactive — a
-  gold hover tint + keyboard focus-visible ring on the builder spine-row toggle (`.dse-spine-toggle` in `ctx.ui.styleTag`)
-  and on the compendium browse rows + index tiles (`.phb-row`/`.phb-tile` in a new `COMPENDIUM_STYLE`). The earlier
-  "needs a host CSS capability" note was wrong — an addon-injected `<style>` handles it.
-- **3-state proficiency dots + AC shield indicator** (`f23c489`). Skill dots are now inline SVG — none (small outline) /
-  proficient (small filled) / mastery=expertise (larger ring + filled centre), so mastery reads distinctly. The AC tile
-  shows a shield-equipped circle (filled when a shield counts toward AC, outline when not; engine-only).
-- **Builder sub-tab keyboard nav** (`0ceb88d`). The sub-tabs are a proper ARIA tablist — roving tabindex + Arrow/Home/End
-  via `builderTabKey`, focus follows the active tab (guarded for headless).
-- **Chip comfort height** (`ae0c7f4`). Closes round-2 click targets: audit found chips OK (✕ = host `.inline-create-btn`,
-  names = standard links, builder summary chips are read-only/row-toggled); gave `S.chip` a `min-height` so single-line
-  spell chips are a comfortable, consistent target.
+**On `agentic-dev` (awaiting integration to `main`; 95 tests):**
+- **Vitals glyphs now come from the HOST icon set.** The unified-UI hoist landed: `ttrpg-codex` (commit `a60f100`,
+  its `agentic-dev`) now owns `.codex-link-row`/`.codex-link-tile`, `.codex-skel`, and `utils.iconGlyph` → `host.h.icon`
+  (heart/shield/bolt/chevrons/plus-circle/eye as `.codex-icon` SVGs, stroke `currentColor`), plus a harness mirror and a
+  `design-system.test.mjs` pinning the guarantees. This repo deleted its local vitals SVG set — `panel.header.js` maps
+  stat→glyph and feature-detects `h.icon` (an older host degrades to text labels; regression-tested both ways).
+  ⚠ Integration order: **codex first**, then the addons (addon CI checks out `ttrpg-codex@main` for the harness).
 
 ## Remaining (in order)
 
 1. **B5 — remaining UI polish (small / optional).**
-   - Record **images** (blocked — no image source); **skeleton** loading. The PB icon (+badge) may want a less "add"-like
-     glyph (pending a look at the icons). Full **mobile** layout is out of scope (needs a dedicated redesign).
+   - Record **images** (blocked — no image source). The PB icon (plus-circle) may want a less "add"-like glyph (pending
+     a look at the icons; the glyph now lives in `ttrpg-codex utils.iconGlyph`, so tweak it THERE). Full **mobile**
+     layout is out of scope (needs a dedicated redesign). (Skeleton loading was a compendium concern — shipped there;
+     the sheet renders synchronously from the store, so it has nothing to skeleton.)
 
 ## Deferred / tech-debt
-- **Hoist remaining reusable UI into `ttrpg-codex` (unified-UI TODO).** The *controls* now consume host components
-  (`.codex-tab-strip`/`.codex-tab`, `.codex-stepper` via `ui.numField`, `.codex-tile`, `.codex-tip`, `.edit-input`), but
-  some reusable UI is still addon-local because the host exposes no equivalent and is reference-only for the agent
-  (agent doesn't modify `ttrpg-codex`): (a) the **vital icon set** (shield/bolt/chevrons/+badge/eye/heart SVGs in
-  `panel.header.js`) + the pre-existing **save shield** (`panel.rail.js`) → candidates for a host `.codex-icon` set; (b)
-  `ui.js` **composition helpers** (`heroTile`/`abilityTile`) that wrap host classes but add addon-side layout; (c) the
-  injected **`ctx.ui.styleTag`** layout CSS. Per `ttrpg-codex/web/css/STYLE.md`, the host's shared classes were themselves
-  *"hoisted from the D&D sheet addon once they proved generic"* — so the pipeline is prototype-in-addon → **maintainer
-  promotes to the host**, then addons consume it. Action for the maintainer: promote the icon set (+ helpers if generic)
-  into `ttrpg-codex`; the addon then references them instead of defining them.
+- **Unified-UI boundary (what stays addon-side, and why).** The generic pieces are hoisted (host owns tokens + the
+  `.codex-*` component classes + the `h.icon` glyph set; this addon only consumes). What remains addon-local is
+  *deliberate*, not debt: (a) **composition helpers** (`ui.js` `heroTile`/`abilityTile`) — layout arrangements OF host
+  components for this sheet, not reusable chrome; (b) **`ctx.ui.styleTag`** — page-layout CSS for the sheet's column
+  grid + spine rows, scoped under `.addon-dnd55e-sheets` per the host CSS contract; (c) **domain indicators** — the
+  save shield (fill = proficiency), 3-state proficiency dots, AC shield dot: these encode D&D *semantics*, and hoisting
+  them would push game concepts into a game-agnostic host. All are built from host tokens, so themes still apply.
+  Next promotion **candidate** (needs a variant design pass first, not a mechanical hoist): **chips** — engine `S.chip`
+  (interactive, ✕-bearing) vs the bestiary's small badge pills vs the host's `.chip` base differ in size + semantics.
+  The agent may now do such promotions itself on the codex `agentic-dev` branch (maintainer-directed 2026-07-08); the
+  old "host is reference-only" note is obsolete.
 - **`aria-live` budget counts (deferred).** Announcing point-buy/ASI "N pts left" changes to screen readers needs a
   *persistent* live region, but every edit re-renders the whole panel (no stable element survives), so `aria-live` there
   wouldn't announce reliably. Revisit if the panels move to a targeted-update / stable-live-region model.
