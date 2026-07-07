@@ -66,14 +66,6 @@ export default {
   'stat.passivePercAbbr': 'Pass. Perc.',
   'stat.temp':        'Temp',
 
-  // ── HP live-play controls (heal / take damage by any amount at once) ──
-  'hp.amount':        'amt',
-  'hp.amountAria':    'Amount to heal or take as damage',
-  'hp.heal':          'Heal',
-  'hp.damage':        'Dmg',
-  'hp.healBy':        'Heal by the amount entered',
-  'hp.damageBy':      'Take damage equal to the amount entered (Temp HP absorbs first)',
-
   // ── Header / sections ────────────────────────────────────────────
   'header.details':   'Details',
   'header.noClass':   'Unnamed adventurer',
@@ -243,6 +235,7 @@ export default {
   'builder.editHere':    'This character uses the rules engine. Open the 🛠️ Builder tab — abilities, class & levels, and choices all live there (edit them directly), and the sheet auto-calculates.',
   'builder.totalLevel':  'Total Level',
   'builder.tabCharacter': 'Character',
+  'builder.tabsAria':    'Builder sections',
   'builder.needsChoices': 'needs choices',
   'builder.levelAria':   'Level {n} — expand or collapse its choices',
   'builder.extraFeats':  'Extra feats',
@@ -280,8 +273,6 @@ export default {
   'override.diverge': 'manual {manual} · auto {auto}',
 
   // ── Actions / misc ───────────────────────────────────────────────
-  'action.hpMinus':   'Lose 1 HP',
-  'action.hpPlus':    'Heal 1 HP',
   'action.remove':    'Remove',
   'action.cancel':    'Cancel',
   'action.print':     'Print',

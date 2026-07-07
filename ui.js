@@ -105,8 +105,14 @@ export function makeUI(ctx) {
     const cls = 'codex-tile' + (opts.accent ? ' codex-tile-accent' : '') + (opts.wide ? ' codex-tile-wide' : '');
     const sub = opts.sub ? `<div style="font-size:var(--text-xs);color:var(--text-muted);margin-top:1px">${opts.sub}</div>` : '';
     const edit = opts.editHtml ? `<div style="margin-top:var(--space-1)">${opts.editHtml}</div>` : '';
+    // An icon (raw SVG) can stand in for the text label — more compact + it reads
+    // faster than a spelled-out stat name. The full label stays as the tile title
+    // AND the icon's aria-label, so it's still fully labelled for hover + a11y.
+    const labelHtml = opts.icon
+      ? `<div class="codex-tile-label" role="img" aria-label="${esc(label)}" style="line-height:0">${opts.icon}</div>`
+      : `<div class="codex-tile-label">${esc(label)}</div>`;
     return `<div class="${cls}" title="${esc(opts.title || label)}">
-      <div class="codex-tile-label">${esc(label)}</div>
+      ${labelHtml}
       <div class="codex-tile-value">${valueHtml}</div>${sub}${edit}</div>`;
   }
 

@@ -4,8 +4,8 @@
 [ttrpg-codex](https://github.com/pjunak/ttrpg-codex) host app. **Addon id is
 `dnd55e-sheets`** — deliberately ≠ the repo dir name, so
 `character.addonData['dnd55e-sheets']` never needed a migration; the host keys
-on the manifest id. Tabbed sheet UI (Overview / Character Sheet / Combat /
-Backpack / Spellbook / Builder) **plus the built-in pure rules engine**
+on the manifest id. Tabbed sheet UI (Overview / Character Sheet [incl. inventory] /
+Combat / Spellbook / Builder) **plus the built-in pure rules engine**
 (`rules/engine.js` + `rules/api.js`, merged in from the retired
 `dnd55e-core-rules` addon). Standalone hand-fillable; declares
 `optionalDependencies: dnd55e-players-handbook` — engine mode lights up when
@@ -36,7 +36,8 @@ entry.js            register(host), tab strip + routing, vitals-bar placement �
                     its header comment is the de-facto architecture doc
 model.js            THE data layer: stored-blob read/migration, viewModel,
                     builderMutate + materializeInto (DEG-1), getRules() probe
-panel.overview.js   ⚠ renders the CHARACTER SHEET tab (id `stats`)
+panel.overview.js   ⚠ renders the CHARACTER SHEET tab (id `stats`) — entry.js appends
+                    panel.backpack.js below it (Backpack has no own tab anymore)
 panel.sheet.js      ⚠ renders the COMBAT tab
 panel.spellbook.js / panel.backpack.js / panel.builder.js / editor.js
 panel.print.js      print/PDF sheet (new-window, self-contained) + JSON import modal
@@ -94,6 +95,15 @@ not persisted). A sheet-wide toolbar offers Print / Export / Import (B4.6).
 - All HTML through `host.h` (`esc` everything dynamic, `dataAction`/`dataOn`
   handlers); design tokens + host component classes (`.codex-tile`,
   `.codex-tab-strip`, `.codex-tip` …) only.
+- **Repeatable UI is host-defined — consume it, don't re-skin it.** Forms and
+  common controls live in `../ttrpg-codex` so the whole app stays on one style
+  (and can be re-themed later); addons only use them. Number entry → `ui.numField`
+  (renders the host `.codex-stepper`); tabs → `.codex-tab-strip` / `.codex-tab`
+  (+ `.is-active`); stat tiles → `.codex-tile`; fields → `.edit-input`; hover
+  legends → `ui.statTip` / `entityRef` (`.codex-tip` / `.codex-pop`); warnings →
+  `.codex-warnings`. Do NOT hand-roll a look-alike (custom −/＋ buttons, a bespoke
+  tab underline): budget/live-play logic can live addon-side, but the *control* is
+  the host's. Quick-adjust action buttons (HP ±, tracker ±) use `.inline-create-btn`.
 - `register(host)` side-effect-free except `register*`; renderers must survive
   sparse/empty input (blobs from older schema versions included — `model.js`
   forward-migrates on read).

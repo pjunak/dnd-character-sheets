@@ -21,10 +21,10 @@ above it). The D&D tabs follow:
 
 - **Overview** — the host's own wiki profile (side-card + sections + lore), reused as tab 1 (not copied).
 - **Character Sheet** — D&D identity (class/level/background/alignment), ability scores,
-  saving throws, skills, mechanical notes.
+  saving throws, skills, mechanical notes, and the **inventory + currency** (grouped by
+  carry location — folded in from the former Backpack tab).
 - **Combat** — attacks from equipped/ready weapons, a castable-spells quick-reference,
   and resource trackers (Rage, Ki, slots…) with the Rest wizard.
-- **Backpack** — inventory grouped by carry location + currency.
 - **Spellbook** — prepared/cantrip slots, granted & choose-grant sections; a Wizard prepares from a **learned
   spellbook** (copy from a scroll for gp) and any class can **add a spell from another source** (feat/item/homebrew,
   slot-castable for casters); level-up spell **swaps** are recorded with history.
@@ -35,9 +35,10 @@ above it). The D&D tabs follow:
 A sheet-wide toolbar offers **🖨 Print / PDF** (a self-contained printable sheet), **⬇ Export** (download the character
 as JSON), and **⬆ Import** (paste an exported JSON to overwrite — editors only).
 
-A slim **vitals bar** (HP with live **+/-**, AC, Initiative, Speed, Proficiency, Passive
-Perception, plus a class-level line) renders full-width under the tabs on
-Backpack/Spellbook; Character Sheet and Combat place it inside their own right column.
+A slim **vitals bar** (a directly-editable **HP** stepper, plus icon-labelled AC,
+Initiative, Speed, Proficiency, Passive Perception and a class-level line) renders
+full-width under the tabs on Spellbook; Character Sheet and Combat place it inside
+their own right column.
 
 **Editing is direct and role-gated — there is no separate "edit mode" and no second edit
 button.** The host's own **✏ Upravit** owns identity/lore/portrait (it rides the host

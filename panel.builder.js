@@ -58,13 +58,16 @@ export function makeBuilderPanel(ctx) {
   // Sub-tab strip: Character + one tab per (set) class. Switching is a plain action
   // that flips the in-memory state; the active tab gets the gold underline.
   function builderTabStrip(c, classTabs, active, engine) {
-    const tab = (id, label, on) => `<button class="inline-create-btn" style="border:none;border-bottom:2px solid ${on ? 'var(--accent-gold)' : 'transparent'};border-radius:0;color:${on ? 'var(--text-parchment)' : 'var(--text-muted)'};font-weight:${on ? '600' : '400'};padding:var(--space-1) var(--space-3)"${dataAction(host.action('builderTab'), c.id, id)}>${esc(label)}</button>`;
+    // Host `.codex-tab-strip` / `.codex-tab` component (widgets.css) — same tablist
+    // the sheet's top tab bar uses (entry.js), so the Builder's sub-tabs share the
+    // unified style + gold active indicator rather than a hand-rolled look-alike.
+    const tab = (id, label, on) => `<button role="tab" class="codex-tab${on ? ' is-active' : ''}" aria-selected="${on ? 'true' : 'false'}"${dataAction(host.action('builderTab'), c.id, id)}>${esc(label)}</button>`;
     const tabs = [tab('character', t('builder.tabCharacter'), active === 'character')];
     for (const cl of classTabs) {
       const rec = engine.getItem('class', cl.classId);
       tabs.push(tab(cl.classId, (rec ? rec.name : cl.classId) + ' ' + num(cl.level, 1), active === cl.classId));
     }
-    return `<div style="display:flex;flex-wrap:wrap;gap:2px;border-bottom:1px solid rgba(var(--gold-muted),.2)">${tabs.join('')}</div>`;
+    return `<div role="tablist" class="codex-tab-strip" aria-label="${esc(t('builder.tabsAria'))}">${tabs.join('')}</div>`;
   }
 
   // One class's progression spine — a row per class level: features gained + the
@@ -120,16 +123,17 @@ export function makeBuilderPanel(ctx) {
       }
       rows.push(spineRow(c, key, l, feats, chips, unresolved, expandable, open, editors, ro));
     }
-    return section(clsName, `${levelStepper(c, classId, lvl, ro)}${rows.join('')}`);
+    return section(clsName, `${levelStepper(c, idx, lvl, ro)}${rows.join('')}`);
   }
 
   // Level a class up/down (+/-) — the guided add-a-level control at the top of a class tab.
-  function levelStepper(c, classId, lvl, ro) {
+  function levelStepper(c, idx, lvl, ro) {
     if (ro) return `<div style="color:var(--text-muted);font-size:var(--text-xs);margin-bottom:var(--space-2)">${esc(t('field.level'))} ${esc(String(lvl))}</div>`;
-    const btn = (dir, sym, on) => `<button class="inline-create-btn" style="min-width:1.9rem;opacity:${on ? '1' : '.35'}"${on ? dataAction(host.action('builderLevelStep'), c.id, classId, dir) : ' disabled'}>${sym}</button>`;
+    // Host `.codex-stepper` (numField): the class level 1–20. builderLevelSet reconciles
+    // orphaned choices and opens the new top level when it grows.
     return `<div style="display:flex;align-items:center;gap:var(--space-2);margin-bottom:var(--space-3)">
       <span style="color:var(--text-muted);font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.03em">${esc(t('field.level'))}</span>
-      ${btn(-1, '−', lvl > 1)}<strong style="min-width:1.5rem;text-align:center;font-variant-numeric:tabular-nums">${esc(String(lvl))}</strong>${btn(1, '＋', lvl < 20)}
+      ${numField(dataOn('change', host.action('builderLevelSet'), c.id, idx, '$value'), lvl, { min: 1, max: 20, ariaLabel: t('field.level') })}
     </div>`;
   }
 
@@ -258,12 +262,13 @@ export function makeBuilderPanel(ctx) {
     const budget = `<span style="font-size:var(--text-xs);font-weight:600;color:${remColor};font-variant-numeric:tabular-nums">${esc(t('builder.pointsLeft', { n: remaining }))}</span>`;
     const cells = ABILITIES.map((a) => {
       const b = Math.max(POINT_BUY.min, Math.min(POINT_BUY.max, num(base[a], POINT_BUY.min)));
-      const canDec = !ro && b > POINT_BUY.min;
-      const canInc = !ro && b < POINT_BUY.max && (spent - pointCost(b) + pointCost(b + 1)) <= POINT_BUY.budget;
-      const stepBtn = (dir, sym, on, title) => `<button class="inline-create-btn" title="${esc(title)}" style="min-width:1.9rem;padding:var(--space-1) var(--space-2);opacity:${on ? '1' : '.35'}"${on ? '' : ' disabled'}${on ? dataAction(host.action('builderAbilityStep'), c.id, a, dir) : ''}>${sym}</button>`;
+      // Host `.codex-stepper` (numField): min = the point-buy floor, max = the highest
+      // score still affordable within the budget, so the ± buttons can't overspend;
+      // builderAbilitySet re-clamps a typed value the same way.
+      let cap = b; while (cap < POINT_BUY.max && (spent - pointCost(b) + pointCost(cap + 1)) <= POINT_BUY.budget) cap++;
       const ctrl = ro
         ? `<div style="color:var(--text-parchment);font-weight:700;font-size:var(--text-lg)">${esc(String(b))}</div>`
-        : `<div style="display:flex;align-items:center;justify-content:center;gap:var(--space-1)">${stepBtn(-1, '−', canDec, t('tracker.minus'))}<strong style="color:var(--text-parchment);font-size:var(--text-lg);min-width:1.5rem;text-align:center;font-variant-numeric:tabular-nums">${esc(String(b))}</strong>${stepBtn(1, '＋', canInc, t('tracker.plus'))}</div>`;
+        : numField(dataOn('change', host.action('builderAbilitySet'), c.id, a, '$value'), b, { min: POINT_BUY.min, max: cap, ariaLabel: a });
       return tile(a, ctrl, b);
     }).join('');
     return section(t('builder.abilities'),
@@ -367,13 +372,16 @@ export function makeBuilderPanel(ctx) {
     const remaining = budget - spent;
     const tiles = eligible.map((a) => {
       const v = num(assign[a], 0);
-      const canDec = !ro && v > 0;
-      const canInc = !ro && v < perMax && remaining > 0;
-      const stepBtn = (dir, sym, on) => `<button class="inline-create-btn" style="min-width:1.9rem;padding:var(--space-1) var(--space-2);opacity:${on ? '1' : '.35'}"${on ? '' : ' disabled'}${on ? dataAction(host.action('builderAsiStep'), c.id, key, a, dir, budget, perMax) : ''}>${sym}</button>`;
-      const val = `<strong style="color:${v ? 'var(--color-success)' : 'var(--text-muted)'};min-width:1.6rem;text-align:center;font-variant-numeric:tabular-nums">${v ? '+' + v : '0'}</strong>`;
+      // Host `.codex-stepper` (via numField): min 0, max = perMax capped by the
+      // budget left for THIS ability (others' spend held fixed), so the ± buttons
+      // can't overspend; builderAsiSet re-clamps a typed value the same way.
+      const cap = Math.min(perMax, budget - (spent - v));
+      const ctrl = ro
+        ? `<strong style="color:${v ? 'var(--color-success)' : 'var(--text-muted)'};font-variant-numeric:tabular-nums">${v ? '+' + v : '0'}</strong>`
+        : numField(dataOn('change', host.action('builderAsiSet'), c.id, key, a, '$value', budget, perMax), v, { min: 0, max: cap, ariaLabel: t('ability.' + a), width: '3.2rem' });
       return `<div style="text-align:center;background:var(--bg-raised);border-radius:var(--radius);padding:var(--space-2)">
         <div style="font-size:var(--text-xs);color:var(--text-muted)">${esc(t('ability.' + a))}</div>
-        <div style="display:flex;align-items:center;justify-content:center;gap:var(--space-1);margin-top:var(--space-1)">${ro ? val : stepBtn(-1, '−', canDec) + val + stepBtn(1, '＋', canInc)}</div>
+        <div style="margin-top:var(--space-1);display:flex;justify-content:center">${ctrl}</div>
       </div>`;
     }).join('');
     const remColor = remaining === 0 ? 'var(--text-muted)' : 'var(--accent-gold)';

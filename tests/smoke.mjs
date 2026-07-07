@@ -115,6 +115,29 @@ test('sheets: engine-computed vitals + Builder tab (editor, book data present)',
   } finally { clearLocalStorage(); }
 });
 
+test('sheets: HP is a directly-editable stepper — no heal/damage-by-amount field (B5)', () => {
+  mockLocalStorage('stats');
+  try {
+    const { rec } = dryRunRegister(register, META, PHB());
+    const out = renderBody(rec, { id: 'chp', name: 'Mage', addonData: { 'dnd55e-sheets': { className: 'Wizard', hp: 4, abilities: { CON: 14 } } } });
+    assert.match(out, /codex-stepper/, 'current HP uses the host .codex-stepper');
+    assert.match(out, /"hp","\$value"/, 'the HP stepper writes the hp field (setField)');
+    assert.doesNotMatch(out, /dse-hp-amt/, 'the manual heal/damage amount field is gone');
+    assert.doesNotMatch(out, /hpApply/, 'the heal/damage-by-amount buttons are gone');
+  } finally { clearLocalStorage(); }
+});
+
+test('sheets: vital tiles use icons with the full label kept as aria-label (UI polish)', () => {
+  mockLocalStorage('stats');
+  try {
+    const { rec } = dryRunRegister(register, META, PHB());
+    const out = renderBody(rec, { id: 'cvi', name: 'Mage', addonData: { 'dnd55e-sheets': { className: 'Wizard', abilities: { DEX: 14 } } } });
+    // A stat name is now a compact inline SVG icon; the word stays as aria-label (a11y).
+    assert.match(out, /class="codex-tile-label" role="img" aria-label="/, 'a vital tile labels its icon for screen readers');
+    assert.match(out, /<svg viewBox="0 0 24 24"[^>]*stroke:var\(--text-muted\)/, 'the icon is a theme-styled inline SVG');
+  } finally { clearLocalStorage(); }
+});
+
 test('sheets: anonymous viewer gets a read-only sheet (no Builder, no inputs)', () => {
   mockLocalStorage('stats');
   try {
@@ -284,17 +307,17 @@ test('sheets: ASI number picker distributes a 2-point budget (+2 or +1/+1), capp
   register(host);
   const act = (name, ...args) => rec.actions.find((a) => a.name === name).fn(...args);
   const asi = () => (stored.abilityGrants || []).find((g) => g.id === 'asi:wizard:4:ability');
-  const step = (ab, dir) => act('builderAsiStep', 'c1', 'asi:wizard:4:ability', ab, dir, 2, 2);
+  const set = (ab, v) => act('builderAsiSet', 'c1', 'asi:wizard:4:ability', ab, v, 2, 2);
   // +1/+1 across two abilities — something the old single-ability select couldn't express.
-  step('STR', 1); step('DEX', 1);
+  set('STR', 1); set('DEX', 1);
   assert.deepEqual(asi().assign, { STR: 1, DEX: 1 }, 'two abilities each +1');
-  step('CON', 1);
-  assert.equal(asi().assign.CON, undefined, 'a 3rd point exceeds the 2-budget → refused');
-  // Zero out, then +2 to a single ability; a 3rd is refused by the per-ability cap.
-  step('STR', -1); step('DEX', -1);
-  step('STR', 1); step('STR', 1);
+  set('CON', 1);
+  assert.equal(asi().assign.CON, undefined, 'a 3rd point exceeds the 2-budget → clamped away');
+  // Free up DEX, then +2 to a single ability; a typed 3 is clamped to the per-ability cap.
+  set('DEX', 0);
+  set('STR', 2);
   assert.deepEqual(asi().assign, { STR: 2 }, '+2 to a single ability');
-  step('STR', 1);
+  set('STR', 3);
   assert.equal(asi().assign.STR, 2, 'per-ability cap (2) enforced');
 });
 
@@ -305,12 +328,12 @@ test('sheets: background ASI number picker distributes 3 points, +2 max per abil
   register(host);
   const act = (name, ...args) => rec.actions.find((a) => a.name === name).fn(...args);
   const bg = () => (stored.abilityGrants || []).find((g) => g.id === 'bgasi');
-  const step = (ab, dir) => act('builderAsiStep', 'c1', 'bgasi', ab, dir, 3, 2);
-  step('STR', 1); step('STR', 1); step('DEX', 1);   // +2 STR, +1 DEX = the 3-point spend
+  const set = (ab, v) => act('builderAsiSet', 'c1', 'bgasi', ab, v, 3, 2);
+  set('STR', 2); set('DEX', 1);   // +2 STR, +1 DEX = the 3-point spend
   assert.deepEqual(bg().assign, { STR: 2, DEX: 1 }, '+2/+1 across two abilities (3 points)');
-  step('CON', 1);
-  assert.equal(bg().assign.CON, undefined, 'a 4th point exceeds the 3-budget → refused');
-  step('STR', 1);
+  set('CON', 1);
+  assert.equal(bg().assign.CON, undefined, 'a 4th point exceeds the 3-budget → clamped away');
+  set('STR', 3);
   assert.equal(bg().assign.STR, 2, 'per-ability cap (2) enforced');
 });
 
@@ -324,9 +347,9 @@ test('sheets: ASI level renders ability number-pickers, not a single-ability sel
     const out = renderBody(rec, { id: 'casi', name: 'Ftr', addonData: { 'dnd55e-sheets': {
       classes: [{ classId: 'fighter', level: 4, subclass: '' }],
       featureChoices: { 'asi:fighter:4': 'asi' } } } });   // ASI mode (not Feat)
-    assert.match(out, /builderAsiStep/, 'the ASI ability pick is a number-picker stepper');
+    assert.match(out, /codex-stepper/, 'the ASI ability pick uses the host .codex-stepper component');
+    assert.match(out, /builderAsiSet/, 'the stepper input is wired to builderAsiSet');
     assert.match(out, /asi:fighter:4:ability/, 'steppers target the ASI ability grant');
-    assert.match(out, /2,2\]/, 'wired with the 2-point budget + per-ability cap');
   } finally { clearLocalStorage(); }
 });
 
@@ -554,14 +577,15 @@ test('sheets: a class tab levels via +/- and picks its subclass in the spine (B4
     const char = { id: 'clv', name: 'Ftr', addonData: { 'dnd55e-sheets': {
       classes: [{ classId: 'fighter', level: 3, subclass: '' }], abilities: { STR: 15 } } } };
     const out = renderBody(rec, char);
-    assert.match(out, /builderLevelStep/, 'the class tab shows a level +/- stepper');
+    assert.match(out, /codex-stepper/, 'the class tab shows a level stepper (host .codex-stepper)');
+    assert.match(out, /builderLevelSet/, 'the level stepper is wired to builderLevelSet');
     assert.match(out, /needs choices/, 'the subclass level flags an unset subclass');
     // Expand the subclass level → the subclass picker appears in the spine.
     act('builderToggleLevel', 'clv', 'fighter:3');
     const open = renderBody(rec, char);
     assert.match(open, /builderSubclassSet/, 'expanding the subclass level reveals the subclass picker');
     assert.match(open, /Eldritch Knight/, 'its subclass option is offered');
-    assert.doesNotThrow(() => act('builderLevelStep', 'clv', 'fighter', 1), 'the +/- stepper does not throw');
+    assert.doesNotThrow(() => act('builderLevelSet', 'clv', 0, '4'), 'the level stepper does not throw');
   } finally { clearLocalStorage(); }
 });
 
@@ -784,8 +808,8 @@ test('sheets: rest actions (open / spend hit die / short+long apply / close) do 
   assert.doesNotThrow(() => act('restClose', 'c1'));
 });
 
-test('sheets: Backpack offers compendium pickers + attunement counter', () => {
-  mockLocalStorage('backpack');
+test('sheets: Backpack (folded into the Character Sheet tab) offers pickers + attunement', () => {
+  mockLocalStorage('stats');   // backpack now lives at the bottom of the Character Sheet tab
   try {
     const { rec } = dryRunRegister(register, META, PHB());
     const out = renderBody(rec, { id: 'cb2', name: 'Knight', addonData: { 'dnd55e-sheets': { className: 'Fighter', inventory: [{ id: 'i1', ref: 'longsword', name: 'Longsword', location: 'equipped', attuned: true }] } } });
@@ -793,6 +817,16 @@ test('sheets: Backpack offers compendium pickers + attunement counter', () => {
     assert.match(out, /Attuned 1\/3/, 'attunement counter from the engine');
     assert.match(out, /✦/, 'attunement toggle');
     assert.match(out, /Sap/, 'weapon mastery shown on the row');
+  } finally { clearLocalStorage(); }
+});
+
+test('sheets: Backpack tab retired — no backpack tab button, content in Character Sheet (UI polish)', () => {
+  mockLocalStorage('stats');
+  try {
+    const { rec } = dryRunRegister(register, META, PHB());
+    const out = renderBody(rec, { id: 'cbp', name: 'Knight', addonData: { 'dnd55e-sheets': { className: 'Fighter', inventory: [{ id: 'i1', name: 'Rope', qty: 1, location: 'pack' }] } } });
+    assert.doesNotMatch(out, /:tab" data-args='\["[^"]*","backpack"\]/, 'no standalone Backpack tab button');
+    assert.match(out, /Rope/, 'inventory renders inside the Character Sheet tab');
   } finally { clearLocalStorage(); }
 });
 

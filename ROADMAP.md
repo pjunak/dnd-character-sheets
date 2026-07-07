@@ -17,29 +17,37 @@ Shipped history lives in git + `AGENTS.md` — it is not repeated here.
 Everything through **B4.6** is integrated to `main`: feature-kind consumption, hover+link per entity, builder
 correctness (reconcile/FE-7), the spellbook (Wizard learned-pool + copy-from-scroll / add-from-another-source), Warlock
 Pact Magic, the guided per-level tabbed Builder, and print/PDF + JSON export/import. Detail is in git history +
-`AGENTS.md`. CI: Node 26, `setup-node@v5`; 84 tests on `main` (`node --test tests/smoke.mjs tests/rules.mjs`).
+`AGENTS.md`. CI: Node 26, `setup-node@v5`; 89 tests (`node --test tests/smoke.mjs tests/rules.mjs`). **Now on `main`:** the
+L1 duplicate-skill dedupe (bogus "content pending" row gone), B5 whole-row click targets (full-row overlay `<button>`,
+keyboard + `aria-expanded`), and ASI number-pickers (background + every ASI level + half-feat sub-pick as ± steppers over
+a shared point budget — enabling the previously-impossible +1/+1 split).
 
-**Fixed on `agentic-dev` (awaiting integration to `main`; 89 tests):**
-- **Duplicate-skill-choice bug** (`836754d`). Every class declared its L1 skills choice twice — `startingProficiencies.skills`
-  (with a `from` pool) AND a redundant bare `grants.choices` `{type:'skills'}` with no `from` — so `collectChoices` emitted a
-  second empty `enumerated` descriptor that rendered a bogus "No options available (content pending)" row at L1 on all 12
-  classes. `collectChoices` now dedupes by descriptor id (keep-first); the handbook also drops the redundant entry (either
-  alone suffices). Real-data-shaped regression test added (the shared fake doesn't replicate the duplication).
-- **B5 · bigger click targets** (`6bd3b17`). The whole builder spine row is now the toggle — a full-row overlay `<button>`
-  layered behind the content (dead-space clicks fall through via pointer-events; inner compendium links stay live;
-  keyboard-focusable + `aria-expanded`), replacing the tiny "L1"-only hit area.
-- **B5 · ASI number pickers** (`f0b5b06`). The ASI split-select dropdowns (background ASI + each ASI level + half-feat
-  ability sub-pick) are now +/- steppers per eligible ability sharing a cumulative budget (class ASI 2 / bg 3 / half-feat
-  its amount) — also enabling the previously-impossible +1/+1 split. `builderAsiStep` re-validates the budget; the
-  abilityGrants map stays the engine's source of truth.
+**Fixed on `agentic-dev` (awaiting integration to `main`; 92 tests):**
+- **Unified-UI compliance** (`8bf1c3d`, `01a0d8e`). Per the repo principle that repeatable UI lives in `ttrpg-codex` and
+  addons only consume it: the builder sub-tab strip now uses the host `.codex-tab-strip`/`.codex-tab` (like the sheet's top
+  tab bar), and all three builder steppers (point-buy, ASI, class level) render the host `.codex-stepper` via `ui.numField`
+  instead of hand-rolled ± buttons. Dir-based step actions became value-based set actions; orphaned actions removed.
+  Principle recorded in `AGENTS.md`.
+- **HP tile redesign** (`a58f367`). Current HP is a directly-editable host `.codex-stepper` (type, or ± by 1, clamped
+  `[0,max]`); Max + Temp HP are small steppers beneath. Dropped the wasted vertical ± AND the separate heal/damage-by-
+  amount field (+ its dead action/strings). A red stepper border flags bloodied (≤35%).
+- **Vital icons** (`65aefdc`). AC / Init / Speed / Proficiency / Passive / HP now show a compact inline-SVG glyph
+  (shield / bolt / chevrons / +badge / eye / heart, gold-theme stroke) in the `.codex-tile` label slot; the full stat name
+  stays as the tile title + the icon's `aria-label`. `ui.heroTile` gained an `icon` option.
+- **Backpack folded into the Character Sheet tab** (`689527e`). Retired the standalone Backpack tab; inventory + currency
+  render full-width at the bottom of the Character Sheet under a 🎒 heading. Strip: Overview / Character Sheet / Combat /
+  (Spellbook) / (Builder).
 
 ## Remaining (in order)
 
-1. **B5 — remaining UI polish.** (Bigger click targets + ASI number pickers landed — see above.)
-   - **Bigger click targets, round 2.** Audit the OTHER controls flagged — chips, tiles, proficiency dots — for the same
-     tiny-hit-area problem, and the compendium browse side (see the handbook ROADMAP).
-   - Record **images** (render seam exists; nothing ships images — needs an image source/decision); **accessibility**
-     (focus-visible, `aria-live`, `<label>`/select association, keyboard nav); **responsive/mobile**; **skeleton** loading.
+1. **B5 — remaining UI polish.**
+   - **Hover / focus-visible feedback** on the builder spine rows + compendium browse rows — NOW ACHIEVABLE (earlier notes
+     wrongly said blocked): the sheet injects a `<style>` via `ctx.ui.styleTag`, so `:hover`/`:focus-visible` rules can ship
+     addon-side; the handbook can add the same to its route render.
+   - **Bigger click targets, round 2.** Audit chips + proficiency dots for the same tiny-hit-area problem.
+   - Record **images** (render seam exists; nothing ships images — needs an image source); **accessibility** (`aria-live`
+     on the budget/point counts, keyboard tab-nav on the builder sub-tabs); **skeleton** loading. The PB icon (+badge) may
+     want a less "add"-like glyph. Full **mobile** layout is out of scope (needs a dedicated redesign — maintainer's call).
 
 ## Deferred / tech-debt
 - **B4.5b hover-preview (maybe):** the guided spine expands rows on **click**. A future option — hover a collapsed row

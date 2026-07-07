@@ -1,5 +1,6 @@
 // ═══════════════════════════════════════════════════════════════
-//  panel.backpack.js — the Backpack (inventory + currency) tab.
+//  panel.backpack.js — the Backpack (inventory + currency) section, folded into
+//  the bottom of the Character Sheet tab (it no longer has its own tab).
 //
 //  Inventory grouped by carry location (Equipped / Ready / Pack), each a titled
 //  section with an item count. In modification mode: compendium add-pickers

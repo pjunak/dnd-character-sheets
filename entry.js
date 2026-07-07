@@ -113,8 +113,8 @@ export default function register(host) {
       { id: 'overview', icon: '🪪', label: t('tab.overview'), hint: t('tab.overviewHint') },
       { id: 'stats',    icon: '📋', label: t('tab.stats'),    hint: t('tab.statsHint') },
       { id: 'combat',   icon: '⚔️', label: t('tab.combat'),   hint: t('tab.combatHint') },
-      { id: 'backpack', icon: '🎒', label: t('tab.backpack'), hint: t('tab.backpackHint') },
     ];
+    // Backpack (inventory + currency) folded into the Character Sheet tab — no own tab.
     if (hasSpells) tabs.push({ id: 'spellbook', icon: '📖', label: t('tab.spellbook'), hint: t('tab.spellbookHint') });
     if (engine && editable) tabs.push({ id: 'builder', icon: '🛠️', label: t('tab.builder'), hint: t('tab.builderHint'), tool: true });
     return tabs;
@@ -167,16 +167,18 @@ export default function register(host) {
       // The Overview tab is the host lore itself; mechanical tabs get the vitals bar.
       let panel = '';
       if (active === 'overview') panel = lorePanel(html);
-      else if (active === 'stats') panel = panelOverview(c, s, editable, comp, engine);
+      // The Backpack (inventory + currency) now lives at the bottom of the Character
+      // Sheet tab — its own tab was retired — appended full-width below the columns.
+      else if (active === 'stats') panel = panelOverview(c, s, editable, comp, engine)
+        + `<div style="margin-top:var(--space-5);border-top:1px solid var(--border-subtle);padding-top:var(--space-4)">
+            <div style="font-size:var(--text-lg);font-weight:600;color:var(--text-parchment);margin-bottom:var(--space-3);display:flex;align-items:center;gap:var(--space-2)"><span aria-hidden="true">🎒</span> ${esc(t('tab.backpack'))}</div>
+            ${panelBackpack(c, s, editable, comp, engine)}</div>`;
       else if (active === 'combat') panel = panelSheet(c, s, editable, comp, engine);
-      else if (active === 'backpack') panel = panelBackpack(c, s, editable, comp, engine);
       else if (active === 'spellbook') panel = panelSpellbook(c, s, editable, comp, engine);
       else if (active === 'builder') panel = panelBuilder(c, s, editable, comp, warnings, engine);
-      // Backpack & Spellbook keep the vital strip as a full-width band on top.
-      // Character Sheet & Combat place it themselves (in their right column,
-      // beside the ability cards), so entry doesn't add it there.
-      const vitals = (active === 'backpack' || active === 'spellbook')
-        ? vitalsBar(c, s, comp, editable, engine) : '';
+      // Spellbook keeps the vital strip as a full-width band on top. Character Sheet
+      // & Combat place it themselves (in their right column), so entry doesn't add it.
+      const vitals = (active === 'spellbook') ? vitalsBar(c, s, comp, editable, engine) : '';
 
       // Rest wizard — a floating overlay (host `.addon-wizard-overlay` classes),
       // rendered at the fragment root so it floats over any tab. Open state is a
@@ -305,17 +307,10 @@ export default function register(host) {
     s.hp = clampHp(num(s.hp, maxHp) + d, maxHp);
     return s;
   };
+  // `hp` — a live-play ±delta primitive (damage eats Temp HP first, then current HP;
+  // heal never fills Temp). The HP tile now edits current HP directly (a host stepper
+  // → setField), but this stays registered for programmatic / quick-adjust use.
   host.registerAction('hp', (id, delta) => { mutate(id, (s) => applyHp(s, delta)); });
-
-  // Manual heal/damage by an arbitrary amount typed into the HP amount field
-  // (id `dse-hp-amt-<cid>`) — dir +1 heals, −1 damages. Reads the DOM value at
-  // click time (the field is cleared on the ensuing re-render).
-  host.registerAction('hpApply', (cid, dir) => {
-    let amt = 0;
-    try { const el = document.getElementById('dse-hp-amt-' + cid); amt = Math.abs(num(el && el.value, 0)); if (el) el.value = ''; } catch (_) {}
-    if (!amt) return;
-    mutate(cid, (s) => applyHp(s, (Number(dir) || 0) * amt));
-  });
 
   // ── Manual overrides (engine mode, ARCH-3) — a typed value beats the computed
   //    one; ↺ clears back to auto. ──
@@ -623,16 +618,16 @@ export default function register(host) {
       }
     });
   });
-  // Point-buy ±1 on one ability — bounded to 8–15 and refused if an increase
-  // would overspend the 27-point budget (decreases always allowed).
-  host.registerAction('builderAbilityStep', (cid, ability, dir) => {
+  // Point-buy SET (B5): the host `.codex-stepper` input fires change with the new
+  // score; clamp to the point-buy floor/ceiling, then step down until within the
+  // 27-point budget.
+  host.registerAction('builderAbilitySet', (cid, ability, value) => {
     if (ABILITIES.indexOf(ability) < 0) return;
     builderMutate(cid, (s) => {
       const base = { ...(s.baseStats || {}) };
-      const cur = Math.max(POINT_BUY.min, Math.min(POINT_BUY.max, num(base[ability], POINT_BUY.min)));
-      const next = cur + Number(dir);
-      if (next < POINT_BUY.min || next > POINT_BUY.max) return;
-      if (Number(dir) > 0 && (pointsSpent(base) - pointCost(cur) + pointCost(next)) > POINT_BUY.budget) return;
+      const cur = num(base[ability], POINT_BUY.min);
+      let next = Math.max(POINT_BUY.min, Math.min(POINT_BUY.max, num(value, POINT_BUY.min)));
+      while (next > POINT_BUY.min && (pointsSpent(base) - pointCost(cur) + pointCost(next)) > POINT_BUY.budget) next--;
       base[ability] = next;
       s.baseStats = base;
     });
@@ -643,8 +638,22 @@ export default function register(host) {
   host.registerAction('builderClassSet', (cid, idx, classId) => {
     builderMutate(cid, (s, engine) => { if (s.classes[idx]) { s.classes[idx] = { ...s.classes[idx], classId: String(classId), subclass: '' }; } if (engine) reconcile(s, engine); });
   });
+  // Set a class level (host `.codex-stepper` input change, B5). Reconciles orphaned
+  // decisions, and — like the old +/- stepper — focuses (opens) the new top level
+  // when the level grows so that level's choices are right there to resolve.
   host.registerAction('builderLevelSet', (cid, idx, value) => {
-    builderMutate(cid, (s, engine) => { if (s.classes[idx]) s.classes[idx] = { ...s.classes[idx], level: Math.max(1, Math.min(20, num(value, 1))) }; if (engine) reconcile(s, engine); });
+    let classId = '', newLevel = 1, grew = false;
+    builderMutate(cid, (s, engine) => {
+      const cl = s.classes[idx];
+      if (cl) {
+        const old = num(cl.level, 1);
+        newLevel = Math.max(1, Math.min(20, num(value, 1)));
+        grew = newLevel > old; classId = cl.classId;
+        s.classes[idx] = { ...cl, level: newLevel };
+      }
+      if (engine) reconcile(s, engine);
+    });
+    if (grew && classId) { ctx.builderState[cid] = { ...(ctx.builderState[cid] || {}), tab: String(classId), open: classId + ':' + newLevel }; host.ui.rerender(); }
   });
   host.registerAction('builderSubclassSet', (cid, idx, subclass) => {
     builderMutate(cid, (s, engine) => { if (s.classes[idx]) s.classes[idx] = { ...s.classes[idx], subclass: String(subclass) }; if (engine) reconcile(s, engine); });
@@ -659,17 +668,6 @@ export default function register(host) {
   host.registerAction('builderTab', (cid, tab) => { ctx.builderState[cid] = { ...(ctx.builderState[cid] || {}), tab: String(tab), open: null }; host.ui.rerender(); });
   // Expand/collapse one level row (accordion — one open at a time; click again to close).
   host.registerAction('builderToggleLevel', (cid, key) => { const st = ctx.builderState[cid] || {}; ctx.builderState[cid] = { ...st, open: st.open === String(key) ? null : String(key) }; host.ui.rerender(); });
-  // Level a class up/down by one (guided add-a-level). Adding a level focuses (opens)
-  // the new top level so its choices are right there to resolve.
-  host.registerAction('builderLevelStep', (cid, classId, dir) => {
-    let newLevel = 1;
-    builderMutate(cid, (s, engine) => {
-      const cl = (s.classes || []).find((x) => x.classId === String(classId));
-      if (cl) { cl.level = Math.max(1, Math.min(20, num(cl.level, 1) + num(dir, 0))); newLevel = cl.level; }
-      if (engine) reconcile(s, engine);
-    });
-    if (num(dir, 0) > 0) { ctx.builderState[cid] = { ...(ctx.builderState[cid] || {}), tab: String(classId), open: classId + ':' + newLevel }; host.ui.rerender(); }
-  });
   // Level-independent extra feats (B4.5b) — read the picker + optional custom name +
   // note at click time. A compendium featId feeds the engine (mechanics apply); a
   // free-text name is tracked. builderMutate so a real feat re-materializes the sheet.
@@ -737,27 +735,26 @@ export default function register(host) {
       upsertGrant(s, 'bgasi', { type: 'background' }, parseAssign(value));
     });
   });
-  // Distribute-N-points ASI picker (B5): step one ability's delta by ±1 in an
-  // ability grant (bg ASI 'bgasi' / class ASI 'asi:<c>:<l>:ability' / half-feat
-  // '…:featability'), re-validating the shared `budget` + per-ability cap server-side.
-  // The abilityGrants `assign` map is the source of truth the engine hydrates; the
-  // grant's source type is derived from the key so hydrate/reconcile treat it exactly
-  // as the old split-select did. Replaces builderBgAsi + builderChoose(':ability') in
-  // the UI (both kept as programmatic entry points).
-  host.registerAction('builderAsiStep', (cid, key, ability, dir, budget, perMax) => {
+  // Distribute-N-points ASI picker (B5): set one ability's delta (from the host
+  // `.codex-stepper` input's change) in an ability grant (bg ASI 'bgasi' / class ASI
+  // 'asi:<c>:<l>:ability' / half-feat '…:featability'), clamping to [0, perMax] and to
+  // the shared `budget` server-side. The abilityGrants `assign` map is the source of
+  // truth the engine hydrates; the grant's source type is derived from the key so
+  // hydrate/reconcile treat it exactly as the old split-select did. Replaces
+  // builderBgAsi + builderChoose(':ability') in the UI (both kept as programmatic entry points).
+  host.registerAction('builderAsiSet', (cid, key, ability, value, budget, perMax) => {
     if (ABILITIES.indexOf(String(ability)) < 0) return;
     builderMutate(cid, (s) => {
       const k = String(key);
       const type = k === 'bgasi' ? 'background' : /:featability$/.test(k) ? 'feat' : 'asi';
       const g = (s.abilityGrants || []).find((x) => x.id === k);
       const assign = { ...((g && g.assign) || {}) };
-      const next = num(assign[ability], 0) + num(dir, 0);
       const pmax = Math.max(1, num(perMax, 2));
       const bud = Math.max(1, num(budget, 2));
-      if (next < 0 || next > pmax) return;
-      const total = ABILITIES.reduce((n, a) => n + (a === String(ability) ? next : num(assign[a], 0)), 0);
-      if (total > bud) return;
-      if (next <= 0) delete assign[ability]; else assign[ability] = next;
+      const others = ABILITIES.reduce((n, a) => n + (a === String(ability) ? 0 : num(assign[a], 0)), 0);
+      let v = Math.max(0, Math.min(pmax, num(value, 0)));   // clamp 0..perMax
+      v = Math.min(v, bud - others);                        // clamp to the remaining budget
+      if (v <= 0) delete assign[ability]; else assign[ability] = v;
       upsertGrant(s, k, { type }, assign);
     });
   });
