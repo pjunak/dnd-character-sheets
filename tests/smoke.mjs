@@ -217,6 +217,33 @@ test('sheets: duplicate multi-pick values dedupe in resolved inputs (FE-7)', () 
   assert.deepEqual(cd.skillProficiencies, ['arcana'], 'a value picked in two boxes collapses to one proficiency');
 });
 
+test('sheets: duplicate L1 skills descriptor dedupes to one picker — no "content pending"', () => {
+  // Real class records declared the L1 skills choice TWICE — canonically in
+  // startingProficiencies.skills (WITH a `from` pool) AND redundantly in grants.choices
+  // as a bare {type:'skills'} with the SAME id and no `from`. The bare dup rendered as
+  // an empty enumerated picker ("content pending"). collectChoices must keep only the
+  // well-formed first descriptor. The shared fake doesn't replicate the duplication, so
+  // it's reproduced inline — this proves the ENGINE dedupe alone fixes the bug, even
+  // against handbook data that still carries the redundant entry.
+  const CLERIC = {
+    id: 'cleric', name: 'Cleric', hitDie: 'd8', subclassLevel: 3,
+    startingProficiencies: { skills: { choose: 2, from: ['history', 'insight', 'medicine', 'persuasion', 'religion'] } },
+    grants: { choices: [{ id: 'skills:cleric', source: 'cleric:1', type: 'skills', count: 2 }] },
+  };
+  const api = makeRulesApi(() => ({ apiVersion: 1,
+    getItem: (kind, id) => ((kind === 'class' && id === 'cleric') ? CLERIC : null),
+    getItemByName: (kind, name) => ((kind === 'class' && /cleric/i.test(String(name))) ? CLERIC : null) }));
+  const { host } = createMockHost(META, {});
+  const { sheetOf } = makeHelpers(host);
+  const E = makeEngine({ host, NS: 'dnd55e-sheets', ABILITIES, SKILLS, num, abilityMod, sheetOf });
+  const choices = E.collectChoices([{ classId: 'cleric', level: 1, subclass: '' }], api);
+  const skills = choices.filter((c) => c.id === 'skills:cleric');
+  assert.equal(skills.length, 1, 'exactly one descriptor for skills:cleric (the bare dup is dropped)');
+  assert.equal(skills[0].kind, 'skills', 'the survivor is the well-formed skills picker');
+  assert.deepEqual(skills[0].from, ['history', 'insight', 'medicine', 'persuasion', 'religion'], 'it carries the from pool');
+  assert.ok(!choices.some((c) => c.kind === 'enumerated'), 'no empty enumerated dup survives (would render "content pending")');
+});
+
 test('sheets: Builder actions mutate the model + materialize without throwing', () => {
   const { rec } = dryRunRegister(register, META, PHB());
   const act = (name, ...args) => rec.actions.find(a => a.name === name).fn(...args);

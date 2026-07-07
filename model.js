@@ -107,7 +107,16 @@ export function makeEngine(ctx) {
       }
       for (const lvl of asiLevelsFor(rec)) if (lvl <= clvl) out.push({ id: 'asi:' + cl.classId + ':' + lvl, kind: 'asiMode', classId: cl.classId, level: lvl, source: { type: 'class', id: cl.classId, level: lvl } });
     }
-    return out;
+    // Dedupe by descriptor id (keep-first). Class records declare the L1 skills
+    // choice TWICE — canonically in startingProficiencies.skills (pushed first, WITH
+    // its `from` pool) AND redundantly in grants.choices as a bare {type:'skills'}
+    // (no `from`), which would otherwise surface as an empty `enumerated` picker
+    // ("content pending"). featureChoices are keyed by descriptor id, so a duplicate
+    // id already aliases the same stored resolution — keep-first both drops the
+    // malformed dup and enforces that id-uniqueness invariant. (Entries lacking an
+    // id can't be deduped — a separate data concern — so pass them through.)
+    const seen = new Set();
+    return out.filter((c) => (c.id ? (seen.has(c.id) ? false : (seen.add(c.id), true)) : true));
   };
 
   /** Map featureChoices resolutions → the canonical input fields the engine
