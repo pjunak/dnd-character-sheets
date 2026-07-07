@@ -277,6 +277,59 @@ test('sheets: a half-feat chosen at an ASI level applies its ability bump (AB-2)
   assert.equal(grantFor('asi:wizard:4'), undefined, 'mode switch clears the feat grant');
 });
 
+test('sheets: ASI number picker distributes a 2-point budget (+2 or +1/+1), capped (B5)', () => {
+  const { host, rec } = createMockHost(META, PHB());
+  let stored = {};
+  host.store.patchAddonData = (_c, itemId, fn) => { stored = fn(stored) || stored; return { id: itemId, addonData: { 'dnd55e-sheets': stored } }; };
+  register(host);
+  const act = (name, ...args) => rec.actions.find((a) => a.name === name).fn(...args);
+  const asi = () => (stored.abilityGrants || []).find((g) => g.id === 'asi:wizard:4:ability');
+  const step = (ab, dir) => act('builderAsiStep', 'c1', 'asi:wizard:4:ability', ab, dir, 2, 2);
+  // +1/+1 across two abilities — something the old single-ability select couldn't express.
+  step('STR', 1); step('DEX', 1);
+  assert.deepEqual(asi().assign, { STR: 1, DEX: 1 }, 'two abilities each +1');
+  step('CON', 1);
+  assert.equal(asi().assign.CON, undefined, 'a 3rd point exceeds the 2-budget → refused');
+  // Zero out, then +2 to a single ability; a 3rd is refused by the per-ability cap.
+  step('STR', -1); step('DEX', -1);
+  step('STR', 1); step('STR', 1);
+  assert.deepEqual(asi().assign, { STR: 2 }, '+2 to a single ability');
+  step('STR', 1);
+  assert.equal(asi().assign.STR, 2, 'per-ability cap (2) enforced');
+});
+
+test('sheets: background ASI number picker distributes 3 points, +2 max per ability (B5)', () => {
+  const { host, rec } = createMockHost(META, PHB());
+  let stored = {};
+  host.store.patchAddonData = (_c, itemId, fn) => { stored = fn(stored) || stored; return { id: itemId, addonData: { 'dnd55e-sheets': stored } }; };
+  register(host);
+  const act = (name, ...args) => rec.actions.find((a) => a.name === name).fn(...args);
+  const bg = () => (stored.abilityGrants || []).find((g) => g.id === 'bgasi');
+  const step = (ab, dir) => act('builderAsiStep', 'c1', 'bgasi', ab, dir, 3, 2);
+  step('STR', 1); step('STR', 1); step('DEX', 1);   // +2 STR, +1 DEX = the 3-point spend
+  assert.deepEqual(bg().assign, { STR: 2, DEX: 1 }, '+2/+1 across two abilities (3 points)');
+  step('CON', 1);
+  assert.equal(bg().assign.CON, undefined, 'a 4th point exceeds the 3-budget → refused');
+  step('STR', 1);
+  assert.equal(bg().assign.STR, 2, 'per-ability cap (2) enforced');
+});
+
+test('sheets: ASI level renders ability number-pickers, not a single-ability select (B5)', () => {
+  mockLocalStorage('builder');
+  try {
+    const { rec } = dryRunRegister(register, META, PHB());
+    const act = (n, ...a) => rec.actions.find((x) => x.name === n).fn(...a);
+    act('builderTab', 'casi', 'fighter');
+    act('builderToggleLevel', 'casi', 'fighter:4');   // expand the L4 ASI row
+    const out = renderBody(rec, { id: 'casi', name: 'Ftr', addonData: { 'dnd55e-sheets': {
+      classes: [{ classId: 'fighter', level: 4, subclass: '' }],
+      featureChoices: { 'asi:fighter:4': 'asi' } } } });   // ASI mode (not Feat)
+    assert.match(out, /builderAsiStep/, 'the ASI ability pick is a number-picker stepper');
+    assert.match(out, /asi:fighter:4:ability/, 'steppers target the ASI ability grant');
+    assert.match(out, /2,2\]/, 'wired with the 2-point budget + per-ability cap');
+  } finally { clearLocalStorage(); }
+});
+
 test('sheets: a multi-pick pool excludes an option already taken in another box (FE-7)', () => {
   mockLocalStorage('builder');
   try {

@@ -737,6 +737,30 @@ export default function register(host) {
       upsertGrant(s, 'bgasi', { type: 'background' }, parseAssign(value));
     });
   });
+  // Distribute-N-points ASI picker (B5): step one ability's delta by ±1 in an
+  // ability grant (bg ASI 'bgasi' / class ASI 'asi:<c>:<l>:ability' / half-feat
+  // '…:featability'), re-validating the shared `budget` + per-ability cap server-side.
+  // The abilityGrants `assign` map is the source of truth the engine hydrates; the
+  // grant's source type is derived from the key so hydrate/reconcile treat it exactly
+  // as the old split-select did. Replaces builderBgAsi + builderChoose(':ability') in
+  // the UI (both kept as programmatic entry points).
+  host.registerAction('builderAsiStep', (cid, key, ability, dir, budget, perMax) => {
+    if (ABILITIES.indexOf(String(ability)) < 0) return;
+    builderMutate(cid, (s) => {
+      const k = String(key);
+      const type = k === 'bgasi' ? 'background' : /:featability$/.test(k) ? 'feat' : 'asi';
+      const g = (s.abilityGrants || []).find((x) => x.id === k);
+      const assign = { ...((g && g.assign) || {}) };
+      const next = num(assign[ability], 0) + num(dir, 0);
+      const pmax = Math.max(1, num(perMax, 2));
+      const bud = Math.max(1, num(budget, 2));
+      if (next < 0 || next > pmax) return;
+      const total = ABILITIES.reduce((n, a) => n + (a === String(ability) ? next : num(assign[a], 0)), 0);
+      if (total > bud) return;
+      if (next <= 0) delete assign[ability]; else assign[ability] = next;
+      upsertGrant(s, k, { type }, assign);
+    });
+  });
   host.registerAction('builderChoose', (cid, key, value) => {
     builderMutate(cid, (s, engine) => {
       const k = String(key);

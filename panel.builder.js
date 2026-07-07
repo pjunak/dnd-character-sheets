@@ -165,7 +165,12 @@ export function makeBuilderPanel(ctx) {
     if (ch.kind === 'asiMode') {
       const mode = fc[ch.id];
       if (mode === 'feat') { const f = fc[ch.id + ':feat']; return { text: f ? ((engine.getItem('feat', f) || {}).name || titleize(f)) : t('builder.featOption'), done: !!f }; }
-      if (mode === 'asi') { const a = fc[ch.id + ':ability']; return { text: a ? '+2 ' + t('ability.' + a) : t('builder.asiOption'), done: !!a }; }
+      if (mode === 'asi') {
+        const assign = assignOf(s, ch.id + ':ability');
+        const parts = ABILITIES.filter((a) => num(assign[a], 0) > 0).map((a) => '+' + num(assign[a]) + ' ' + t('ability.' + a));
+        const total = ABILITIES.reduce((n, a) => n + num(assign[a], 0), 0);
+        return { text: parts.length ? parts.join(', ') : t('builder.asiOption'), done: total >= 2 };
+      }
       return { text: null, done: false };
     }
     const count = Math.max(1, num(ch.count, 1));
@@ -309,12 +314,10 @@ export function makeBuilderPanel(ctx) {
   function builderCreationChoices(c, s, engine, ro) {
     const bgRec = s.background ? (engine.getItemByName('background', s.background) || engine.getItem('background', s.background)) : null;
     if (!(bgRec && Array.isArray(bgRec.abilityScores) && bgRec.abilityScores.length)) return '';
-    const abil = bgRec.abilityScores;
-    const splits = [];
-    for (const x of abil) for (const y of abil) if (x !== y) splits.push({ value: `${x}:2,${y}:1`, label: `+2 ${x}, +1 ${y}` });
-    splits.push({ value: abil.map((a) => a + ':1').join(','), label: '+1 ' + abil.join(', +1 ') });
-    const cur = s.featureChoices['bgasi'] || '';
-    const blocks = [choiceBlock(t('builder.bgAsi', { bg: bgRec.name }), selectBox(cur, splits, dataOn('change', host.action('builderBgAsi'), c.id, '$value'), t('builder.choose'), ro))];
+    // 2024 background ASI: distribute 3 points across the background's abilities
+    // (+2/+1 or +1/+1/+1), max +2 to any one — a number picker, not a split-select (B5).
+    const pickers = abilityBudgetPickers(c, 'bgasi', bgRec.abilityScores, assignOf(s, 'bgasi'), 3, 2, ro);
+    const blocks = [choiceBlock(t('builder.bgAsi', { bg: bgRec.name }), pickers)];
     if (bgRec.originFeat) blocks.push(`<div style="color:var(--text-muted);font-size:var(--text-xs)">${esc(t('builder.originFeat', { feat: titleize(bgRec.originFeat) }))}</div>`);
     return section(t('builder.choices'), `<div style="display:flex;flex-direction:column;gap:var(--space-2)">${blocks.join('')}</div>`);
   }
@@ -344,6 +347,40 @@ export function makeBuilderPanel(ctx) {
     </div>`;
     const body = rows || `<div style="color:var(--text-muted);font-size:var(--text-xs)">${esc(t('builder.noExtraFeats'))}</div>`;
     return section(t('builder.extraFeats'), `${body}${adder}`);
+  }
+
+  // The applied per-ability deltas for an ability grant (bg ASI / class ASI /
+  // half-feat) — the abilityGrants `assign` map is the single source of truth that
+  // the engine hydrates, so the number pickers read + write it directly.
+  function assignOf(s, id) {
+    const g = (Array.isArray(s.abilityGrants) ? s.abilityGrants : []).find((x) => x.id === id);
+    return (g && g.assign) || {};
+  }
+
+  // "Distribute N points across these abilities" — a +/- stepper per eligible
+  // ability sharing a cumulative `budget` (ASI = 2, background = 3, a half-feat =
+  // its amount), each capped at `perMax`. Replaces the old split-select dropdowns
+  // (B5), mirroring the point-buy stepper; every step routes through builderAsiStep,
+  // which re-validates the budget server-side. `key` is the abilityGrant id.
+  function abilityBudgetPickers(c, key, eligible, assign, budget, perMax, ro) {
+    const spent = eligible.reduce((n, a) => n + num(assign[a], 0), 0);
+    const remaining = budget - spent;
+    const tiles = eligible.map((a) => {
+      const v = num(assign[a], 0);
+      const canDec = !ro && v > 0;
+      const canInc = !ro && v < perMax && remaining > 0;
+      const stepBtn = (dir, sym, on) => `<button class="inline-create-btn" style="min-width:1.9rem;padding:var(--space-1) var(--space-2);opacity:${on ? '1' : '.35'}"${on ? '' : ' disabled'}${on ? dataAction(host.action('builderAsiStep'), c.id, key, a, dir, budget, perMax) : ''}>${sym}</button>`;
+      const val = `<strong style="color:${v ? 'var(--color-success)' : 'var(--text-muted)'};min-width:1.6rem;text-align:center;font-variant-numeric:tabular-nums">${v ? '+' + v : '0'}</strong>`;
+      return `<div style="text-align:center;background:var(--bg-raised);border-radius:var(--radius);padding:var(--space-2)">
+        <div style="font-size:var(--text-xs);color:var(--text-muted)">${esc(t('ability.' + a))}</div>
+        <div style="display:flex;align-items:center;justify-content:center;gap:var(--space-1);margin-top:var(--space-1)">${ro ? val : stepBtn(-1, '−', canDec) + val + stepBtn(1, '＋', canInc)}</div>
+      </div>`;
+    }).join('');
+    const remColor = remaining === 0 ? 'var(--text-muted)' : 'var(--accent-gold)';
+    const tag = `<span style="font-size:var(--text-xs);font-weight:600;color:${remColor};font-variant-numeric:tabular-nums">${esc(t('builder.pointsLeft', { n: remaining }))}</span>`;
+    return `<div style="display:flex;flex-direction:column;gap:var(--space-1)">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(4.5rem,1fr));gap:var(--space-2)">${tiles}</div>
+      ${ro ? '' : tag}</div>`;
   }
 
   // Render one choice descriptor from collectChoices (skills / expertise /
@@ -400,8 +437,8 @@ export function makeBuilderPanel(ctx) {
     const label = t('builder.asiLevel', { cls: (engine.getItem('class', ch.classId) || {}).name || ch.classId, lvl: ch.level });
     let detail = '';
     if (mode === 'asi') {
-      const abilKey = key + ':ability';
-      detail = `<div style="margin-top:var(--space-1);min-width:9rem">${selectBox(s.featureChoices[abilKey] || '', ABILITIES.map((a) => ({ value: a, label: t('ability.' + a) })), dataOn('change', host.action('builderChoose'), c.id, abilKey, '$value'), t('builder.asiAbility'), ro)}</div>`;
+      // 2024 ASI: distribute 2 points (+2 to one, or +1/+1 to two) — number pickers (B5).
+      detail = `<div style="margin-top:var(--space-2)">${abilityBudgetPickers(c, key + ':ability', ABILITIES, assignOf(s, key + ':ability'), 2, 2, ro)}</div>`;
     } else if (mode === 'feat') {
       const featKey = key + ':feat';
       const chosenFeat = s.featureChoices[featKey] || '';
@@ -416,8 +453,9 @@ export function makeBuilderPanel(ctx) {
       // the applied bump flow through the engine via abilityGrants.
       const asi = featRec && featRec.grants && featRec.grants.abilityScoreIncrease;
       if (asi && Array.isArray(asi.from) && asi.from.length > 1) {
-        const abilKey = key + ':featability';
-        detail += `<div style="margin-top:var(--space-1);min-width:9rem">${selectBox(s.featureChoices[abilKey] || '', asi.from.map((a) => ({ value: a, label: t('ability.' + a) })), dataOn('change', host.action('builderChoose'), c.id, abilKey, '$value'), t('builder.asiAbility'), ro)}</div>`;
+        // Half-feat with a choice of ability → distribute its amount (usually +1) — pickers (B5).
+        const amt = Math.max(1, num(asi.amount, 1));
+        detail += `<div style="margin-top:var(--space-2)">${abilityBudgetPickers(c, key + ':featability', asi.from, assignOf(s, key + ':featability'), amt, amt, ro)}</div>`;
       }
     }
     return choiceBlock(label, `${selectBox(mode, modeOpts, dataOn('change', host.action('builderChoose'), c.id, key, '$value'), t('builder.choose'), ro)}${detail}`);
