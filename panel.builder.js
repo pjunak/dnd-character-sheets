@@ -144,7 +144,9 @@ export function makeBuilderPanel(ctx) {
   function swapChip(sw, engine) {
     const nm = (ref) => { const r = engine.getItem && engine.getItem('spell', ref); return r ? r.name : String(ref); };
     const leg = (ref) => { const r = engine.getItem && engine.getItem('spell', ref); return r && r.text ? { title: r.name, desc: firstPara(r.text), aria: r.name } : null; };
-    return `<span style="display:inline-flex;align-items:center;gap:2px;background:var(--bg-raised);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);padding:0 var(--space-1);font-size:var(--text-xs);color:var(--text-light)">🔄 ${entityRef('spell', sw.out, nm(sw.out), leg(sw.out))} → ${entityRef('spell', sw.in, nm(sw.in), leg(sw.in))}</span>`;
+    // pe() keeps the spell links clickable inside a pointer-events:none spine row.
+    const pe = (h) => `<span style="pointer-events:auto">${h}</span>`;
+    return `<span style="display:inline-flex;align-items:center;gap:2px;background:var(--bg-raised);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);padding:0 var(--space-1);font-size:var(--text-xs);color:var(--text-light)">🔄 ${pe(entityRef('spell', sw.out, nm(sw.out), leg(sw.out)))} → ${pe(entityRef('spell', sw.in, nm(sw.in), leg(sw.in)))}</span>`;
   }
 
   // Human label for a resolved choice value (skill / feature-pool / weapon / feat).
@@ -172,21 +174,28 @@ export function makeBuilderPanel(ctx) {
     return { text: vals.length ? vals.map((v) => labelValue(ch, v, engine)).join(', ') : null, done: vals.length >= count };
   }
 
-  // One spine row: a caret+level toggle (when the level has choices), the features
-  // gained (compendium links), the made-choice chips + optional "needs choices" flag,
-  // then the expanded editors below when open. Feature links stay clickable — only
-  // the caret toggles, so a link click never doubles as an expand.
+  // One spine row: the level label (with a ▸/▾ caret when the level has choices), the
+  // features gained (compendium links), the made-choice chips + optional "needs choices"
+  // flag, then the expanded editors below when open. When expandable, the WHOLE head is
+  // the click target: a full-row <button> is layered behind the content (a sibling of the
+  // links, not an ancestor — so a link click resolves to no data-action and navigates
+  // normally). The content sits on top with pointer-events:none so dead-space clicks fall
+  // through to the button; the inner links are re-enabled to pointer-events:auto. The
+  // real <button> also gives keyboard focus + native Enter/Space, and aria-expanded.
   function spineRow(c, key, l, feats, chips, unresolved, expandable, open, editors, ro) {
-    const lvlLabel = expandable
-      ? `<button class="inline-create-btn" style="border:none;background:none;padding:2px 4px;min-width:3.5rem;text-align:left;color:var(--text-muted)"${dataAction(host.action('builderToggleLevel'), c.id, key)}>${open ? '▾' : '▸'} L${esc(String(l))}</button>`
-      : `<span style="color:var(--text-muted);min-width:3.5rem;padding-left:calc(4px + 1ch)">L${esc(String(l))}</span>`;
+    const caret = expandable ? (open ? '▾ ' : '▸ ') : '';
+    const featHtml = feats.length
+      ? feats.map((f) => `<span style="pointer-events:auto">${f}</span>`).join('<span style="color:var(--text-muted)">, </span>')
+      : '<span style="color:var(--text-muted)">—</span>';
     const badge = (unresolved && !ro) ? `<span style="background:rgba(var(--accent-gold-rgb),.15);color:var(--accent-gold);border-radius:var(--radius-sm);padding:0 var(--space-1);font-size:var(--text-xs)">${esc(t('builder.needsChoices'))}</span>` : '';
-    const head = `<div style="display:flex;gap:var(--space-2);align-items:center;padding:var(--space-1) 0;font-size:var(--text-sm)">
-      ${lvlLabel}
-      <span style="color:var(--text-parchment);flex:1">${feats.length ? feats.join(', ') : '<span style="color:var(--text-muted)">—</span>'}</span>
+    const content = `<div style="display:flex;gap:var(--space-2);align-items:center;padding:var(--space-1) 0;font-size:var(--text-sm)${expandable ? ';position:relative;z-index:1;pointer-events:none' : ''}">
+      <span style="color:var(--text-muted);min-width:3.5rem;padding-left:${expandable ? '4px' : 'calc(4px + 1ch)'}">${caret}L${esc(String(l))}</span>
+      <span style="color:var(--text-parchment);flex:1">${featHtml}</span>
       <span style="display:flex;flex-wrap:wrap;gap:var(--space-1);align-items:center">${chips.join('')}${badge}</span>
     </div>`;
-    return `<div style="border-bottom:1px solid rgba(var(--gold-muted),.1)">${head}${editors}</div>`;
+    if (!expandable) return `<div style="border-bottom:1px solid rgba(var(--gold-muted),.1)">${content}${editors}</div>`;
+    const toggle = `<button aria-expanded="${open ? 'true' : 'false'}" aria-label="${esc(t('builder.levelAria', { n: l }))}" style="position:absolute;inset:0;background:none;border:none;padding:0;margin:0;cursor:pointer;border-radius:var(--radius-sm)"${dataAction(host.action('builderToggleLevel'), c.id, key)}></button>`;
+    return `<div style="border-bottom:1px solid rgba(var(--gold-muted),.1)"><div style="position:relative">${toggle}${content}</div>${editors}</div>`;
   }
 
   // Feature names gained by a class (or its subclass) at a given class level, each a

@@ -244,6 +244,7 @@ export default {
   'builder.totalLevel':  'Total Level',
   'builder.tabCharacter': 'Character',
   'builder.needsChoices': 'needs choices',
+  'builder.levelAria':   'Level {n} — expand or collapse its choices',
   'builder.extraFeats':  'Extra feats',
   'builder.pickFeat':    'Add a feat…',
   'builder.customFeatName': 'or a custom feat name',

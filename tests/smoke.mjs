@@ -294,6 +294,26 @@ test('sheets: a multi-pick pool excludes an option already taken in another box 
   } finally { clearLocalStorage(); }
 });
 
+test('sheets: builder spine rows are whole-row click targets, inner links stay live (B5)', () => {
+  mockLocalStorage('builder');
+  try {
+    const { rec } = dryRunRegister(register, META, PHB());
+    const act = (n, ...a) => rec.actions.find((x) => x.name === n).fn(...a);
+    act('builderTab', 'cct', 'sorcerer');   // Sorcerer L2 has Metamagic → an expandable spine row
+    const out = renderBody(rec, { id: 'cct', name: 'Sorc', addonData: { 'dnd55e-sheets': {
+      classes: [{ classId: 'sorcerer', level: 2, subclass: '' }], abilities: { CHA: 15 } } } });
+    // The toggle is a full-row overlay <button> (not just the "L2" label), keyboard-
+    // focusable, aria-expanded — so a click anywhere on the row expands it.
+    assert.match(out, /position:absolute;inset:0/, 'a full-row overlay button covers the row head');
+    assert.match(out, /aria-expanded/, 'the disclosure exposes aria-expanded');
+    assert.match(out, /builderToggleLevel/, 'the overlay button toggles the level');
+    // Dead space falls through to the button (content pointer-events:none) while inner
+    // compendium links are re-enabled (pointer-events:auto) so they still navigate.
+    assert.match(out, /pointer-events:none/, 'content layer passes dead-space clicks through');
+    assert.match(out, /pointer-events:auto/, 'inner links remain interactive');
+  } finally { clearLocalStorage(); }
+});
+
 test('sheets: Spellbook separates granted from picks + shows the available pool', () => {
   mockLocalStorage('spellbook');
   try {
