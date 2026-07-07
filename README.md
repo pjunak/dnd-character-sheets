@@ -25,10 +25,15 @@ above it). The D&D tabs follow:
 - **Combat** — attacks from equipped/ready weapons, a castable-spells quick-reference,
   and resource trackers (Rage, Ki, slots…) with the Rest wizard.
 - **Backpack** — inventory grouped by carry location + currency.
-- **Spellbook** — prepared/cantrip slots, granted & choose-grant sections, extras
-  (appended after Backpack, and only when the character has spells).
-- **Builder** — guided progression; rightmost, only with the rules engine and only for
-  editors.
+- **Spellbook** — prepared/cantrip slots, granted & choose-grant sections; a Wizard prepares from a **learned
+  spellbook** (copy from a scroll for gp) and any class can **add a spell from another source** (feat/item/homebrew,
+  slot-castable for casters); level-up spell **swaps** are recorded with history.
+- **Builder** — guided per-level progression; internally **tabbed** (a **Character** tab + **one tab per class**), each
+  class tab a per-level spine whose rows **expand in place** to resolve that level's choices; level via **+/-**.
+  Rightmost, only with the rules engine and only for editors.
+
+A sheet-wide toolbar offers **🖨 Print / PDF** (a self-contained printable sheet), **⬇ Export** (download the character
+as JSON), and **⬆ Import** (paste an exported JSON to overwrite — editors only).
 
 A slim **vitals bar** (HP with live **+/-**, AC, Initiative, Speed, Proficiency, Passive
 Perception, plus a class-level line) renders full-width under the tabs on

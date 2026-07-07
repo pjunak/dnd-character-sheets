@@ -39,11 +39,18 @@ model.js            THE data layer: stored-blob read/migration, viewModel,
 panel.overview.js   ⚠ renders the CHARACTER SHEET tab (id `stats`)
 panel.sheet.js      ⚠ renders the COMBAT tab
 panel.spellbook.js / panel.backpack.js / panel.builder.js / editor.js
+panel.print.js      print/PDF sheet (new-window, self-contained) + JSON import modal
 rules/              the PURE engine (host-free, unit-tested): engine.js + api.js
 tests/              smoke.mjs + rules.mjs (+ fake-phb.mjs fixture data)
 ```
 The Overview tab has no module — it is the host's own wiki profile folded in
 via the `characters:body` takeover.
+
+The **Builder** is internally sub-tabbed: a **Character** tab (abilities, species,
+background, class roster, level-independent extra feats) + **one tab per class**,
+each a per-level **progression spine** whose rows expand in place (accordion) to
+edit that level's choices. Sub-tab / open-row are in-memory (`ctx.builderState`,
+not persisted). A sheet-wide toolbar offers Print / Export / Import (B4.6).
 
 ## Layering rules (where new code goes)
 
