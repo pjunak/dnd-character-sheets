@@ -25,18 +25,22 @@ Character Sheet tab, 3-state proficiency dots + AC shield indicator, builder sub
 **On `agentic-dev` (awaiting integration to `main`; 95 tests):**
 - **Vitals glyphs now come from the HOST icon set.** The unified-UI hoist landed: `ttrpg-codex` (commit `a60f100`,
   its `agentic-dev`) now owns `.codex-link-row`/`.codex-link-tile`, `.codex-skel`, and `utils.iconGlyph` → `host.h.icon`
-  (heart/shield/bolt/chevrons/plus-circle/eye as `.codex-icon` SVGs, stroke `currentColor`), plus a harness mirror and a
-  `design-system.test.mjs` pinning the guarantees. This repo deleted its local vitals SVG set — `panel.header.js` maps
-  stat→glyph and feature-detects `h.icon` (an older host degrades to text labels; regression-tested both ways).
+  (as `.codex-icon` SVGs, stroke `currentColor`), plus a harness mirror and a `design-system.test.mjs` pinning the
+  guarantees. This repo deleted its local vitals SVG set — `panel.header.js` maps stat→glyph and feature-detects
+  `h.icon` (an older host degrades to text labels; regression-tested both ways).
   ⚠ Integration order: **codex first**, then the addons (addon CI checks out `ttrpg-codex@main` for the harness).
+- **Chips promoted + PB glyph fixed** (codex `b3229fc`). Spell/inventory chips render the host `.codex-chip`
+  (+ `-danger`) — the local `S.chip` style string is gone; the PB tile switched from `plus-circle` (read as an "add"
+  button) to the new `medal` glyph. This closes the chips promotion candidate from the boundary note below.
 
 ## Remaining (in order)
 
-1. **B5 — remaining UI polish (small / optional).**
-   - Record **images** (blocked — no image source). The PB icon (plus-circle) may want a less "add"-like glyph (pending
-     a look at the icons; the glyph now lives in `ttrpg-codex utils.iconGlyph`, so tweak it THERE). Full **mobile**
-     layout is out of scope (needs a dedicated redesign). (Skeleton loading was a compendium concern — shipped there;
-     the sheet renders synchronously from the store, so it has nothing to skeleton.)
+1. **B5 — remaining UI polish.** Done except two externally-gated items:
+   - Record **images** (blocked — needs the maintainer's image source/licensing decision; the render seam exists).
+   - Full **mobile** layout is out of scope (needs a dedicated redesign).
+   (Everything else shipped: click targets, hover/focus, steppers, HP tile, icons — PB now a `medal` glyph — dots,
+   keyboard nav, chips, skeletons where applicable. The sheet renders synchronously from the store, so it has nothing
+   to skeleton.)
 
 ## Deferred / tech-debt
 - **Unified-UI boundary (what stays addon-side, and why).** The generic pieces are hoisted (host owns tokens + the
@@ -46,9 +50,9 @@ Character Sheet tab, 3-state proficiency dots + AC shield indicator, builder sub
   grid + spine rows, scoped under `.addon-dnd55e-sheets` per the host CSS contract; (c) **domain indicators** — the
   save shield (fill = proficiency), 3-state proficiency dots, AC shield dot: these encode D&D *semantics*, and hoisting
   them would push game concepts into a game-agnostic host. All are built from host tokens, so themes still apply.
-  Next promotion **candidate** (needs a variant design pass first, not a mechanical hoist): **chips** — engine `S.chip`
-  (interactive, ✕-bearing) vs the bestiary's small badge pills vs the host's `.chip` base differ in size + semantics.
-  The agent may now do such promotions itself on the codex `agentic-dev` branch (maintainer-directed 2026-07-08); the
+  The chips candidate is closed: the design pass split it into `.codex-chip` (management chip, this repo) and
+  `.codex-badge` (read-only fact pill, PHB + bestiary) — different components, one home (codex `b3229fc`).
+  The agent may do such promotions itself on the codex `agentic-dev` branch (maintainer-directed 2026-07-08); the
   old "host is reference-only" note is obsolete.
 - **`aria-live` budget counts (deferred).** Announcing point-buy/ASI "N pts left" changes to screen readers needs a
   *persistent* live region, but every edit re-renders the whole panel (no stable element survives), so `aria-live` there

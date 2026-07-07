@@ -25,7 +25,7 @@ export function makeHeaderPanel(ctx) {
   // narrower than a spelled-out stat name (the tile keeps the full label as
   // its title + the slot's aria-label). Feature-detected: on an older host
   // icon() returns '' and every call site falls back to its text label.
-  const GLYPH = { hp: 'heart', ac: 'shield', init: 'bolt', speed: 'chevrons', pb: 'plus-circle', passive: 'eye' };
+  const GLYPH = { hp: 'heart', ac: 'shield', init: 'bolt', speed: 'chevrons', pb: 'medal', passive: 'eye' };
   const icon = (name) => (typeof host.h.icon === 'function') ? host.h.icon(GLYPH[name] || name) : '';
 
   // Shield-equipped indicator for the AC tile: a filled circle when a shield contributes

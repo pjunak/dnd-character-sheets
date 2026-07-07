@@ -71,7 +71,6 @@ export function makeUI(ctx) {
     // Misc labels
     sectionLabel: 'font-size:var(--text-xs);color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:var(--space-2)',
     subLabel: 'color:var(--text-muted);font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.04em;margin-bottom:var(--space-1)',
-    chip: 'display:flex;align-items:center;gap:var(--space-2);border-radius:var(--radius-sm);padding:var(--space-1) var(--space-2);min-width:8.5rem;min-height:2.15rem',
     // Legacy compact tiles (Builder summary still uses these)
     statBox: 'background:var(--bg-raised);border-radius:var(--radius);padding:var(--space-2) var(--space-3);min-width:4.5rem;text-align:center',
     statBoxLabel: 'font-size:var(--text-xs);color:var(--text-muted)',
@@ -272,7 +271,6 @@ export function makeUI(ctx) {
   function spellChip(name, sub, opts) {
     opts = opts || {};
     const color = opts.danger ? 'var(--color-danger)' : 'var(--text-parchment)';
-    const bd = opts.danger ? 'var(--color-danger)' : 'var(--border-subtle)';
     const badge = opts.badge ? `<span title="${esc(opts.badgeTitle || '')}">${esc(opts.badge)}</span>` : '';
     // Name links to its compendium page (when given an {kind,id} link) and/or
     // carries a hover legend; falls back to plain escaped text.
@@ -282,7 +280,7 @@ export function makeUI(ctx) {
     const right = opts.removeAttr
       ? `<button class="inline-create-btn" title="${esc(t('action.remove'))}"${opts.removeAttr}>✕</button>`
       : (opts.locked ? `<span title="${esc(t('spell.alwaysPrepared'))}" style="color:var(--accent-gold)">🔒</span>` : '');
-    return `<div title="${esc(opts.title || '')}" style="${S.chip};background:var(--bg-raised);border:1px solid ${bd}">
+    return `<div title="${esc(opts.title || '')}" class="codex-chip${opts.danger ? ' codex-chip-danger' : ''}">
       ${badge}<div style="flex:1"><div style="color:${color};font-size:var(--text-sm)">${nameHtml}</div>${sub ? `<div style="color:var(--text-muted);font-size:var(--text-xs)">${esc(sub)}</div>` : ''}</div>${right}</div>`;
   }
 

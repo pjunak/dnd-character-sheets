@@ -458,7 +458,9 @@ test('sheets: Spellbook separates granted from picks + shows the available pool'
     } } });
     assert.match(out, /Always prepared/, 'granted section header');
     assert.match(out, /Bless/, 'granted (always-prepared) spell shown');
-    assert.match(out, /min-height:2\.15rem/, 'spell chips are a comfortable, consistent height (UI polish)');
+    // Chips are the host .codex-chip component; its comfortable min-height is
+    // pinned host-side (ttrpg-codex test/design-system.test.mjs).
+    assert.match(out, /class="codex-chip"/, 'spell chips are the host chip component');
     assert.match(out, /Fireball/, 'prepared pick shown');
     // B2.1: spell names link to their compendium detail page (prepared pick + granted).
     assert.match(out, /href="#\/compendium\/spell:fireball"/, 'prepared spell links to its compendium page (B2.1)');
