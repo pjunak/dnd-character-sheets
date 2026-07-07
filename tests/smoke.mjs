@@ -341,7 +341,10 @@ test('sheets: ASI number picker distributes a 2-point budget (+2 or +1/+1), capp
   const asi = () => (stored.abilityGrants || []).find((g) => g.id === 'asi:wizard:4:ability');
   const set = (ab, v) => act('builderAsiSet', 'c1', 'asi:wizard:4:ability', ab, v, 2, 2);
   // +1/+1 across two abilities — something the old single-ability select couldn't express.
-  set('STR', 1); set('DEX', 1);
+  set('STR', 1);
+  assert.ok(rec.announces.includes('1 pts left'), 'each budget change announces the remainder (host live region)');
+  set('DEX', 1);
+  assert.ok(rec.announces.includes('0 pts left'), 'spending the last point announces zero');
   assert.deepEqual(asi().assign, { STR: 1, DEX: 1 }, 'two abilities each +1');
   set('CON', 1);
   assert.equal(asi().assign.CON, undefined, 'a 3rd point exceeds the 2-budget → clamped away');

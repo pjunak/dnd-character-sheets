@@ -623,6 +623,7 @@ export default function register(host) {
   // 27-point budget.
   host.registerAction('builderAbilitySet', (cid, ability, value) => {
     if (ABILITIES.indexOf(ability) < 0) return;
+    let left = null;   // remaining point-buy budget, captured post-clamp
     builderMutate(cid, (s) => {
       const base = { ...(s.baseStats || {}) };
       const cur = num(base[ability], POINT_BUY.min);
@@ -630,7 +631,12 @@ export default function register(host) {
       while (next > POINT_BUY.min && (pointsSpent(base) - pointCost(cur) + pointCost(next)) > POINT_BUY.budget) next--;
       base[ability] = next;
       s.baseStats = base;
+      left = POINT_BUY.budget - pointsSpent(base);
     });
+    // Announce the new remaining budget through the HOST's persistent live
+    // region — the full-panel re-render destroys any in-page live region, so
+    // this is what actually reaches screen readers. Feature-detected.
+    if (left != null && typeof host.ui.announce === 'function') host.ui.announce(t('builder.pointsLeft', { n: left }));
   });
   // Structural edits (class/level/subclass/remove) can orphan level- or
   // owner-scoped decisions (ASI picks, pool picks) — reconcile prunes them so a
@@ -771,6 +777,7 @@ export default function register(host) {
   // builderBgAsi + builderChoose(':ability') in the UI (both kept as programmatic entry points).
   host.registerAction('builderAsiSet', (cid, key, ability, value, budget, perMax) => {
     if (ABILITIES.indexOf(String(ability)) < 0) return;
+    let left = null;   // remaining ASI budget, captured post-clamp
     builderMutate(cid, (s) => {
       const k = String(key);
       const type = k === 'bgasi' ? 'background' : /:featability$/.test(k) ? 'feat' : 'asi';
@@ -782,8 +789,11 @@ export default function register(host) {
       let v = Math.max(0, Math.min(pmax, num(value, 0)));   // clamp 0..perMax
       v = Math.min(v, bud - others);                        // clamp to the remaining budget
       if (v <= 0) delete assign[ability]; else assign[ability] = v;
+      left = bud - others - Math.max(0, v);
       upsertGrant(s, k, { type }, assign);
     });
+    // Same persistent-live-region announcement as point-buy (builderAbilitySet).
+    if (left != null && typeof host.ui.announce === 'function') host.ui.announce(t('builder.pointsLeft', { n: left }));
   });
   host.registerAction('builderChoose', (cid, key, value) => {
     builderMutate(cid, (s, engine) => {
