@@ -17,22 +17,19 @@ Shipped history lives in git + `AGENTS.md` — it is not repeated here.
 Everything through **B4.6** is integrated to `main`: feature-kind consumption, hover+link per entity, builder
 correctness (reconcile/FE-7), the spellbook (Wizard learned-pool + copy-from-scroll / add-from-another-source), Warlock
 Pact Magic, the guided per-level tabbed Builder, and print/PDF + JSON export/import. Detail is in git history +
-`AGENTS.md`. CI: Node 26, `setup-node@v5`; 84 tests (`node --test tests/smoke.mjs tests/rules.mjs`).
+`AGENTS.md`. CI: Node 26, `setup-node@v5`; 85 tests (`node --test tests/smoke.mjs tests/rules.mjs`).
+
+**Fixed on `agentic-dev` (awaiting integration to `main`):** the duplicate-skill-choice bug (`836754d`). Every class
+declared its L1 skills choice twice — canonically in `startingProficiencies.skills` (with a `from` pool) AND redundantly
+in `grants.choices` as a bare `{type:'skills'}` with **no `from`** — so `collectChoices` emitted a second
+`kind:'enumerated'` descriptor (same id, empty pool) that rendered a bogus "No options available (content pending)" row
+at L1 on all 12 classes. `collectChoices` now dedupes by descriptor id (keep-first: the well-formed picker is pushed
+first, so the malformed dup drops); the handbook side also removes the redundant `grants.choices` entry (either fix
+alone suffices). A real-data-shaped regression test reproduces the duplication inline (the shared fake doesn't).
 
 ## Remaining (in order)
 
-1. **BUG — duplicate skill-choice at L1 ("No options available (content pending)").**
-   Every class record declares its L1 skills choice **twice**: canonically in `startingProficiencies.skills`
-   (`{choose, from:[…]}`) AND redundantly in `grants.choices` as `{id:'skills:<class>', type:'skills', count:2}` with
-   **no `from`**. `collectChoices` emits both — the valid `kind:'skills'` picker AND a second `kind:'enumerated'`
-   descriptor (same id, empty pool) that renders the "content pending" line. Visible at L1 for **all 12 classes** with
-   real data (the fake test data doesn't replicate the duplication, so tests stayed green).
-   **Fix:** dedupe `collectChoices` output by descriptor id — the `startingProficiencies` skills choice is pushed before
-   the grants loop, so keep-first drops the malformed grants dup (robust to the data as-is). Optionally also remove the
-   redundant `grants.choices` skills entry from the 12 handbook class records. Add a real-data-shaped smoke test (a class
-   whose `grants.choices` duplicates its `skills:<class>` id → exactly one skills picker, no "content pending").
-
-2. **B5 — UI polish.**
+1. **B5 — UI polish.**
    - **Bigger click targets.** Many controls are only clickable on a tiny sub-element — e.g. a builder level row toggles
      only when you click the "L1" number, not the whole row. Make the **whole row** the toggle (full-width clickable
      header) while keeping inner links working (a row-level handler that ignores clicks landing on an `<a>`, or a
