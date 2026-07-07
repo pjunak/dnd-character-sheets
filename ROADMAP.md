@@ -17,29 +17,29 @@ Shipped history lives in git + `AGENTS.md` — it is not repeated here.
 Everything through **B4.6** is integrated to `main`: feature-kind consumption, hover+link per entity, builder
 correctness (reconcile/FE-7), the spellbook (Wizard learned-pool + copy-from-scroll / add-from-another-source), Warlock
 Pact Magic, the guided per-level tabbed Builder, and print/PDF + JSON export/import. Detail is in git history +
-`AGENTS.md`. CI: Node 26, `setup-node@v5`; 85 tests (`node --test tests/smoke.mjs tests/rules.mjs`).
+`AGENTS.md`. CI: Node 26, `setup-node@v5`; 84 tests on `main` (`node --test tests/smoke.mjs tests/rules.mjs`).
 
-**Fixed on `agentic-dev` (awaiting integration to `main`):** the duplicate-skill-choice bug (`836754d`). Every class
-declared its L1 skills choice twice — canonically in `startingProficiencies.skills` (with a `from` pool) AND redundantly
-in `grants.choices` as a bare `{type:'skills'}` with **no `from`** — so `collectChoices` emitted a second
-`kind:'enumerated'` descriptor (same id, empty pool) that rendered a bogus "No options available (content pending)" row
-at L1 on all 12 classes. `collectChoices` now dedupes by descriptor id (keep-first: the well-formed picker is pushed
-first, so the malformed dup drops); the handbook side also removes the redundant `grants.choices` entry (either fix
-alone suffices). A real-data-shaped regression test reproduces the duplication inline (the shared fake doesn't).
+**Fixed on `agentic-dev` (awaiting integration to `main`; 89 tests):**
+- **Duplicate-skill-choice bug** (`836754d`). Every class declared its L1 skills choice twice — `startingProficiencies.skills`
+  (with a `from` pool) AND a redundant bare `grants.choices` `{type:'skills'}` with no `from` — so `collectChoices` emitted a
+  second empty `enumerated` descriptor that rendered a bogus "No options available (content pending)" row at L1 on all 12
+  classes. `collectChoices` now dedupes by descriptor id (keep-first); the handbook also drops the redundant entry (either
+  alone suffices). Real-data-shaped regression test added (the shared fake doesn't replicate the duplication).
+- **B5 · bigger click targets** (`6bd3b17`). The whole builder spine row is now the toggle — a full-row overlay `<button>`
+  layered behind the content (dead-space clicks fall through via pointer-events; inner compendium links stay live;
+  keyboard-focusable + `aria-expanded`), replacing the tiny "L1"-only hit area.
+- **B5 · ASI number pickers** (`f0b5b06`). The ASI split-select dropdowns (background ASI + each ASI level + half-feat
+  ability sub-pick) are now +/- steppers per eligible ability sharing a cumulative budget (class ASI 2 / bg 3 / half-feat
+  its amount) — also enabling the previously-impossible +1/+1 split. `builderAsiStep` re-validates the budget; the
+  abilityGrants map stays the engine's source of truth.
 
 ## Remaining (in order)
 
-1. **B5 — UI polish.**
-   - **Bigger click targets.** Many controls are only clickable on a tiny sub-element — e.g. a builder level row toggles
-     only when you click the "L1" number, not the whole row. Make the **whole row** the toggle (full-width clickable
-     header) while keeping inner links working (a row-level handler that ignores clicks landing on an `<a>`, or a
-     full-width button layered behind the content). Audit other controls (chips, tiles, dots) for the same problem.
-   - **Ability-score entry = number pickers, not dropdowns.** Replace the ASI **dropdowns** (background ASI + each
-     ability-score-improvement level) with a **+/- number picker per eligible ability** sharing a **cumulative point
-     budget** (ASI = 2 points → +2 to one or +1/+1; a half-feat = its amount) — mirroring the existing point-buy stepper.
-     One consistent "distribute N points across these abilities" control replacing the split-select.
-   - Record **images** (render seam exists; nothing ships images); **accessibility** (focus-visible, `aria-live`,
-     `<label>`/select association, keyboard nav); **responsive/mobile**; **skeleton** loading.
+1. **B5 — remaining UI polish.** (Bigger click targets + ASI number pickers landed — see above.)
+   - **Bigger click targets, round 2.** Audit the OTHER controls flagged — chips, tiles, proficiency dots — for the same
+     tiny-hit-area problem, and the compendium browse side (see the handbook ROADMAP).
+   - Record **images** (render seam exists; nothing ships images — needs an image source/decision); **accessibility**
+     (focus-visible, `aria-live`, `<label>`/select association, keyboard nav); **responsive/mobile**; **skeleton** loading.
 
 ## Deferred / tech-debt
 - **B4.5b hover-preview (maybe):** the guided spine expands rows on **click**. A future option — hover a collapsed row
