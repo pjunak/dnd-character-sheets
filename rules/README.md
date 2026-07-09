@@ -57,6 +57,19 @@ die; every other level gets the average. For the common single-class case this i
 simply that class's die; multiclass order beyond the first entry doesn't change
 the total, so no "origin class" is tracked.
 
+**Collected features:** class features grant from the per-class `feature`
+records (`listFeatures({classId})`, record level ≤ class level) — the
+`progression[].features` name-strings are display labels, not identity (a
+drifted table once granted the L18 Spell Mastery to a L2 wizard). A string
+grants only when the class has no record of that name (the generic labels —
+ASI / Epic Boon / "\<Class\> Subclass" / upgrade markers — and whole books that
+predate feature records, ARCH-4); a string whose name is a record's at another
+level is drift and grants nothing. Same-name repeat records (rogue/bard
+Expertise, Metamagic) each grant at their own level; option-pool records
+(`category`: metamagic/maneuver/invocation) are choice fodder, never
+auto-granted. Every entry stays provenance-tagged
+(`{ id, name?, source: { type, id, level } }`).
+
 ## Develop
 
 ```sh

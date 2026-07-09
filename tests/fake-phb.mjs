@@ -10,8 +10,12 @@ export function makeFake() {
         spellcasting: { ability: 'INT', type: 'full', prepares: 'spellbook', ritual: true },
         weaponMastery: { count: 2 }, acFormulas: [],
         // Authoritative printed full-caster spell-slot progression (2024 PHB).
+        // The L2 row is DELIBERATELY drifted: it name-drops the L18 'Spell
+        // Mastery' (the real bug a stale book shipped). The engine must grant by
+        // the feature RECORDS (below) and ignore the drifted string.
         progression: [
-          { level: 1, cantripsKnown: 3, preparedSpells: 4, spellSlots: [2] },
+          { level: 1, cantripsKnown: 3, preparedSpells: 4, spellSlots: [2], features: ['Arcane Recovery'] },
+          { level: 2, cantripsKnown: 3, preparedSpells: 5, spellSlots: [3], features: ['Scholar', 'Spell Mastery'] },
           { level: 5, cantripsKnown: 4, preparedSpells: 9, spellSlots: [4, 3, 2] },
           { level: 11, cantripsKnown: 5, preparedSpells: 15, spellSlots: [4, 3, 3, 2, 1, 1] },
           { level: 17, cantripsKnown: 5, preparedSpells: 21, spellSlots: [4, 3, 3, 3, 2, 1, 1, 1, 1] },
@@ -60,6 +64,14 @@ export function makeFake() {
         id: 'rogue', name: 'Rogue', kind: 'class', hitDie: 'd8', savingThrows: ['DEX', 'INT'],
         spellcasting: null, weaponMastery: { count: 2 }, acFormulas: [],
         startingProficiencies: { weapons: ['martial-finesse-or-light'] },
+        // Mirrors the real table's tricky rows: 'Expertise' repeats at two levels
+        // (one record per occurrence — BOTH grant), and L3 mixes a recordless
+        // generic label ('Rogue Subclass') with a real feature record.
+        progression: [
+          { level: 1, features: ['Expertise'] },
+          { level: 3, features: ['Rogue Subclass', 'Steady Aim'] },
+          { level: 6, features: ['Expertise'] },
+        ],
       },
       sorcerer: {
         id: 'sorcerer', name: 'Sorcerer', kind: 'class', hitDie: 'd6', savingThrows: ['CON', 'CHA'],
@@ -69,7 +81,9 @@ export function makeFake() {
       warlock: {
         id: 'warlock', name: 'Warlock', kind: 'class', hitDie: 'd8', savingThrows: ['WIS', 'CHA'],
         spellcasting: { ability: 'CHA', type: 'pact', prepares: 'list' }, weaponMastery: { count: 0 }, acFormulas: [],
-        progression: [{ level: 1, cantripsKnown: 2, preparedSpells: 2 }, { level: 5, cantripsKnown: 3, preparedSpells: 6 }],
+        // 'Pact Magic' has NO feature record → the recordless-book string
+        // fallback (ARCH-4) must grant it verbatim.
+        progression: [{ level: 1, cantripsKnown: 2, preparedSpells: 2, features: ['Pact Magic'] }, { level: 5, cantripsKnown: 3, preparedSpells: 6 }],
       },
     },
     weapon: {
@@ -135,11 +149,20 @@ export function makeFake() {
     },
     // Feature records incl. an option-pool parent (Metamagic) + its category-tagged
     // options — exercises collectChoices' feature-grants + fromCategory expansion.
+    // The wizard/rogue records back the collected-features step: records are the
+    // grant identity (the wizard table's drifted 'Spell Mastery' string must NOT
+    // grant); the two same-name rogue Expertise records must BOTH grant.
     feature: {
       'sorcerer-metamagic': { id: 'sorcerer-metamagic', name: 'Metamagic', kind: 'feature', classId: 'sorcerer', level: 2, localId: 'metamagic',
         grants: { choices: [{ id: 'metamagic', source: 'sorcerer:2', type: 'metamagic', count: 2, countByLevel: { '2': 2, '10': 4, '17': 6 }, fromCategory: 'metamagic', swappableOn: 'levelup' }] } },
       'metamagic-quickened-spell': { id: 'metamagic-quickened-spell', name: 'Quickened Spell', kind: 'feature', classId: 'sorcerer', level: 2, localId: 'quickened-spell', category: 'metamagic', prerequisite: { cost: '2 Sorcery Points' } },
       'metamagic-twinned-spell': { id: 'metamagic-twinned-spell', name: 'Twinned Spell', kind: 'feature', classId: 'sorcerer', level: 2, localId: 'twinned-spell', category: 'metamagic', prerequisite: { cost: '1 Sorcery Point' } },
+      'wizard-arcane-recovery': { id: 'wizard-arcane-recovery', name: 'Arcane Recovery', kind: 'feature', classId: 'wizard', level: 1, localId: 'arcane-recovery' },
+      'wizard-scholar': { id: 'wizard-scholar', name: 'Scholar', kind: 'feature', classId: 'wizard', level: 2, localId: 'scholar' },
+      'wizard-spell-mastery': { id: 'wizard-spell-mastery', name: 'Spell Mastery', kind: 'feature', classId: 'wizard', level: 18, localId: 'spell-mastery' },
+      'rogue-expertise': { id: 'rogue-expertise', name: 'Expertise', kind: 'feature', classId: 'rogue', level: 1, localId: 'expertise' },
+      'rogue-steady-aim': { id: 'rogue-steady-aim', name: 'Steady Aim', kind: 'feature', classId: 'rogue', level: 3, localId: 'steady-aim' },
+      'rogue-expertise-6': { id: 'rogue-expertise-6', name: 'Expertise', kind: 'feature', classId: 'rogue', level: 6, localId: 'expertise-6' },
     },
   };
   const byName = (kind, name) => Object.values(store[kind] || {}).find((r) => (r.name || '').toLowerCase() === String(name).toLowerCase()) || null;

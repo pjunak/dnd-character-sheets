@@ -481,6 +481,58 @@ test('rules: subclass resources are emitted, resolved at the class level (FE-2)'
   assert.equal(r.source.type, 'subclass', 'tagged with subclass provenance');
 });
 
+test('rules: class features grant by RECORD identity — a drifted table string cannot mis-grant', () => {
+  const { rec } = withFake();
+  const feats = (lvl) => rec.provided.hydrate({ className: 'Wizard', level: lvl }).sheet.features;
+  // The fake wizard's L2 row name-drops the L18 'Spell Mastery' (the bug a stale
+  // book actually shipped). Records are the identity: L2 grants Scholar, never
+  // Spell Mastery — and the entry carries the record id + name + provenance.
+  const l2 = feats(2);
+  assert.deepEqual(l2.find((f) => f.id === 'wizard-scholar'),
+    { id: 'wizard-scholar', name: 'Scholar', source: { type: 'class', id: 'wizard', level: 2 } },
+    'record-derived entry: record id + name + class provenance');
+  assert.ok(!l2.some((f) => /spell.mastery/i.test(String(f.name || f.id))), 'the drifted string grants NOTHING at L2');
+  assert.ok(l2.some((f) => f.id === 'wizard-arcane-recovery' && f.source.level === 1), 'the L1 record granted too');
+  // At 18 the record grants at its own level — even though the abbreviated table
+  // has no L18 row mentioning it (records grant; strings only label).
+  const sm = feats(18).find((f) => f.id === 'wizard-spell-mastery');
+  assert.ok(sm && sm.source.level === 18, 'Spell Mastery arrives at L18, from the record');
+});
+
+test('rules: repeat same-name feature records (Expertise ×2) BOTH grant, each at its level', () => {
+  const { rec } = withFake();
+  const at = (lvl) => rec.provided.hydrate({ className: 'Rogue', level: lvl }).sheet.features;
+  assert.deepEqual(at(6).filter((f) => f.name === 'Expertise').map((f) => [f.id, f.source.level]),
+    [['rogue-expertise', 1], ['rogue-expertise-6', 6]],
+    'both occurrences grant, with distinct record ids + levels');
+  assert.deepEqual(at(5).filter((f) => f.name === 'Expertise').map((f) => f.id), ['rogue-expertise'],
+    'below the repeat level only the first occurrence grants');
+});
+
+test('rules: recordless strings still grant — generic labels, ARCH-4 books, subclass features', () => {
+  const { rec } = withFake();
+  // Mixed row: rogue L3 pairs the recordless 'Rogue Subclass' label with a real
+  // record — the label survives beside it, in the printed order.
+  const l3 = rec.provided.hydrate({ className: 'Rogue', level: 3 }).sheet.features.filter((f) => f.source.level === 3);
+  assert.deepEqual(l3.map((f) => f.id), ['Rogue Subclass', 'rogue-steady-aim'], 'generic label + record coexist, table order kept');
+  assert.equal(l3[0].name, undefined, 'a string fallback keeps the label-as-id shape (no name)');
+  // A book with NO feature records for the class (warlock) → strings verbatim.
+  assert.deepEqual(rec.provided.hydrate({ className: 'Warlock', level: 1 }).sheet.features,
+    [{ id: 'Pact Magic', source: { type: 'class', id: 'warlock', level: 1 } }],
+    'ARCH-4: a recordless book degrades to the printed strings');
+  // Subclass features keep their own (unchanged) path + provenance.
+  const ek = rec.provided.hydrate({ classes: [{ classId: 'fighter', level: 3, subclass: 'eldritch-knight' }] }).sheet.features;
+  assert.deepEqual(ek.find((f) => f.id === 'war-bond'),
+    { id: 'war-bond', name: 'War Bond', source: { type: 'subclass', id: 'eldritch-knight', level: 3 } });
+});
+
+test('rules: option-pool records (category) are choice fodder, never auto-granted features', () => {
+  const { rec } = withFake();
+  const feats = rec.provided.hydrate({ className: 'Sorcerer', level: 2 }).sheet.features;
+  assert.ok(feats.some((f) => f.id === 'sorcerer-metamagic'), 'the Metamagic parent grants (by record)');
+  assert.ok(!feats.some((f) => /quickened|twinned/i.test(String(f.name || f.id))), 'its metamagic OPTIONS do not');
+});
+
 test('rules: renderers survive the smoke pass', () => {
   const { rec } = dryRunRegister(register, META);
   assert.ok(smokeRegistrations(rec).ok, JSON.stringify(smokeRegistrations(rec).failures));

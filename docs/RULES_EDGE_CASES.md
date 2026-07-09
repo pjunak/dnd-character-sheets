@@ -181,6 +181,13 @@ These aren't D&D rules — they're the structural decisions that make the rules 
 > consumer needs it (per-source AC/HP breakdown, feature-mechanics display); until then it's
 > plumbing with opportunity cost vs. user-facing work. **Revisit when a provenance-dependent
 > feature actually demands it**, then do the narrow pilot above.
+>
+> **Landed slice (2026-07):** feature records are now the engine's *identity* source for
+> collecting class features — `hydrate` joins `listFeatures({classId})` by record level ≤
+> class level and treats `progression[].features` strings as display labels (fallback only
+> for names with no record: the generic labels + pre-record books, ARCH-4). That closed the
+> drifted-table bug (a L2 wizard granted the L18 Spell Mastery). Effect/mechanics migration
+> (`grants` on features) remains deferred as argued above.
 
 ---
 

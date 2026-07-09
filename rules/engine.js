@@ -553,13 +553,46 @@ export function hydrate(decisions, api) {
   });
 
   // Collected features (provenance-tagged) — feeds the Builder's level log.
+  // Class features are derived from the per-class `feature` RECORDS (join:
+  // classId + record level ≤ class level) — the progression[].features
+  // name-strings are display labels, not identity (a drifted table once granted
+  // the L18 Spell Mastery to a L2 wizard). Strings still grant whatever has no
+  // record of that name in the class: the generic labels (ASI / Epic Boon /
+  // "<Class> Subclass" / upgrade markers) and whole books that predate feature
+  // records (ARCH-4 degradation). A string whose name IS a record's at another
+  // level is drift and grants nothing. Option-pool records (category:
+  // metamagic / maneuver / invocation) are choice fodder, never auto-granted.
   step(() => {
     const feats = [];
+    const norm = (s) => String(s || '').trim().toLowerCase();
     for (const c of classes) {
-      const prog = (c.record && c.record.progression) || [];
-      for (const row of prog) {
-        if (num(row.level) > c.level) continue;
-        for (const f of row.features || []) feats.push({ id: f, source: { type: 'class', id: c.classId, level: row.level } });
+      const records = (api && api.listFeatures ? api.listFeatures({ classId: c.classId }) : [])
+        .filter((f) => f && !f.subclassId && !f.category && f.level != null);
+      const owned = new Set(records.map((f) => norm(f.name)));
+      const recsAt = new Map();   // level → class-feature records gained there
+      for (const f of records) {
+        const lv = num(f.level);
+        if (!recsAt.has(lv)) recsAt.set(lv, []);
+        recsAt.get(lv).push(f);
+      }
+      const rowsAt = new Map();   // level → printed progression row
+      for (const row of (c.record && c.record.progression) || []) rowsAt.set(num(row.level), row);
+      const levels = [...new Set([...recsAt.keys(), ...rowsAt.keys()])].sort((a, b) => a - b);
+      for (const lv of levels) {
+        if (lv > c.level) continue;
+        const source = { type: 'class', id: c.classId, level: lv };
+        const recs = recsAt.get(lv) || [];
+        const row = rowsAt.get(lv);
+        const taken = new Set();
+        // Walk the printed row first so the book's order is kept: a string naming
+        // a record AT THIS level emits that record (repeat names each take one)...
+        for (const s of (row && row.features) || []) {
+          const hit = recs.find((f) => !taken.has(f.id) && norm(f.name) === norm(s));
+          if (hit) { taken.add(hit.id); feats.push({ id: hit.id, name: hit.name, source }); }
+          else if (!owned.has(norm(s))) feats.push({ id: s, source });   // recordless label → verbatim
+        }
+        // ...then records the row forgot still grant (records are the identity).
+        for (const f of recs) if (!taken.has(f.id)) feats.push({ id: f.id, name: f.name, source });
       }
       const subRec = c.subclass && api && api.getItem ? api.getItem('subclass', c.subclass) : null;
       for (const f of (subRec && subRec.features) || []) if (num(f.level) <= c.level) feats.push({ id: f.id, name: f.name, source: { type: 'subclass', id: c.subclass, level: f.level } });
