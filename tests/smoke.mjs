@@ -16,7 +16,7 @@
 // read-only path).
 //
 // ENGINE MODE: the rules engine is BUILT IN (rules/) — what the tests inject is
-// fake BOOK DATA as deps['dnd55e-players-handbook'] (tests/fake-phb.mjs, shared
+// fake BOOK DATA as deps['dnd55e-compendium'] (tests/fake-phb.mjs, shared
 // with tests/rules.mjs), so the real engine computes over it. Expected numbers
 // below therefore mirror the engine-pinned values in tests/rules.mjs.
 import { test } from 'node:test';
@@ -48,11 +48,11 @@ function renderBody(rec, char, lore) {
 const META = {
   id: 'dnd55e-sheets',
   permissions: ['ui:override', 'ui:action', 'ui:settings-tab', 'data:read:characters', 'data:write:characters.addonData'],
-  optionalDependencies: { 'dnd55e-players-handbook': { range: '>=0.1.0' } },
+  optionalDependencies: { 'dnd55e-compendium': { range: '>=0.1.0' } },
 };
 
 // Book data present → the built-in engine computes (fresh fake per test).
-const PHB = () => ({ deps: { 'dnd55e-players-handbook': makeFake() } });
+const PHB = () => ({ deps: { 'dnd55e-compendium': makeFake() } });
 
 const FIGHTER = {
   id: 'c1', name: 'Thorin',

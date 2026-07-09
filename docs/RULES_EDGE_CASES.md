@@ -10,7 +10,7 @@
 > `[S]` the sheet UI / per-character storage (this repo's panels + model.js) ·
 > `[R]` the rules engine (this repo's `rules/` module — merged in from the
 > retired standalone `dnd55e-core-rules` addon) ·
-> `[C]` the book data addon (`dnd55e-players-handbook`, formerly
+> `[C]` the book data addon (`dnd55e-compendium`, formerly
 > `dnd55e-compendium`; content record shape / declared grants).
 > Older entries below still say "core-rules"/"compendium" — read those as the
 > rules module / the Player's Handbook addon respectively.
@@ -34,7 +34,7 @@ These aren't D&D rules — they're the structural decisions that make the rules 
 | **ARCH-1** ★★★ `[S][R]` | **Store only decisions; compute everything else at render.** | If we persist computed numbers (maxHp, AC, save totals), a later rules fix or an ability-score change silently leaves stale values on every existing character. | `addonData` holds **decisions only** (choices, base scores, levels, equipped flags, prepared set). `rules.hydrate(decisions) → {sheet, warnings}` derives the rest each render. The current flat blob (persisted `maxHp/ac/profBonus/...`) becomes **overrides**, not source of truth. |
 | **ARCH-2** ★★★ `[R][C][S]` | **Provenance on every granted thing.** | "Where did this spell / proficiency / +1 AC come from?" drives dedup detection, the colored forced-duplicate warning, removal when a source is removed, and the "auto vs manual" badges. Without it you cannot implement the user's spell-provenance requirement at all. | Every grant the engine emits carries `source: {type:'class'|'subclass'|'feat'|'species'|'background'|'item'|'manual'|'copied', id, label}`. Compendium records declare grants; engine stamps source while collecting; UI reads it. |
 | **ARCH-3** ★★★ `[S]` | **Per-field manual override that always wins.** | Standalone (no rules) mode and "the DM said so" both need to beat the computed value, without losing the computed value underneath. | `overrides: { maxHp, ac, speed, initiative, saveDC:{}, skill:{}, ... }`. Render order: `override ?? computed ?? blank`. UI shows a `↺ auto` affordance to clear an override, and flags divergence (`manual 18 · auto 16`). |
-| **ARCH-4** ★★★ `[S][R]` | **Graceful degradation when book data is absent.** | The user's hard requirement: sheet must be fully hand-fillable with no book addon installed, and installing/removing it must never break a sheet. | *(As shipped: the rules engine is BUILT-IN under `rules/`; what's probed is the DATA addon — `model.js` calls `host.use('dnd55e-players-handbook')` **lazily per render**, try/caught.)* Absent → every field falls back to its override or a free-text/manual input; spellbook becomes an unenforced editable list; no dropdowns. Present → dropdowns + computed values + `↺ auto`. |
+| **ARCH-4** ★★★ `[S][R]` | **Graceful degradation when book data is absent.** | The user's hard requirement: sheet must be fully hand-fillable with no book addon installed, and installing/removing it must never break a sheet. | *(As shipped: the rules engine is BUILT-IN under `rules/`; what's probed is the DATA addon — `model.js` calls `host.use('dnd55e-compendium')` **lazily per render**, try/caught.)* Absent → every field falls back to its override or a free-text/manual input; spellbook becomes an unenforced editable list; no dropdowns. Present → dropdowns + computed values + `↺ auto`. |
 | **ARCH-5** ★★ `[R]` | **Validation is advisory, never blocking.** | DMs allow homebrew and "illegal" builds constantly. Over-prepared, >3 attunement, failed multiclass prereqs, unknown spell — none may block saving. | `hydrate` returns `warnings[]` with `severity: 'illegal'|'soft'|'info'`. UI surfaces them as dismissible chips, never as save-blockers. |
 | **ARCH-6** ★★★ `[S]` | **Schema versioning + migration of the *existing* filled sheet.** | The user already created and filled a character on the current flat blob (`className` string, flat `maxHp`). The redesign changes the shape; that data must migrate, not vanish. | Bump `v`. Write idempotent migrators: `className` string → `classes:[{classId|manualName, level}]`; flat `maxHp/ac/...` → `overrides`; flat `skillProf{}` → decision set. Run on read (mirror the host's `_migrate*` pattern). |
 | **ARCH-7** ★★ `[R][C]` | **Edition coexistence (2014 vs 2024).** | 2014 species grant ASIs, classes are known-vs-prepared, backgrounds differ. Mixing silently double-applies or mis-applies. | Tag every compendium record `edition: '2024'|'2014'`. Engine targets 2024 semantics; treat 2014 records via per-record rule flags or simply exclude them from the v1 pickers. Recommend **2024-only** content for v1. |
@@ -366,7 +366,7 @@ preview echo, and `scripts/dev-install-addon.cjs`. Covered by new tests in `test
 > **2026-07-02 update:** the standalone `dnd55e-core-rules` addon was MERGED into this
 > repo as the `rules/` module (the engine always ships with the sheet now). The
 > optional dependency — and the `getRules()` probe — retarget to the book DATA addon:
-> `optionalDependencies: { "dnd55e-players-handbook": ">=0.1.0" }`. The Builder tab and
+> `optionalDependencies: { "dnd55e-compendium": ">=0.1.0" }`. The Builder tab and
 > every engine-mode branch light up exactly when book data is installed; the host
 > `optionalDependencies` mechanism described above is unchanged and still what makes
 > the soft seam work.

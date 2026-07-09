@@ -13,10 +13,10 @@ import { makeEngine } from '../model.js';
 const META = {
   id: 'dnd55e-sheets',
   permissions: ['ui:override', 'ui:action', 'ui:settings-tab', 'data:read:characters', 'data:write:characters.addonData'],
-  optionalDependencies: { 'dnd55e-players-handbook': { range: '>=0.1.0' } },
+  optionalDependencies: { 'dnd55e-compendium': { range: '>=0.1.0' } },
 };
 
-const withFake = () => dryRunRegister(register, META, { deps: { 'dnd55e-players-handbook': makeFake() } });
+const withFake = () => dryRunRegister(register, META, { deps: { 'dnd55e-compendium': makeFake() } });
 
 test('rules: feature-record grants expand fromCategory into pool choices', () => {
   const fake = makeFake();

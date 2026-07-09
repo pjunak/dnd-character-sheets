@@ -10,7 +10,7 @@
 //
 //  The rules ENGINE is built in (rules/engine.js + rules/api.js — merged from
 //  the retired dnd55e-core-rules addon); what's optional is the CONTENT: the
-//  api activates only while a book data addon (dnd55e-players-handbook) is
+//  api activates only while a book data addon (dnd55e-compendium) is
 //  installed, and the sheet stays fully hand-fillable without it.
 //
 //  `makeEngine(ctx)` binds host + the shared helpers/constants; every function is
@@ -221,7 +221,7 @@ export function makeEngine(ctx) {
   // hand-filled standalone paths otherwise (ARCH-4). The probe is lazy, per
   // render, try/caught — installing/removing the book mid-session never breaks
   // the sheet.
-  const DATA_ADDON = 'dnd55e-players-handbook';
+  const DATA_ADDON = 'dnd55e-compendium';
   const _probeData = () => {
     try {
       const d = host.use && host.use(DATA_ADDON);

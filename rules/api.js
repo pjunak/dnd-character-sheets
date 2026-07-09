@@ -2,7 +2,7 @@
 //  rules/api.js — the rules API surface over a data provider.
 //
 //  `makeRulesApi(getData)` binds the pure engine (rules/engine.js) to a live
-//  content accessor (the object the dnd55e-players-handbook addon provide()s —
+//  content accessor (the object the dnd55e-compendium addon provide()s —
 //  or any future per-book data addon with the same shape) and returns the api
 //  the sheet panels consume:
 //    • list*()/getItem()  — passthrough of book data for dropdowns

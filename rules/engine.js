@@ -2,7 +2,7 @@
 //  rules/engine.js — the pure D&D 5.5e (2024) derivation engine.
 //
 //  No host, no DOM: every function takes plain decisions + a book-data accessor
-//  `api` (the object dnd55e-players-handbook provides), so it's unit-testable
+//  `api` (the object dnd55e-compendium provides), so it's unit-testable
 //  in isolation (tests/rules.mjs drives it with a fake api). rules/api.js wires
 //  `hydrate(cd) = hydrate(cd, <live book data>)`.
 //

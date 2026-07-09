@@ -1,7 +1,7 @@
 // A fake Player's-Handbook data API shared by BOTH test suites — mirrors the
-// real seed shapes (and the api the dnd55e-players-handbook addon provide()s).
+// real seed shapes (and the api the dnd55e-compendium addon provide()s).
 // tests/rules.mjs drives the pure engine with it; tests/smoke.mjs injects it as
-// deps['dnd55e-players-handbook'] so the sheet's REAL rules api computes over it.
+// deps['dnd55e-compendium'] so the sheet's REAL rules api computes over it.
 export function makeFake() {
   const store = {
     class: {

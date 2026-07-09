@@ -8,7 +8,7 @@ on the manifest id. Tabbed sheet UI (Overview / Character Sheet [incl. inventory
 Combat / Spellbook / Builder) **plus the built-in pure rules engine**
 (`rules/engine.js` + `rules/api.js`, merged in from the retired
 `dnd55e-core-rules` addon). Standalone hand-fillable; declares
-`optionalDependencies: dnd55e-players-handbook` — engine mode lights up when
+`optionalDependencies: dnd55e-compendium` — engine mode lights up when
 that book addon's data is present. `provide()`s the rules API for future
 consumers (e.g. a combat addon).
 
@@ -67,7 +67,7 @@ not persisted). A sheet-wide toolbar offers Print / Export / Import (B4.6).
 - **`rules/` stays pure and host-free** (no `host`, no DOM) — that's what
   makes it unit-testable. Rules facts (point-buy costs, clamps, tables) live
   here, never in panels.
-- **Content belongs in the book addon** (`../dnd55e-players-handbook`) — this
+- **Content belongs in the book addon** (`../dnd55e-compendium`) — this
   repo ships no rulebook data; `tests/fake-phb.mjs` fakes it for engine-mode
   tests.
 
@@ -93,7 +93,7 @@ components; standalone (no book) degrades to a hand-filled sheet (DEG-1).
   batch spans the host, integrate **`ttrpg-codex` first** — addon CI checks out
   `ttrpg-codex@main` for the test harness.
 - **Sibling checkouts assumed**: `../ttrpg-codex` (harness + dev-install),
-  `../dnd55e-players-handbook` (the data this consumes; its `data/SCHEMA.md`
+  `../dnd55e-compendium` (the data this consumes; its `data/SCHEMA.md`
   is the record-shape contract behind `rules/api.js`), `../Living-scroll`
   (Python port source-of-truth for rule edge cases).
 - **Dev loop**: from `../ttrpg-codex` run

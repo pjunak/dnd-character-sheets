@@ -55,7 +55,7 @@ proficiency totals). The addon has **no hard dependencies** and works entirely s
 ## Designed to grow
 
 - **Rules in harmony:** the sheet *soft-uses* per-book data addons
-  (`dnd55e-players-handbook`, a manifest `optionalDependencies` entry) — when one is
+  (`dnd55e-compendium`, a manifest `optionalDependencies` entry) — when one is
   installed, the built-in engine auto-fills stats from class/species/background choices,
   free-text fields become dropdowns, and the Builder tab appears. If the book addon is
   absent, the sheet falls back to manual entry — installing/uninstalling it never breaks
