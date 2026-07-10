@@ -13,11 +13,10 @@
 // ═══════════════════════════════════════════════════════════════
 
 export function makeSheetPanel(ctx) {
-  const { host, t, num, signed, titleize, firstPara, featureRecordFor, ui, viewModel, legends, abilityRail, vitalsBar } = ctx;
+  const { host, t, num, signed, titleize, firstPara, featureRecordFor, hitDieAvg, ui, viewModel, legends, abilityRail, vitalsBar } = ctx;
   const { esc, dataAction, dataOn } = host.h;
-  const { section, card, subLabel, attacksBlock, numField, statTip, entityRef } = ui;
+  const { section, card, subLabel, attacksBlock, numField, statTip, entityRef, spellInfo, spellLegend } = ui;
 
-  const DIE_AVG = { d6: 4, d8: 5, d10: 6, d12: 7 };
   const RES_ORDER = { pool: 0, charge: 1, slot: 2, hitdice: 3 };
   function restState(cid) { try { return localStorage.getItem('dse-rest:' + cid); } catch (_) { return null; } }
 
@@ -55,22 +54,8 @@ export function makeSheetPanel(ctx) {
 
   // ── Spells I can cast (UX-6) — per-class Save DC / Attack (with legends) and
   //    the castable loadout (cantrips + prepared + always-prepared) grouped by
-  //    level. Read-only; a compact combat reference, not the prep UI. ──
-  function spellInfo(engine, ref) {
-    const r = engine && engine.getItem ? engine.getItem('spell', ref) : null;
-    return r ? { ref, name: r.name, level: num(r.level, 0), school: r.school || '' }
-             : { ref, name: t('misc.unknown'), level: 0, school: '' };
-  }
-  // Hover legend for a spell ref (title + compact description + level/school
-  // terms); null when unresolved → entityRef renders a plain name.
-  function spellLegend(engine, ref) {
-    const r = engine && engine.getItem ? engine.getItem('spell', ref) : null;
-    if (!r) return null;
-    const lvl = num(r.level, 0);
-    const terms = [{ label: t('spellbook.level'), value: lvl === 0 ? t('spellbook.cantrip') : lvl }];
-    if (r.school) terms.push({ label: t('spellbook.school'), value: r.school });
-    return { title: r.name, desc: r.text ? firstPara(r.text) : '', terms, aria: r.name };
-  }
+  //    level. Read-only; a compact combat reference, not the prep UI.
+  //    spellInfo/spellLegend come from ui.js (shared with the Spellbook). ──
   function combatSpells(c, s, comp, engine) {
     const sc = comp && comp.spellcasting;
     if (!sc || !Array.isArray(sc.perClass) || !sc.perClass.length) return '';
@@ -97,9 +82,9 @@ export function makeSheetPanel(ctx) {
     if (!cast.length) {
       body += `<div style="color:var(--text-muted);font-size:var(--text-xs)">${esc(t('combat.noPrepared'))}</div>`;
     } else {
-      cast.sort((a, b) => a.level - b.level || a.name.localeCompare(b.name));
+      cast.sort((a, b) => num(a.level, 0) - num(b.level, 0) || a.name.localeCompare(b.name));
       const byLevel = {};
-      cast.forEach((sp) => { (byLevel[sp.level] = byLevel[sp.level] || []).push(sp); });
+      cast.forEach((sp) => { const lv = num(sp.level, 0); (byLevel[lv] = byLevel[lv] || []).push(sp); });
       const groups = Object.keys(byLevel).map(Number).sort((a, b) => a - b).map((lvl) => {
         const label = lvl === 0 ? t('spellbook.cantrip') : t('spellbook.lvlN', { n: lvl });
         const chips = byLevel[lvl].map((sp) => `<span style="background:var(--bg-raised);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);padding:var(--space-1) var(--space-2);font-size:var(--text-sm);color:var(--text-light)">${entityRef('spell', sp.ref, sp.name, spellLegend(engine, sp.ref))}</span>`).join('');
@@ -189,14 +174,13 @@ export function makeSheetPanel(ctx) {
     const conMod = comp && comp.abilities && comp.abilities.CON ? num(comp.abilities.CON.mod, 0) : 0;
     const hdRows = resources.filter((r) => r.kind === 'hitdice').map((r) => {
       const cur = curOf(r);
-      const heal = Math.max(1, (DIE_AVG[r.die] || 5) + conMod);
+      const heal = Math.max(1, hitDieAvg(r.die) + conMod);
       const btn = cur > 0
         ? `<button class="inline-create-btn"${dataAction(host.action('restSpendHitDie'), cid, r.key)}>${esc(t('rest.spendDie', { die: r.die, heal }))}</button>`
         : `<span style="color:var(--text-muted);font-size:var(--text-xs)">${esc(t('rest.noneLeft'))}</span>`;
       return `<div style="display:flex;align-items:center;gap:var(--space-2);padding:var(--space-1) 0">
         <span style="flex:1;color:var(--text-light);font-size:var(--text-sm)">${esc(r.name)} <span style="color:var(--text-muted)">${esc(String(cur))}/${esc(String(r.max))}</span></span>${btn}</div>`;
     }).join('');
-    const half = Math.max(1, Math.floor(num(comp && comp.totalLevel, num(s.level, 1)) / 2));
 
     const body = `
       <div style="color:var(--text-muted);font-size:var(--text-xs);margin-bottom:var(--space-2)">${esc(t('rest.hitDiceHint'))}</div>
@@ -205,7 +189,7 @@ export function makeSheetPanel(ctx) {
         <button class="inline-create-btn"${dataAction(host.action('restApply'), cid, 'short')}>☾ ${esc(t('rest.takeShort'))}</button>
         <button class="edit-save-btn"${dataAction(host.action('restApply'), cid, 'long')}>🌙 ${esc(t('rest.takeLong'))}</button>
       </div>
-      <div style="color:var(--text-muted);font-size:var(--text-xs);margin-top:var(--space-3)">${esc(t('rest.longSummary', { half }))}</div>`;
+      <div style="color:var(--text-muted);font-size:var(--text-xs);margin-top:var(--space-3)">${esc(t('rest.longSummary'))}</div>`;
 
     // Sibling backdrop (behind the panel) carries the dismiss action so a click
     // OUTSIDE the wizard closes it, while clicks inside don't bubble to it.

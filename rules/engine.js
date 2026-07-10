@@ -33,6 +33,34 @@ export const num = (v, d = 0) => { const n = Number(v); return Number.isFinite(n
 export const abilityMod = (score) => Math.floor((num(score, 10) - 10) / 2);
 export const proficiencyBonus = (totalLevel) => 2 + Math.floor((Math.max(1, num(totalLevel, 1)) - 1) / 4);
 export const dieSize = (hitDie) => num(String(hitDie || '').replace(/^d/i, ''), 8);
+/** Average of a hit die rounded UP (d6→4, d8→5, d10→6, d12→7) — the per-level
+ *  HP value and the hit-die-spend heal. SYSTEM rule, one site (was duplicated
+ *  as DIE_AVG tables in entry.js + panel.sheet.js). */
+export const hitDieAvg = (hitDie) => Math.floor(dieSize(hitDie) / 2) + 1;
+
+// 2024 PHB "Expanding and Replacing the Book": copying a spell into a wizard's
+// spellbook costs 50 gp per spell level (cantrips can't be copied; min level 1).
+export const SCROLL_COPY_GP_PER_LEVEL = 50;
+export const scrollCopyCost = (level) => SCROLL_COPY_GP_PER_LEVEL * Math.max(1, num(level, 1));
+
+// 2024 ASI budgets (AB-1/AB-2) — SYSTEM rules the Builder's pickers consume:
+// an ASI feat distributes 2 points (+2 or +1/+1); a background distributes 3
+// points (+2/+1 or +1/+1/+1) among its listed abilities, max +2 to any one.
+export const ASI_RULES = { budget: 2, perMax: 2, bgBudget: 3, bgPerMax: 2 };
+
+// Ability score caps (AB-4): 20 by default; a cap-raising grant (2024 Epic
+// Boon: "increase … by 1, to a maximum of 30") lifts it, never past 30 —
+// the 2024 absolute maximum for any score.
+export const ABILITY_CAP = 20;
+export const ABILITY_CAP_HARD = 30;
+/** Eligible abilities of a feat's abilityScoreIncrease grant. The 2024 data's
+ *  'ANY' token ("one ability score of your choice" — e.g. Boon of Skill) means
+ *  all six. [] when the grant is absent/malformed. */
+export const featAsiFrom = (asi) => (asi && Array.isArray(asi.from) ? (asi.from.includes('ANY') ? ABILITIES.slice() : asi.from) : []);
+/** The raised per-ability cap a feat's ASI carries, or null when the default
+ *  (20) applies. 2024 Epic Boons print "to a maximum of 30" as prose, so the
+ *  cap rides on the CATEGORY, not a per-record field. */
+export const featAbilityCap = (feat) => (feat && feat.category === 'epicBoon' ? ABILITY_CAP_HARD : null);
 
 // D&D 2024 standard point buy — 27 points; each BASE score 8–15; the cost per
 // point rises past 13. SYSTEM rules (the Builder's ability-score budget), so
@@ -62,11 +90,15 @@ const MULTICLASS_SLOTS = {
 export const multiclassSlots = (casterLevel) => (MULTICLASS_SLOTS[Math.max(0, Math.min(20, num(casterLevel, 0)))] || []).slice();
 
 /** A class's contribution to the combined caster level (MC-2): full = level,
- *  half (Paladin/Ranger) = ⌊level/2⌋, third (EK/AT subclass) = ⌊level/3⌋. Rounded
- *  DOWN so a half-caster level 1 contributes 0 (no spells until level 2). */
+ *  half (Paladin/Ranger) = ⌈level/2⌉, third (EK/AT subclass) = ⌊level/3⌋.
+ *  2024 PHB Multiclassing, Spell Slots: "Half your levels (round up) in the
+ *  Paladin and Ranger classes; one third of your Fighter or Rogue levels
+ *  (round down) if you have the Eldritch Knight or Arcane Trickster
+ *  subclass." The half-caster round-UP is a 2024 change from 2014 (they
+ *  cast from level 1 now); thirds stayed round-down. */
 function casterContribution(type, level) {
   if (type === 'full') return level;
-  if (type === 'half') return Math.floor(level / 2);
+  if (type === 'half') return Math.ceil(level / 2);
   if (type === 'third') return Math.floor(level / 3);
   return 0;   // 'pact' contributes 0 — Warlock Pact Magic never combines (see pactMagic)
 }
@@ -101,8 +133,13 @@ export function resolveClasses(cd, api, warn) {
   };
   if (Array.isArray(cd.classes) && cd.classes.length) {
     for (const c of cd.classes) {
+      // A PLACEHOLDER roster row (the Builder's "＋ Add class" before a class is
+      // picked) contributes nothing — counting it would inflate total level, PB
+      // and HP (an empty row used to add a phantom avg-d8 level). A row with a
+      // classId the book can't resolve still counts (ARCH-4: free-text class).
+      if (!c || !c.classId) continue;
       const rec = lookup(c.classId);
-      if (!rec && api && c.classId) warn('Unknown class: ' + c.classId);
+      if (!rec && api) warn('Unknown class: ' + c.classId);
       out.push({ classId: c.classId, name: rec ? rec.name : c.classId, level: Math.max(1, num(c.level, 1)), subclass: c.subclass || '', record: rec });
     }
   } else if (cd.className) {
@@ -187,16 +224,27 @@ export function weaponAbilityMod(rec, mods) {
 }
 
 /** Union of class weapon proficiencies (PR-5). Tokens: 'simple', 'martial',
- *  'martial-finesse-or-light' (the 2024 Rogue subset). */
+ *  'martial-finesse-or-light' (the 2024 Rogue subset).
+ *  Multiclassing grants only a REDUCED starting set: when a NON-origin class
+ *  (index > 0) declares `multiclassProficiencies`, its `weapons` list is used
+ *  INSTEAD of the full starting set (an absent/empty list grants nothing —
+ *  declaring the field means "this is the complete multiclass grant").
+ *  Records without the field keep today's behavior (full starting set), so
+ *  books that don't ship it yet are unaffected. */
 export function classWeaponProf(classes) {
   const p = { simple: false, martial: false, martialFinesseLight: false };
-  for (const c of classes) {
-    for (const tok of ((c.record && c.record.startingProficiencies && c.record.startingProficiencies.weapons) || [])) {
+  classes.forEach((c, i) => {
+    const rec = c.record;
+    if (!rec) return;
+    const src = (i > 0 && rec.multiclassProficiencies)
+      ? rec.multiclassProficiencies.weapons
+      : rec.startingProficiencies && rec.startingProficiencies.weapons;
+    for (const tok of src || []) {
       if (tok === 'simple') p.simple = true;
       else if (tok === 'martial') p.martial = true;
       else if (tok === 'martial-finesse-or-light') { p.simple = true; p.martialFinesseLight = true; }
     }
-  }
+  });
   return p;
 }
 function weaponProficient(rec, p) {
@@ -242,18 +290,26 @@ export function hydrate(decisions, api) {
   const sheet = { abilities: {}, derived: {}, proficiencies: { saves: {}, skills: {}, armor: [], weapons: [], tools: [] }, features: [] };
   const mods = {};
 
-  // Abilities (AB-1/AB-2): final = base + Σ ability grants (background ASI,
-  // half-feats, …), clamped to 20. `baseStats` is preferred; `abilities` is the
-  // back-compat fallback (the flat sheet stores final scores directly). Each
-  // grant is { source, assign: { STR:+2, … } }. Shape: abilities[a] =
-  // {base, score, mod, bonus}.
+  // Abilities (AB-1/AB-2/AB-4): final = base + Σ ability grants (background
+  // ASI, half-feats, Epic Boons …), clamped to a PER-ABILITY cap: 20 by
+  // default, raised by a grant carrying `cap` (2024 Epic Boons: "+1, to a
+  // maximum of 30") — the raise applies only to abilities that grant touches,
+  // with 30 as the hard ceiling (the 2024 absolute maximum). `baseStats` is
+  // preferred; `abilities` is the back-compat fallback (the flat sheet stores
+  // final scores directly). Each grant is { source, assign: { STR:+2, … },
+  // cap? }. Shape: abilities[a] = {base, score, mod, bonus}.
   step(() => {
     const base = cd.baseStats || cd.abilities || {};
     const grants = Array.isArray(cd.abilityGrants) ? cd.abilityGrants : [];
     for (const a of ABILITIES) {
-      let bonus = 0;
-      for (const g of grants) { const v = g && g.assign && g.assign[a]; if (v) bonus += num(v); }
-      const score = Math.min(20, num(base[a], 10) + bonus);   // cap 20 (cap-raisers AB-4 later)
+      let bonus = 0, cap = ABILITY_CAP;
+      for (const g of grants) {
+        const v = g && g.assign && g.assign[a];
+        if (!v) continue;
+        bonus += num(v);
+        if (num(g.cap) > cap) cap = Math.min(ABILITY_CAP_HARD, num(g.cap));
+      }
+      const score = Math.min(cap, num(base[a], 10) + bonus);
       const m = abilityMod(score);
       mods[a] = m;
       sheet.abilities[a] = { base: num(base[a], 10), score, mod: m, bonus };
@@ -451,14 +507,18 @@ export function hydrate(decisions, api) {
     //    caster-level heuristic: ceil(level / fraction) rounded UP, so a 2024 L1
     //    half-caster (Paladin/Ranger gain Spellcasting at L1) still has slots and
     //    odd levels aren't undercounted. (Full casters: ceil(level/1) == level.)
-    //  • MULTIPLE caster classes → the round-DOWN combined-caster-level rule
-    //    (multiclassing is intentionally stingier) indexed into MULTICLASS_SLOTS.
+    //  • MULTIPLE caster classes → the combined-caster-level rule (2024: full
+    //    levels + half levels rounded UP + third levels rounded DOWN, see
+    //    casterContribution) indexed into MULTICLASS_SLOTS.
+    //  • PACT (Warlock) → never leveled slots: even if a book prints the pact
+    //    column as `spellSlots`, reading it here would DOUBLE-COUNT (pactMagic
+    //    already emits the pact pool separately), so pact skips ownSlots.
     const slotDivisor = (t) => (t === 'full' ? 1 : t === 'half' ? 2 : t === 'third' ? 3 : 0);
     let combinedCasterLevel;
     let slots = null;        // set directly when the single class table is used
     if (casters.length === 1) {
       const only = casters[0];
-      const ownSlots = only.prog && Array.isArray(only.prog.spellSlots) ? only.prog.spellSlots : null;
+      const ownSlots = only.type !== 'pact' && only.prog && Array.isArray(only.prog.spellSlots) ? only.prog.spellSlots : null;
       const d = slotDivisor(only.type);
       // casterLevel reported for the UI/derive: the class's effective caster level.
       combinedCasterLevel = d ? Math.ceil(only.level / d) : 0;
@@ -651,13 +711,15 @@ export function hydrate(decisions, api) {
         });
       }
     }
-    // 2. Hit Dice — aggregate by die size; regain half total level on a long rest.
+    // 2. Hit Dice — aggregate by die size. 2024 Long Rest: "You regain all
+    // lost Hit Points and all spent Hit Point Dice" — ALL of them, not the
+    // 2014 half-your-total.
     const byDie = {};
     for (const c of classes) { const d = c.record && c.record.hitDie; if (d) byDie[d] = (byDie[d] || 0) + c.level; }
     for (const die of Object.keys(byDie)) {
       resources.push({
         key: 'hit-dice-' + die, name: 'Hit Dice (' + die + ')', max: byDie[die], kind: 'hitdice', die,
-        recharge: [{ on: 'long', amount: 'halfLevel' }], source: { type: 'class' },
+        recharge: [{ on: 'long', amount: 'full' }], source: { type: 'class' },
       });
     }
     // 3. Spell slots (leveled). Long rest → full.

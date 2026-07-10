@@ -349,6 +349,21 @@ labelled fallback (`fallback`/`_materialized`), not a second source of truth, so
 violate ARCH-1. Cost is a little extra stored JSON per character — cheap, bounded, and the price
 of lossless degradation. **Recommendation: adopt this; drop the discard/plain-text options.**
 
+> **Shipped ledger (2026-07-10).** `materializeInto` (model.js) writes into the FLAT fields
+> (not a separate `fallback` block — the flat sheet IS the fallback) on every Builder edit:
+> the final numbers (`maxHp/ac/initiative/speed/profBonus/level`, HP clamped via the
+> override-aware `effectiveMaxHp`), final ability scores, the save + skill proficiency maps
+> **and the expertise map** (`skillExpertise` — the standalone viewModel doubles PB from it),
+> the joined multiclass class line (`className: "Fighter 5 / Wizard 5"`; single-class keeps
+> the bare name) plus the subclass **name** (ids stay in `classes[]`), and a name-resolved
+> **spell-loadout snapshot** — cantrips + prepared picks + granted spells as
+> `origin:'snapshot'` entries in `s.spells` (each noting its granting class/source),
+> replaced wholesale on every materialize so it never accumulates; engine-mode renders
+> filter snapshots out (the live prep UI owns those spells), the standalone spellbook
+> shows them with a 📌 badge. Inventory already stores names at add time. Still open from
+> the design above: the one-time *"re-run the rules vs keep the manual sheet"* choice when
+> the engine returns (decisions currently just resume silently).
+
 ---
 
 ## 15. Host limitation found while wiring — RESOLVED (HOST-1)

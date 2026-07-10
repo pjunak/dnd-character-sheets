@@ -388,6 +388,58 @@ test('sheets: ASI level renders ability number-pickers, not a single-ability sel
   } finally { clearLocalStorage(); }
 });
 
+test('sheets: the L19 slot offers Epic Boon feats (grouped); earlier ASI levels stay general-only', () => {
+  mockLocalStorage('builder');
+  try {
+    const { rec } = dryRunRegister(register, META, PHB());
+    const act = (n, ...a) => rec.actions.find((x) => x.name === n).fn(...a);
+    const charOf = (id, extra) => ({ id, name: 'Ftr', addonData: { 'dnd55e-sheets': {
+      classes: [{ classId: 'fighter', level: 19, subclass: '' }], abilities: {},
+      featureChoices: { 'asi:fighter:19': 'feat', 'asi:fighter:4': 'feat', ...(extra || {}) } } } });
+    act('builderTab', 'ceb', 'fighter');
+    act('builderToggleLevel', 'ceb', 'fighter:19');
+    const out = renderBody(rec, charOf('ceb'));
+    assert.match(out, /<optgroup label="Epic Boons">/, 'boons are grouped distinctly');
+    assert.match(out, /value="boon-of-fate"/, 'an epic boon is offered at L19');
+    assert.match(out, /value="tough"/, 'general feats remain offered at L19 ("or another feat")');
+    assert.match(out, /Level 19 grants an Epic Boon/, 'the canon hint explains the slot');
+    act('builderTab', 'ceb2', 'fighter');
+    act('builderToggleLevel', 'ceb2', 'fighter:4');
+    const out2 = renderBody(rec, charOf('ceb2'));
+    assert.doesNotMatch(out2, /boon-of-fate/, 'no epic boons before level 19');
+    assert.doesNotMatch(out2, /<optgroup/, 'the pre-19 picker stays a flat general list');
+    // 'ANY' (Boon of Skill) expands to the full six-ability picker.
+    act('builderTab', 'ceb3', 'fighter');
+    act('builderToggleLevel', 'ceb3', 'fighter:19');
+    const out3 = renderBody(rec, charOf('ceb3', { 'asi:fighter:19:feat': 'boon-of-skill' }));
+    assert.match(out3, /asi:fighter:19:featability/, "the 'ANY' boon renders an ability sub-picker");
+    assert.match(out3, /Charisma/, 'all six abilities are eligible under ANY');
+  } finally { clearLocalStorage(); }
+});
+
+test('sheets: a picked Epic Boon applies its +1 through the grant machinery with the 30 cap', () => {
+  const { host, rec } = createMockHost(META, PHB());
+  let stored = {
+    classes: [{ classId: 'fighter', level: 19, subclass: '' }],
+    manualScores: true, baseStats: { STR: 10, DEX: 10, CON: 10, INT: 20, WIS: 10, CHA: 10 },
+    abilities: { INT: 20 },
+    featureChoices: { 'asi:fighter:19': 'feat', 'asi:fighter:19:feat': 'boon-of-fate' },
+  };
+  host.store.patchAddonData = (_c, itemId, fn) => { stored = fn(stored) || stored; return { id: itemId, addonData: { 'dnd55e-sheets': stored } }; };
+  register(host);
+  const act = (name, ...args) => rec.actions.find((a) => a.name === name).fn(...args);
+  act('builderAsiSet', 'c1', 'asi:fighter:19:featability', 'INT', 1, 1, 1);
+  const g = stored.abilityGrants.find((x) => x.id === 'asi:fighter:19:featability');
+  assert.deepEqual(g.assign, { INT: 1 }, 'the boon ability pick lands as an ability grant');
+  assert.equal(g.cap, 30, 'the grant carries the raised Epic Boon cap');
+  assert.equal(stored.abilities.INT, 21, 'materialized INT rises past 20 (engine clamped at the boon cap)');
+  // A single-option boon auto-applies its +1 (with the cap) on pick.
+  act('builderChoose', 'c1', 'asi:fighter:19:feat', 'boon-of-fortitude');
+  const g2 = stored.abilityGrants.find((x) => x.id === 'asi:fighter:19:featability');
+  assert.deepEqual(g2.assign, { CON: 1 }, 'a single-option boon auto-applies');
+  assert.equal(g2.cap, 30, 'auto-applied boon grants carry the cap too');
+});
+
 test('sheets: a multi-pick pool excludes an option already taken in another box (FE-7)', () => {
   mockLocalStorage('builder');
   try {
@@ -562,6 +614,51 @@ test('sheets: Spellbook management — two buttons, copy mode + other-source mod
     assert.match(out, /from the DM/, 'the added spell + its source note show');
     assert.doesNotMatch(out, /Copy a spell into your Wizard spellbook/, 'other mode is NOT the copy modal');
   } finally { clearLocalStorage(); }
+});
+
+test('sheets: scroll-copy offers only scrolls of the picked spell + never consumes a mismatch', () => {
+  const modeLS = (mode, sel) => ({ getItem: (k) => { k = String(k); if (k.startsWith('dse-tab:')) return 'spellbook'; if (k.startsWith('dse-spellmgr:')) return mode; if (k.startsWith('dse-copysel:')) return sel || null; return null; }, setItem() {}, removeItem() {} });
+  const blob = () => ({
+    classes: [{ classId: 'wizard', level: 5, subclass: '' }], abilities: { INT: 16 }, currency: { gp: 500 },
+    inventory: [
+      { id: 'sc1', name: 'Spell Scroll of Fireball', qty: 1, location: 'pack' },
+      { id: 'sc2', name: 'Scroll of Healing Word', qty: 1, location: 'pack' },
+    ],
+  });
+  const char = { id: 'cscr', name: 'Mage', addonData: { 'dnd55e-sheets': blob() } };
+  // Picked spell = Fireball: only the Fireball scroll is offered (ROADMAP 5b).
+  globalThis.localStorage = modeLS('copy', 'fireball');
+  try {
+    const { rec } = dryRunRegister(register, META, PHB());
+    const out = renderBody(rec, char);
+    assert.match(out, /Spell Scroll of Fireball/, 'the scroll holding the picked spell is offered');
+    assert.doesNotMatch(out, /Scroll of Healing Word/, 'a scroll of a DIFFERENT spell is never offered');
+    assert.match(out, /spellCopyPick/, 'changing the picked spell re-filters (wired to spellCopyPick)');
+  } finally { clearLocalStorage(); }
+  // Picked spell = Detect Magic: no matching scroll → disabled message, wrong scrolls hidden.
+  globalThis.localStorage = modeLS('copy', 'detect-magic');
+  try {
+    const { rec } = dryRunRegister(register, META, PHB());
+    const out = renderBody(rec, char);
+    assert.match(out, /No scroll of this spell/, 'a no-match state instead of wrong scrolls');
+    assert.doesNotMatch(out, /Scroll of Healing Word/, 'wrong scrolls stay hidden in the no-match state');
+  } finally { clearLocalStorage(); }
+  // Apply-time guard: a mismatched scroll id is NOT consumed (the copy still lands).
+  const { host, rec } = createMockHost(META, PHB());
+  let stored = blob();
+  host.store.patchAddonData = (_c, itemId, fn) => { stored = fn(stored) || stored; return { id: itemId, addonData: { 'dnd55e-sheets': stored } }; };
+  register(host);
+  const act = (name, ...args) => rec.actions.find((a) => a.name === name).fn(...args);
+  const withForm = (spell, scroll, fn) => {
+    globalThis.document = { getElementById: (id) => (String(id).startsWith('dse-copy-spell') ? { value: spell } : String(id).startsWith('dse-copy-scroll') ? { value: scroll } : { value: '' }) };
+    try { fn(); } finally { delete globalThis.document; }
+  };
+  withForm('fireball', 'sc2', () => act('spellCopy', 'cscr', 'wizard'));
+  assert.ok(stored.spellbook.wizard.includes('fireball'), 'the copy itself lands');
+  assert.equal(stored.currency.gp, 350, '150 gp charged (L3 × 50)');
+  assert.ok(stored.inventory.some((it) => it.id === 'sc2'), 'the MISMATCHED scroll is not consumed');
+  withForm('fireball', 'sc1', () => act('spellCopy', 'cscr', 'wizard'));
+  assert.ok(!stored.inventory.some((it) => it.id === 'sc1'), 'the MATCHING scroll is consumed');
 });
 
 test('sheets: a Warlock shows Pact Magic in the Spellbook summary (B4.3)', () => {
@@ -813,6 +910,48 @@ test('sheets: spellbook prepare/cantrip/copy + drag-drop actions do not throw', 
   } finally { delete globalThis.document; }
 });
 
+test('sheets: prepared picks over the limit stay visible + removable (never hidden)', () => {
+  mockLocalStorage('spellbook');
+  try {
+    const { rec } = dryRunRegister(register, META, PHB());
+    // L1 Wizard (preparedLimit 4) holding 5 picks — e.g. after a level-down.
+    // Every chip must render; the one past the cap gets the warning treatment.
+    const out = renderBody(rec, { id: 'cov', name: 'Mage', addonData: { 'dnd55e-sheets': {
+      className: 'Wizard', level: 1, abilities: {},
+      spellbook: { wizard: ['mage-armor', 'detect-magic', 'fireball', 'bless', 'misty-step'] },
+      preparedSpells: { wizard: ['mage-armor', 'detect-magic', 'fireball', 'bless', 'misty-step'] } } } });
+    assert.match(out, /Over the prepared limit/, 'the over-cap chip carries the warning title');
+    assert.equal((out.match(/"unprepSpell"/g) || []).length >= 5 || (out.match(/unprepSpell/g) || []).length >= 5, true,
+      'all 5 picks keep their ✕ (removable), including those past the cap');
+    assert.match(out, /Prepared 5\/4/, 'the summary counts every pick against the cap');
+  } finally { clearLocalStorage(); }
+});
+
+test('sheets: spellDrop validates class list / level / capacity / book membership (no silent overfill)', () => {
+  const { host, rec } = createMockHost(META, PHB());
+  let stored = { className: 'Wizard', level: 1, abilities: {} };
+  host.store.patchAddonData = (_c, itemId, fn) => { stored = fn(stored) || stored; return { id: itemId, addonData: { 'dnd55e-sheets': stored } }; };
+  register(host);
+  const act = (name, ...args) => rec.actions.find((a) => a.name === name).fn(...args);
+  const drop = (ref, kind) => { act('spellDragStart', { dataTransfer: { setData() {} } }, ref); act('spellDrop', 'c1', 'wizard', kind); };
+  drop('mage-armor', 'prepared');
+  assert.equal((((stored.preparedSpells || {}).wizard) || []).length, 0, 'a spellbook caster cannot prepare a spell not in the book (SP-5)');
+  drop('mage-armor', 'spellbook');
+  assert.deepEqual(stored.spellbook.wizard, ['mage-armor'], 'learning into the book is a valid drop');
+  drop('mage-armor', 'prepared');
+  assert.deepEqual(stored.preparedSpells.wizard, ['mage-armor'], 'once learned, the prepare drop lands');
+  drop('fire-bolt', 'prepared');
+  assert.deepEqual(stored.preparedSpells.wizard, ['mage-armor'], 'a cantrip cannot be dropped into the prepared slots');
+  drop('fireball', 'spellbook');
+  assert.deepEqual(stored.spellbook.wizard, ['mage-armor'], 'an L3 spell above the L1 wizard cap is rejected');
+  drop('bless', 'spellbook');
+  assert.deepEqual(stored.spellbook.wizard, ['mage-armor'], 'a spell outside the class list is rejected');
+  // Capacity: L1 wizard knows 3 cantrips — a 4th valid cantrip drop is rejected.
+  stored.cantrips = { wizard: ['a', 'b', 'c'] };
+  drop('fire-bolt', 'cantrip');
+  assert.equal(stored.cantrips.wizard.length, 3, 'a cantrip drop past the known cap is rejected (no overfill)');
+});
+
 test('sheets: Combat tab shows engine-computed attacks from equipped weapons', () => {
   mockLocalStorage('combat');
   try {
@@ -868,6 +1007,26 @@ test('sheets: rest actions (open / spend hit die / short+long apply / close) do 
   assert.doesNotThrow(() => act('restClose', 'c1'));
 });
 
+test('sheets: overrides.maxHp governs every HP clamp + the rest heal (ARCH-3)', () => {
+  const { host, rec } = createMockHost(META, PHB());
+  // Engine-built L5 Wizard (computed max 32, mirrors tests/rules.mjs) with a DM
+  // override of 50 — the override must be the clamp everywhere the tile shows it.
+  let stored = { className: 'Wizard', level: 5, abilities: { CON: 14 }, hp: 10, maxHp: 32, overrides: { maxHp: 50 } };
+  host.store.patchAddonData = (_c, itemId, fn) => { stored = fn(stored) || stored; return { id: itemId, addonData: { 'dnd55e-sheets': stored } }; };
+  register(host);
+  const act = (name, ...args) => rec.actions.find((a) => a.name === name).fn(...args);
+  act('setField', 'c1', 'hp', '40');
+  assert.equal(stored.hp, 40, 'typed HP above the computed max (32) survives — the override (50) is the clamp');
+  act('hp', 'c1', 20);
+  assert.equal(stored.hp, 50, '± heal clamps at the overridden max, not the computed one');
+  act('restApply', 'c1', 'long');
+  assert.equal(stored.hp, 50, 'long rest heals to the overridden max');
+  act('hp', 'c1', -30);
+  act('clearOverride', 'c1', 'maxHp');
+  act('hp', 'c1', 99);
+  assert.equal(stored.hp, 32, 'override cleared → the computed/materialized max clamps again');
+});
+
 test('sheets: Backpack (folded into the Character Sheet tab) offers pickers + attunement', () => {
   mockLocalStorage('stats');   // backpack now lives at the bottom of the Character Sheet tab
   try {
@@ -905,11 +1064,87 @@ test('sheets: header class + subclass link to the compendium (B2.4)', () => {
   mockLocalStorage('combat');
   try {
     const { rec } = dryRunRegister(register, META, PHB());
+    // The flat `subclass` deliberately carries the ID here — that's what every
+    // blob materialized BEFORE the name fix contains. The header must resolve
+    // it (id-first lookup) and display the record's NAME, never the slug.
     const out = renderBody(rec, { id: 'chd', name: 'Knight', addonData: { 'dnd55e-sheets': {
-      className: 'Fighter', subclass: 'Eldritch Knight', level: 3,
+      className: 'Fighter', subclass: 'eldritch-knight', level: 3,
       classes: [{ classId: 'fighter', level: 3, subclass: 'eldritch-knight' }], abilities: { STR: 15 } } } });
     assert.match(out, /href="#\/compendium\/class:fighter"/, 'header class name links to its compendium page');
     assert.match(out, /href="#\/compendium\/subclass:eldritch-knight"/, 'header subclass name links to its compendium page');
+    assert.match(out, /\(<[^>]*>Eldritch Knight<\/a>\)/, 'a legacy id-valued blob still displays the resolved subclass NAME');
+  } finally { clearLocalStorage(); }
+});
+
+test('sheets: materialize stores the subclass NAME in the flat fallback, id stays in classes[] (DEG-1)', () => {
+  const { host, rec } = createMockHost(META, PHB());
+  let stored = { classes: [{ classId: 'fighter', level: 3, subclass: '' }], abilities: {} };
+  host.store.patchAddonData = (_c, itemId, fn) => { stored = fn(stored) || stored; return { id: itemId, addonData: { 'dnd55e-sheets': stored } }; };
+  register(host);
+  const act = (name, ...args) => rec.actions.find((a) => a.name === name).fn(...args);
+  act('builderSubclassSet', 'c1', 0, 'eldritch-knight');
+  assert.equal(stored.subclass, 'Eldritch Knight', 'the flat fallback holds the resolved NAME (readable standalone)');
+  assert.equal(stored.classes[0].subclass, 'eldritch-knight', 'the decision model keeps the id');
+  assert.equal(stored.className, 'Fighter', 'class fallback stays the resolved name');
+});
+
+test('sheets: materialize writes the DEG-1 spell snapshot + the joined multiclass class line', () => {
+  const { host, rec } = createMockHost(META, PHB());
+  let stored = {
+    classes: [{ classId: 'wizard', level: 5, subclass: '' }, { classId: 'fighter', level: 2, subclass: '' }],
+    abilities: {}, cantrips: { wizard: ['fire-bolt'] }, preparedSpells: { wizard: ['mage-armor'] },
+    spells: [{ id: 'x1', name: 'My Homebrew Bolt', level: 2, origin: 'other' }],
+  };
+  host.store.patchAddonData = (_c, itemId, fn) => { stored = fn(stored) || stored; return { id: itemId, addonData: { 'dnd55e-sheets': stored } }; };
+  register(host);
+  const act = (name, ...args) => rec.actions.find((a) => a.name === name).fn(...args);
+  act('builderAbility', 'c1', 'STR', '15');   // any Builder edit re-materializes
+  assert.equal(stored.className, 'Wizard 5 / Fighter 2', 'the WHOLE multiclass build survives in the flat class line');
+  assert.equal(stored.level, 7, 'flat level = total level');
+  const snaps = stored.spells.filter((sp) => sp.origin === 'snapshot');
+  assert.deepEqual(snaps.map((sp) => sp.name).sort(), ['Fire Bolt', 'Mage Armor'], 'the loadout snapshot is NAME-resolved (readable without the book)');
+  assert.ok(snaps.every((sp) => sp.sourceNote === 'Wizard'), 'snapshot entries carry the granting class as their note');
+  assert.ok(stored.spells.some((sp) => sp.name === 'My Homebrew Bolt'), 'user-added entries survive the snapshot rewrite');
+  act('builderAbility', 'c1', 'STR', '14');
+  assert.equal(stored.spells.filter((sp) => sp.origin === 'snapshot').length, 2, 'snapshots are replaced wholesale, never accumulate');
+});
+
+test('sheets: materialize writes skill EXPERTISE; standalone totals keep the doubled PB (DEG-1)', () => {
+  const { host, rec } = createMockHost(META, PHB());
+  let stored = {
+    classes: [{ classId: 'rogue', level: 1, subclass: '' }],
+    abilities: { DEX: 14 },
+    featureChoices: { 'skills:rogue#0': 'stealth', 'rogue-expertise-1#0': 'stealth' },
+  };
+  host.store.patchAddonData = (_c, itemId, fn) => { stored = fn(stored) || stored; return { id: itemId, addonData: { 'dnd55e-sheets': stored } }; };
+  register(host);
+  const act = (name, ...args) => rec.actions.find((a) => a.name === name).fn(...args);
+  act('builderAbility', 'c1', 'STR', '10');   // any Builder edit re-materializes
+  assert.equal(stored.skillProf.stealth, true, 'proficiency materialized');
+  assert.equal(stored.skillExpertise.stealth, true, 'EXPERTISE materialized into the flat fallback');
+  // The standalone viewModel applies it: DEX +2 + 2×PB(2) = +6 — the same total
+  // the engine computed, not silently PB lower.
+  const { viewModel } = makeEngine({ num, abilityMod, host: {}, NS: 'x', ABILITIES, SKILLS, sheetOf: () => ({}) });
+  const vm = viewModel({ profBonus: 2, abilities: { DEX: 14 }, saveProf: {}, skillProf: { stealth: true }, skillExpertise: { stealth: true } }, null);
+  assert.equal(vm.skill('stealth', 'DEX').total, 6, 'standalone stealth total keeps the doubled PB');
+  assert.equal(vm.skill('stealth', 'DEX').exp, true, 'reported as expertise (the mastery ring renders)');
+  assert.equal(vm.skill('perception', 'WIS').total, 0, 'non-proficient skills unaffected');
+});
+
+test('sheets: the spell snapshot renders standalone (book removed) and hides in engine mode', () => {
+  const blob = { className: 'Wizard', level: 5, abilities: {},
+    spells: [{ id: 'snap:mage-armor', ref: 'mage-armor', name: 'Mage Armor', level: 1, school: 'Abjuration', prepared: true, origin: 'snapshot', sourceNote: 'Wizard' }] };
+  mockLocalStorage('spellbook');
+  try {
+    // Standalone (engine off): the snapshot IS the visible spellbook — DEG-1.
+    const { rec } = dryRunRegister(register, META);
+    const out = renderBody(rec, { id: 'cs1', name: 'Mage', addonData: { 'dnd55e-sheets': blob } });
+    assert.match(out, /Mage Armor/, 'the snapshot spell stays visible after engine/book removal');
+    assert.match(out, /📌/, 'marked as the engine-loadout snapshot');
+    // Engine mode: the live prep UI owns the loadout — the Extra group hides snapshots.
+    const { rec: rec2 } = dryRunRegister(register, META, PHB());
+    const out2 = renderBody(rec2, { id: 'cs2', name: 'Mage', addonData: { 'dnd55e-sheets': blob } });
+    assert.doesNotMatch(out2, /📌/, 'engine mode never shows snapshot entries as Extra spells');
   } finally { clearLocalStorage(); }
 });
 
@@ -919,6 +1154,26 @@ test('sheets: Backpack add-item + attune actions do not throw', () => {
   assert.doesNotThrow(() => act('invAddRef', 'c1', 'weapon', 'longsword'));
   assert.doesNotThrow(() => act('invAddRef', 'c1', 'armor', 'leather'));
   assert.doesNotThrow(() => act('invAttune', 'c1', 'someid'));
+});
+
+test('sheets: invAddRef stores the item KIND; free-text armor resolves by name (ROADMAP 7)', () => {
+  const { host, rec } = createMockHost(META, PHB());
+  let stored = {};
+  host.store.patchAddonData = (_c, itemId, fn) => { stored = fn(stored) || stored; return { id: itemId, addonData: { 'dnd55e-sheets': stored } }; };
+  register(host);
+  const act = (name, ...args) => rec.actions.find((a) => a.name === name).fn(...args);
+  act('invAddRef', 'c1', 'armor', 'leather');
+  assert.equal(stored.inventory[0].kind, 'armor', 'the kind rides beside the ref — no cross-kind probing needed');
+  assert.equal(stored.inventory[0].ref, 'leather');
+  // A hand-typed armor NAME now links too (the by-name fallback probes both
+  // kinds) — links show on the read view, so render as an anonymous viewer.
+  mockLocalStorage('stats');
+  try {
+    const { rec: rec2 } = dryRunRegister(register, META, { ...PHB(), isAnonymous: true });
+    const out = renderBody(rec2, { id: 'cit', name: 'Knight', addonData: { 'dnd55e-sheets': {
+      className: 'Fighter', inventory: [{ id: 'i1', name: 'Leather Armor', qty: 1, location: 'pack' }] } } });
+    assert.match(out, /href="#\/compendium\/armor:leather"/, 'free-text armor resolves to its compendium page');
+  } finally { clearLocalStorage(); }
 });
 
 test('sheets: resource tracker actions mutate without throwing', () => {

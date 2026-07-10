@@ -55,7 +55,7 @@ import { t } from './i18n.js';
 import {
   ABILITIES, COINS, LOCATIONS, SKILLS,
   num, abilityMod, signed, titleize, clampHp, blank, makeHelpers, compendiumHref, firstPara, featureRecordFor,
-  POINT_BUY, pointCost, pointsSpent,
+  POINT_BUY, pointCost, pointsSpent, hitDieAvg, scrollCopyCost, ASI_RULES, featAsiFrom, featAbilityCap,
 } from './helpers.js';
 import { makeEngine } from './model.js';
 import { makeUI } from './ui.js';
@@ -79,7 +79,7 @@ export default function register(host) {
     host, t, NS,
     ABILITIES, COINS, LOCATIONS, SKILLS,
     num, abilityMod, signed, titleize, clampHp, blank, uid, sheetOf, compendiumHref, firstPara, featureRecordFor,
-    POINT_BUY, pointCost, pointsSpent,
+    POINT_BUY, pointCost, pointsSpent, hitDieAvg, scrollCopyCost, ASI_RULES, featAsiFrom, featAbilityCap,
   };
   // Builder UI state, per character id: { tab: 'character'|<classId>, open: '<classId>:<level>'|null }.
   // In-memory (shared via ctx → the Builder panel reads it; actions below mutate it) — deliberately
@@ -102,7 +102,7 @@ export default function register(host) {
     ...makePrintPanel(ctx),
   };
 
-  const { getRules, safeHydrate, decisionsOf, mutate } = ctx.engine;
+  const { getRules, safeHydrate, decisionsOf, mutate, effectiveMaxHp } = ctx.engine;
   const { vitalsBar, panelOverview, panelSheet, panelSpellbook, panelBackpack, panelBuilder, restModal, spellSwapModal, spellbookMgrModal, buildPrintHtml, importModal } = ctx.panels;
 
   // ── Tab model ────────────────────────────────────────────────────
@@ -275,8 +275,11 @@ export default function register(host) {
       if (field === 'level') n = Math.max(1, n);
       else if (field === 'maxHp' || field === 'tempHp' || field === 'speed') n = Math.max(0, n);
       s[field] = n;
-      if (field === 'maxHp') s.hp = clampHp(num(s.hp, 0), n);
-      else if (field === 'hp') s.hp = clampHp(n, num(s.maxHp, 0));
+      // HP clamps respect the OVERRIDDEN max when one is stored (ARCH-3) — the
+      // same value the HP tile displays — never a raw flat/computed field the
+      // display already disagrees with.
+      if (field === 'maxHp') s.hp = clampHp(num(s.hp, 0), effectiveMaxHp(s));
+      else if (field === 'hp') s.hp = clampHp(n, effectiveMaxHp(s));
       return s;
     });
   });
@@ -303,7 +306,7 @@ export default function register(host) {
       const absorbed = Math.min(temp, -d);
       if (absorbed > 0) { s.tempHp = temp - absorbed; d += absorbed; }
     }
-    const maxHp = num(s.maxHp, 0);
+    const maxHp = effectiveMaxHp(s);   // override-aware max (ARCH-3)
     s.hp = clampHp(num(s.hp, maxHp) + d, maxHp);
     return s;
   };
@@ -358,8 +361,12 @@ export default function register(host) {
   // The flag VALUE is the mode: 'copy' (scroll → book, spellbook casters) or
   // 'other' (a spell from a feat / item / homebrew). Two buttons, one modal.
   const spellMgrKey = (cid) => 'dse-spellmgr:' + cid;
+  // The copy form's CURRENT spell pick, persisted so the scroll list can be
+  // filtered to scrolls of THAT spell across the change→re-render cycle.
+  const copySelKey = (cid) => 'dse-copysel:' + cid;
   host.registerAction('spellMgrOpen', (cid, mode) => { try { localStorage.setItem(spellMgrKey(cid), mode || 'other'); } catch (_) {} host.ui.rerender(); });
-  host.registerAction('spellMgrClose', (cid) => { try { localStorage.removeItem(spellMgrKey(cid)); } catch (_) {} host.ui.rerender(); });
+  host.registerAction('spellMgrClose', (cid) => { try { localStorage.removeItem(spellMgrKey(cid)); localStorage.removeItem(copySelKey(cid)); } catch (_) {} host.ui.rerender(); });
+  host.registerAction('spellCopyPick', (cid, ref) => { try { localStorage.setItem(copySelKey(cid), String(ref || '')); } catch (_) {} host.ui.rerender(); });
   // Copy a spell into the book: read the picked spell (+ optional scroll) at click
   // time, charge 50 gp × spell level (2024 copying cost), consume the scroll if one
   // was chosen, and add the ref to s.spellbook[classId] (→ preparable via B4.2b).
@@ -367,15 +374,24 @@ export default function register(host) {
     let ref = '', scrollId = '';
     try { const sp = document.getElementById('dse-copy-spell-' + cid); const sc = document.getElementById('dse-copy-scroll-' + cid); ref = sp && sp.value; scrollId = sc && sc.value; } catch (_) {}
     if (!ref) { host.ui.rerender(); return; }
+    try { localStorage.removeItem(copySelKey(cid)); } catch (_) {}
     const engine = getRules();
     const rec = engine && engine.getItem ? engine.getItem('spell', ref) : null;
-    const cost = 50 * Math.max(1, num(rec && rec.level, 1));
+    const cost = scrollCopyCost(rec && rec.level);   // 50 gp × spell level (rules/engine.js)
     mutate(cid, (s) => {
       addRef(s, 'spellbook', classId, ref);
       s.currency = { ...s.currency, gp: Math.max(0, num(s.currency.gp, 0) - cost) };
-      if (scrollId) s.inventory = s.inventory
-        .map((it) => (it.id === scrollId ? { ...it, qty: num(it.qty, 1) - 1 } : it))
-        .filter((it) => !(it.id === scrollId && num(it.qty, 0) <= 0));
+      // Consume the scroll ONLY when it actually holds the copied spell (the
+      // form already filters to matching scrolls; this guards a stale/forged
+      // selection so a "Scroll of Healing Word" can never be burned copying
+      // Fireball — the copy itself still happens, just without consumption).
+      if (scrollId) {
+        const it = (s.inventory || []).find((x) => x && x.id === scrollId);
+        const matches = it && rec && String(it.name || '').toLowerCase().includes(String(rec.name || '').toLowerCase());
+        if (matches) s.inventory = s.inventory
+          .map((x) => (x.id === scrollId ? { ...x, qty: num(x.qty, 1) - 1 } : x))
+          .filter((x) => !(x.id === scrollId && num(x.qty, 0) <= 0));
+      }
       return s;
     });
   });
@@ -428,7 +444,40 @@ export default function register(host) {
     const ref = _dragRef; _dragRef = null;
     if (!ref) return;
     const bag = kind === 'cantrip' ? 'cantrips' : kind === 'spellbook' ? 'spellbook' : 'preparedSpells';
-    mutate(cid, (s) => { addRef(s, bag, classId, ref); return s; });
+    const engine = getRules();
+    mutate(cid, (s) => {
+      // A drop can arrive from ANY group's pool card (unlike the click actions,
+      // whose pools are pre-filtered), so validate it the same way those pools
+      // are built: right class list, right level band for the target group,
+      // capacity respected — an invalid drop is rejected, never silently
+      // overfills (the over-limit chips exist only for legacy/level-down data).
+      if (engine) {
+        const comp = hydrateFor(s);
+        const p = comp && comp.spellcasting && (comp.spellcasting.perClass || []).find((x) => x.classId === String(classId));
+        const rec = engine.getItem ? engine.getItem('spell', ref) : null;
+        const inClassList = engine.listSpells ? (engine.listSpells({ class: String(classId) }) || []).some((sp) => sp.id === ref) : true;
+        if (!p || !rec || !inClassList) return s;
+        const lvl = num(rec.level, 0);
+        const chosen = (s[bag] && s[bag][classId]) || [];
+        if (chosen.includes(ref)) return s;
+        if (kind === 'cantrip') {
+          if (lvl !== 0 || chosen.length >= num(p.cantripsKnown, 0)) return s;
+        } else {
+          if (lvl < 1 || lvl > Math.max(1, num(p.maxSpellLevel, 9))) return s;
+          if (kind === 'spellbook') {
+            if (p.prepares !== 'spellbook') return s;
+          } else {
+            if (chosen.length >= num(p.preparedLimit, 0)) return s;
+            const alwaysSet = new Set((comp.spellcasting.granted || []).filter((g) => g.alwaysPrepared).map((g) => g.ref));
+            if (alwaysSet.has(ref)) return s;
+            // A spellbook caster prepares only from the LEARNED book (SP-5).
+            if (p.prepares === 'spellbook' && !((s.spellbook && s.spellbook[classId]) || []).includes(ref)) return s;
+          }
+        }
+      }
+      addRef(s, bag, classId, ref);
+      return s;
+    });
   });
   // Choose-grant picks (Magic Initiate / Fey Touched / lineage cantrip).
   host.registerAction('grantPick', (cid, key, ref) => {
@@ -485,7 +534,9 @@ export default function register(host) {
     const engine = getRules();
     const rec = engine && engine.getItem ? engine.getItem(kind, ref) : null;
     const location = kind === 'armor' ? 'equipped' : 'ready';
-    mutate(cid, (s) => { s.inventory = s.inventory.concat([{ id: uid('item'), ref: String(ref), name: rec ? rec.name : String(ref), qty: 1, location, attuned: false }]); return s; });
+    // Store the compendium KIND we already know beside the ref, so lookups
+    // never have to probe kinds (weapon→armor) and can't cross-kind misfire.
+    mutate(cid, (s) => { s.inventory = s.inventory.concat([{ id: uid('item'), ref: String(ref), kind: String(kind), name: rec ? rec.name : String(ref), qty: 1, location, attuned: false }]); return s; });
   });
   host.registerAction('invAttune', (cid, iid) => {
     mutate(cid, (s) => { s.inventory = s.inventory.map((it) => (it.id === iid ? { ...it, attuned: !it.attuned } : it)); return s; });
@@ -538,7 +589,6 @@ export default function register(host) {
   //    engine recharge rules for the triggered rest(s); a long rest also restores
   //    HP to full, clears temp HP, and regains half total level in hit dice. ──
   const restKey = (cid) => 'dse-rest:' + cid;
-  const DIE_AVG = { d6: 4, d8: 5, d10: 6, d12: 7 };
   const hydrateFor = (s) => { const engine = getRules(); const r = engine ? safeHydrate(engine, decisionsOf(s, engine)) : null; return r && r.sheet; };
   const resCur = (s, r) => (Object.prototype.hasOwnProperty.call(s.resourceUses || {}, r.key) ? num(s.resourceUses[r.key], r.max) : num(r.max, 0));
 
@@ -554,8 +604,8 @@ export default function register(host) {
       if (cur <= 0) return s;
       s.resourceUses = { ...(s.resourceUses || {}), [dieKey]: cur - 1 };
       const con = comp.abilities && comp.abilities.CON ? num(comp.abilities.CON.mod, 0) : 0;
-      const heal = Math.max(1, (DIE_AVG[r.die] || 5) + con);
-      const maxHp = comp.derived ? num(comp.derived.maxHp, 0) : num(s.maxHp, 0);
+      const heal = Math.max(1, hitDieAvg(r.die) + con);
+      const maxHp = effectiveMaxHp(s, comp);   // override-aware max (ARCH-3)
       s.hp = maxHp > 0 ? Math.min(maxHp, num(s.hp, 0) + heal) : num(s.hp, 0) + heal;
       return s;
     });
@@ -568,7 +618,7 @@ export default function register(host) {
       const comp = hydrateFor(s);
       const resources = (comp && comp.resources) || [];
       const totalLevel = comp ? num(comp.totalLevel, num(s.level, 1)) : num(s.level, 1);
-      const maxHp = comp && comp.derived ? num(comp.derived.maxHp, num(s.maxHp, 0)) : num(s.maxHp, 0);
+      const maxHp = effectiveMaxHp(s, comp);   // override-aware max (ARCH-3)
       const abilMod = (a) => (comp && comp.abilities && comp.abilities[a] ? num(comp.abilities[a].mod, 0) : 0);
       const uses = { ...(s.resourceUses || {}) };
       const regain = (r, amount) => {
@@ -593,7 +643,9 @@ export default function register(host) {
   const { builderMutate, reconcile, builderModel } = ctx.engine;
   const parseAssign = (str) => { const a = {}; String(str || '').split(',').forEach((p) => { const [k, v] = p.split(':'); if (k && v) a[k.trim()] = num(v); }); return a; };
   const removeGrant = (s, id) => { s.abilityGrants = (s.abilityGrants || []).filter((g) => g.id !== id); };
-  const upsertGrant = (s, id, source, assign) => { removeGrant(s, id); if (assign && Object.keys(assign).length) s.abilityGrants = (s.abilityGrants || []).concat([{ id, source, assign }]); };
+  // `cap` (optional) is a RAISED per-ability max the grant carries (AB-4 —
+  // 2024 Epic Boons: 30); absent → the engine's default 20 applies.
+  const upsertGrant = (s, id, source, assign, cap) => { removeGrant(s, id); if (assign && Object.keys(assign).length) s.abilityGrants = (s.abilityGrants || []).concat([{ id, source, assign, ...(cap ? { cap: num(cap) } : {}) }]); };
 
   host.registerAction('builderField', (cid, field, value) => {
     builderMutate(cid, (s) => {
@@ -778,9 +830,16 @@ export default function register(host) {
   host.registerAction('builderAsiSet', (cid, key, ability, value, budget, perMax) => {
     if (ABILITIES.indexOf(String(ability)) < 0) return;
     let left = null;   // remaining ASI budget, captured post-clamp
-    builderMutate(cid, (s) => {
+    builderMutate(cid, (s, engine) => {
       const k = String(key);
       const type = k === 'bgasi' ? 'background' : /:featability$/.test(k) ? 'feat' : 'asi';
+      // A half-feat/boon ability pick inherits its feat's raised cap (Epic
+      // Boons: max 30) so the engine can clamp past 20 for exactly this grant.
+      let cap = null;
+      if (type === 'feat' && engine) {
+        const featId = s.featureChoices[k.replace(/:featability$/, ':feat')];
+        cap = featAbilityCap(featId ? engine.getItem('feat', String(featId)) : null);
+      }
       const g = (s.abilityGrants || []).find((x) => x.id === k);
       const assign = { ...((g && g.assign) || {}) };
       const pmax = Math.max(1, num(perMax, 2));
@@ -790,7 +849,7 @@ export default function register(host) {
       v = Math.min(v, bud - others);                        // clamp to the remaining budget
       if (v <= 0) delete assign[ability]; else assign[ability] = v;
       left = bud - others - Math.max(0, v);
-      upsertGrant(s, k, { type }, assign);
+      upsertGrant(s, k, { type }, assign, cap);
     });
     // Same persistent-live-region announcement as point-buy (builderAbilitySet).
     if (left != null && typeof host.ui.announce === 'function') host.ui.announce(t('builder.pointsLeft', { n: left }));
@@ -801,7 +860,9 @@ export default function register(host) {
       if (value === '' || value == null) delete s.featureChoices[k];
       else s.featureChoices[k] = String(value);
       if (/:featability$/.test(k)) {
-        upsertGrant(s, k, { type: 'feat' }, value ? { [String(value)]: 1 } : null);
+        const featId = s.featureChoices[k.replace(/:featability$/, ':feat')];
+        const cap = engine ? featAbilityCap(featId ? engine.getItem('feat', String(featId)) : null) : null;
+        upsertGrant(s, k, { type: 'feat' }, value ? { [String(value)]: 1 } : null, cap);
       } else if (/:ability$/.test(k)) {
         upsertGrant(s, k, { type: 'asi' }, value ? { [String(value)]: 2 } : null);
       } else if (/:feat$/.test(k)) {
@@ -809,8 +870,11 @@ export default function register(host) {
         removeGrant(s, abilKey); delete s.featureChoices[abilKey];
         const feat = value && engine ? engine.getItem('feat', String(value)) : null;
         const asi = feat && feat.grants && feat.grants.abilityScoreIncrease;
-        if (asi && Array.isArray(asi.from) && asi.from.length === 1) {
-          upsertGrant(s, abilKey, { type: 'feat' }, { [asi.from[0]]: num(asi.amount, 1) });
+        // 'ANY' (Boon of Skill) expands to all six — never auto-applied; a
+        // genuine single-option bump applies with its feat's cap (boons: 30).
+        const from = featAsiFrom(asi);
+        if (asi && from.length === 1) {
+          upsertGrant(s, abilKey, { type: 'feat' }, { [from[0]]: num(asi.amount, 1) }, featAbilityCap(feat));
         }
       } else if (/^asi:[^:]+:\d+$/.test(k)) {
         if (value !== 'asi') { removeGrant(s, k + ':ability'); delete s.featureChoices[k + ':ability']; }

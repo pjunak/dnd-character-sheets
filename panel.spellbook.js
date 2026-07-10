@@ -11,28 +11,10 @@
 // ═══════════════════════════════════════════════════════════════
 
 export function makeSpellbookPanel(ctx) {
-  const { host, t, num, signed, titleize, firstPara, ui } = ctx;
+  const { host, t, num, signed, titleize, scrollCopyCost, ui } = ctx;
   const { esc, dataAction, dataOn } = host.h;
-  const { section, card, subLabel, spellChip, numField, entityRef } = ui;
+  const { section, card, subLabel, spellChip, spellInfo, spellLegend, numField, entityRef } = ui;
 
-  // Resolve a spell ref → {name, level, school}. A ref the compendium can't
-  // resolve gets a neutral placeholder (not a slug-titleized id) — titleize is
-  // reserved for known-clean keys (class/source ids), never raw refs.
-  function spellInfo(engine, ref) {
-    const r = engine && engine.getItem ? engine.getItem('spell', ref) : null;
-    return r ? { name: r.name, level: num(r.level, 0), school: r.school || '', ritual: !!r.ritual }
-             : { name: t('misc.unknown'), level: null, school: '', ritual: false };
-  }
-  // Hover legend for a spell ref: title + compact description + level/school
-  // terms. null when the ref doesn't resolve (→ the name renders without a card).
-  function spellLegend(engine, ref) {
-    const r = engine && engine.getItem ? engine.getItem('spell', ref) : null;
-    if (!r) return null;
-    const lvl = num(r.level, 0);
-    const terms = [{ label: t('spellbook.level'), value: lvl === 0 ? t('spellbook.cantrip') : lvl }];
-    if (r.school) terms.push({ label: t('spellbook.school'), value: r.school });
-    return { title: r.name, desc: r.text ? firstPara(r.text) : '', terms, aria: r.name };
-  }
   function lvlLabel(level) { return level === 0 ? t('spellbook.cantrip') : level == null ? '' : t('spellbook.lvlN', { n: level }); }
 
   function panelSpellbook(c, s, edit, comp, engine) {
@@ -103,8 +85,10 @@ export function makeSpellbookPanel(ctx) {
 
     if (num(p.cantripsKnown) > 0) {
       const chosen = (s.cantrips && s.cantrips[cid]) || [];
-      const avail = pool.filter((sp) => num(sp.level) === 0 && !chosen.includes(sp.id));
-      parts.push(spellSlotGroup(c, cid, 'cantrip', t('spell.cantripsN', { n: chosen.length, known: num(p.cantripsKnown) }), chosen, num(p.cantripsKnown), avail, engine, edit, null, false));
+      // Granted cantrips (lineage/feat) are excluded from the learnable pool and
+      // colour an already-picked duplicate, same as the prepared group (SP-3).
+      const avail = pool.filter((sp) => num(sp.level) === 0 && !chosen.includes(sp.id) && !alwaysSet.has(sp.id));
+      parts.push(spellSlotGroup(c, cid, 'cantrip', t('spell.cantripsN', { n: chosen.length, known: num(p.cantripsKnown) }), chosen, num(p.cantripsKnown), avail, engine, edit, alwaysSet, false));
     }
     // The spellbook itself — the learned pool prepared spells are drawn from.
     if (bookMode) {
@@ -136,17 +120,22 @@ export function makeSpellbookPanel(ctx) {
   function spellSlotGroup(c, cid, kind, label, chosen, limit, avail, engine, edit, alwaysSet, canRitual) {
     const removeAct = kind === 'cantrip' ? 'unlearnCantrip' : 'unprepSpell';
     const slots = [];
-    for (let i = 0; i < limit; i++) {
+    // Render EVERY chosen entry, not just the first `limit`: a level-down (or
+    // legacy over-full data) can leave more picks than slots, and a hidden chip
+    // could never be unprepared. Chips past the cap keep their ✕ and get the
+    // warning treatment instead of silently vanishing.
+    for (let i = 0; i < Math.max(limit, chosen.length); i++) {
       const ref = chosen[i];
       if (ref) {
         const info = spellInfo(engine, ref);
         const dup = alwaysSet && alwaysSet.has(ref);
+        const over = i >= limit;   // beyond the prepared/known cap
         // Ritual affordance: mark a prepared spell that has the Ritual tag when the
         // class can ritual-cast (⟳), so you know it can be cast without a slot.
         const rit = canRitual && info.ritual;
-        const sub = lvlLabel(info.level) + (rit ? ' ⟳' : '');
-        slots.push(spellChip(info.name, sub, { danger: dup, title: dup ? t('spell.forcedDup') : (rit ? t('spell.ritual') : ''), link: { kind: 'spell', id: ref }, legend: spellLegend(engine, ref), removeAttr: edit ? dataAction(host.action(removeAct), c.id, cid, ref) : null }));
-      } else if (edit) {
+        const sub = lvlLabel(info.level) + (rit ? ' ⟳' : '') + (over ? ' ⚠' : '');
+        slots.push(spellChip(info.name, sub, { danger: dup || over, title: over ? t('spell.overLimit') : dup ? t('spell.forcedDup') : (rit ? t('spell.ritual') : ''), link: { kind: 'spell', id: ref }, legend: spellLegend(engine, ref), removeAttr: edit ? dataAction(host.action(removeAct), c.id, cid, ref) : null }));
+      } else if (edit && i < limit) {
         slots.push(`<div style="border:1px dashed rgba(var(--gold-muted),.35);border-radius:var(--radius-sm);min-width:8.5rem;min-height:2.4rem;display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:var(--text-xs)">${esc(t('spell.emptySlot'))}</div>`);
       }
     }
@@ -239,7 +228,9 @@ export function makeSpellbookPanel(ctx) {
   // only) and ✎ add-from-another-source (any class).
   function extraSection(c, s, edit, granted, comp) {
     const gnames = new Set((granted || []).map((g) => String(g.name || '').toLowerCase()));
-    const spells = (s.spells || []).slice().sort((a, b) => num(a.level) - num(b.level) || String(a.name || '').localeCompare(String(b.name || '')));
+    // DEG-1 snapshot entries are the ENGINE loadout's fallback copy — the live
+    // prep UI above already shows those spells, so the Extra group hides them.
+    const spells = (s.spells || []).filter((sp) => sp.origin !== 'snapshot').slice().sort((a, b) => num(a.level) - num(b.level) || String(a.name || '').localeCompare(String(b.name || '')));
     if (!spells.length && !edit) return '';
     const cards = spells.length
       ? `<div style="display:flex;flex-wrap:wrap;gap:var(--space-2);align-items:flex-start">${spells.map((sp) => spellCard(c, sp, edit, gnames.has(String(sp.name || '').toLowerCase()))).join('')}</div>`
@@ -256,7 +247,8 @@ export function makeSpellbookPanel(ctx) {
     const lvl = num(sp.level, 0);
     const lvlTxt = lvl === 0 ? t('spellbook.cantrip') : t('spellbook.lvlN', { n: lvl });
     const originBadge = sp.origin === 'copied' ? `<span title="${esc(t('spell.copied'))}">📖</span> `
-      : (sp.origin === 'other' || sp.origin === 'custom') ? `<span title="${esc(t('spell.fromOther'))}">✎</span> ` : '';
+      : (sp.origin === 'other' || sp.origin === 'custom') ? `<span title="${esc(t('spell.fromOther'))}">✎</span> `
+      : sp.origin === 'snapshot' ? `<span title="${esc(t('spell.snapshot'))}">📌</span> ` : '';
     // A spell from another source that a spellcaster can cast with slots (B4.2c/SP-10).
     const slotTag = sp.castWithSlots ? `<span title="${esc(t('spell.castWithSlotsHint'))}" style="color:var(--accent-gold);font-size:var(--text-xs)">◈ ${esc(t('spell.castWithSlots'))}</span>` : '';
     const noteLine = sp.sourceNote ? `<div style="color:var(--text-muted);font-size:var(--text-xs);font-style:italic">${esc(sp.sourceNote)}</div>` : '';
@@ -339,14 +331,31 @@ export function makeSpellbookPanel(ctx) {
       const maxLvl = num(bookP.maxSpellLevel, 9);
       const pool = engine.listSpells ? (engine.listSpells({ class: bid }) || []) : [];
       const copyable = pool.filter((sp) => num(sp.level) >= 1 && num(sp.level) <= Math.max(1, maxLvl) && !book.has(sp.id));
-      const scrolls = (s.inventory || []).filter((it) => /scroll/i.test(String(it.name || '')));
+      // The spell pick persists across the change→re-render cycle (spellCopyPick
+      // stores it), so the scroll list can be filtered to scrolls of THAT spell.
+      let selRef = '';
+      try { selRef = localStorage.getItem('dse-copysel:' + cid) || ''; } catch (_) {}
+      const selected = copyable.some((sp) => sp.id === selRef) ? selRef : ((copyable[0] && copyable[0].id) || '');
+      const selSpell = copyable.find((sp) => sp.id === selected) || null;
+      // Only scrolls that actually HOLD the picked spell may be consumed
+      // (ROADMAP 5b): prefer the canonical "Scroll of <spell>" form, fall back
+      // to any scroll whose name contains the spell's name. Wrong scrolls are
+      // never offered; with no match, copying without a scroll stays possible.
+      const allScrolls = (s.inventory || []).filter((it) => /scroll/i.test(String(it.name || '')));
+      const reEsc = (x) => String(x).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const ofRe = selSpell ? new RegExp('scroll\\s+of\\s+' + reEsc(selSpell.name), 'i') : null;
+      let scrolls = ofRe ? allScrolls.filter((it) => ofRe.test(String(it.name || ''))) : [];
+      if (!scrolls.length && selSpell) scrolls = allScrolls.filter((it) => String(it.name || '').toLowerCase().includes(String(selSpell.name).toLowerCase()));
+      const scrollSelect = scrolls.length
+        ? `<select id="dse-copy-scroll-${esc(cid)}" class="edit-input"><option value="">${esc(t('spell.noScroll'))}</option>${scrolls.map((it) => `<option value="${esc(it.id)}">${esc(it.name)}</option>`).join('')}</select>`
+        : `<select id="dse-copy-scroll-${esc(cid)}" class="edit-input" disabled><option value="">${esc(allScrolls.length ? t('spell.noMatchingScroll') : t('spell.noScroll'))}</option></select>`;
       const gp = num((s.currency || {}).gp, 0);
       const form = copyable.length
         ? `<div style="display:flex;flex-direction:column;gap:var(--space-2)">
              <label style="display:flex;flex-direction:column;gap:2px;font-size:var(--text-sm);color:var(--text-muted)">${esc(t('spell.copyPick'))}
-               <select id="dse-copy-spell-${esc(cid)}" class="edit-input">${copyable.map((sp) => `<option value="${esc(sp.id)}">${esc(sp.name)} — ${num(sp.level) * 50} ${esc(t('spell.gp'))}</option>`).join('')}</select></label>
+               <select id="dse-copy-spell-${esc(cid)}" class="edit-input"${dataOn('change', host.action('spellCopyPick'), cid, '$value')}>${copyable.map((sp) => `<option value="${esc(sp.id)}"${sp.id === selected ? ' selected' : ''}>${esc(sp.name)} — ${scrollCopyCost(sp.level)} ${esc(t('spell.gp'))}</option>`).join('')}</select></label>
              <label style="display:flex;flex-direction:column;gap:2px;font-size:var(--text-sm);color:var(--text-muted)">${esc(t('spell.copyScroll'))}
-               <select id="dse-copy-scroll-${esc(cid)}" class="edit-input"><option value="">${esc(t('spell.noScroll'))}</option>${scrolls.map((it) => `<option value="${esc(it.id)}">${esc(it.name)}</option>`).join('')}</select></label>
+               ${scrollSelect}</label>
              <div style="font-size:var(--text-xs);color:var(--text-muted)">${esc(t('spell.copyCost', { gp }))}</div>
              <div style="display:flex;justify-content:flex-end"><button class="edit-save-btn"${dataAction(host.action('spellCopy'), cid, bid)}>📜 ${esc(t('spell.copyConfirm'))}</button></div>
            </div>`
@@ -373,7 +382,7 @@ export function makeSpellbookPanel(ctx) {
         ${isCaster ? `<label style="display:flex;align-items:center;gap:var(--space-2);font-size:var(--text-sm);color:var(--text-light)"><input type="checkbox" id="dse-custom-slots-${esc(cid)}" checked> ${esc(t('spell.castWithSlots'))}</label>` : ''}
         <div style="display:flex;justify-content:flex-end"><button class="edit-save-btn"${dataAction(host.action('spellCustomAdd'), cid)}>＋ ${esc(t('spell.customConfirm'))}</button></div>
       </div>`;
-      const rows = (s.spells || []).map((sp) => {
+      const rows = (s.spells || []).filter((sp) => sp.origin !== 'snapshot').map((sp) => {
         const badge = sp.origin === 'copied' ? '📖' : (sp.origin === 'other' || sp.origin === 'custom') ? '✎' : '•';
         const slot = sp.castWithSlots ? ` <span style="color:var(--accent-gold)" title="${esc(t('spell.castWithSlotsHint'))}">◈</span>` : '';
         const note = sp.sourceNote ? ` <span style="font-style:italic">— ${esc(sp.sourceNote)}</span>` : '';

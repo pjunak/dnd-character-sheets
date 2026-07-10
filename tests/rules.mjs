@@ -111,6 +111,19 @@ test('rules: Warlock Pact Magic — short-rest slots, own level cap, no slot com
   assert.equal(res.recharge[0].on, 'short', 'pact slots recharge on a SHORT rest');
 });
 
+test('rules: a pact class printing pact slots as spellSlots never double-counts them (B4.3 guard)', () => {
+  // Some books print the Warlock's pact-slot column as `progression[].spellSlots`.
+  // Reading that as LEVELED Spellcasting slots would double-count (pactMagic
+  // already emits the pact pool), so the single-caster ownSlots path skips pact.
+  const fake = makeFake();
+  fake.getItem('class', 'warlock').progression[0].spellSlots = [1];
+  const { rec } = dryRunRegister(register, META, { deps: { 'dnd55e-compendium': fake } });
+  const sheet = rec.provided.hydrate({ classes: [{ classId: 'warlock', level: 1 }] }).sheet;
+  assert.deepEqual(sheet.spellcasting.slots, [], 'printed pact slots do NOT become leveled Spellcasting slots');
+  assert.deepEqual(sheet.spellcasting.perClass[0].pact, { slots: 1, level: 1 }, 'the pact pool is still emitted once');
+  assert.equal((sheet.resources || []).filter((r) => r.kind === 'slot').length, 1, 'exactly ONE slot resource (the pact pool)');
+});
+
 test('rules: provides a versioned rules API', () => {
   const { ok, rec, error } = dryRunRegister(register, META);
   assert.ok(ok, error);
@@ -208,6 +221,24 @@ test('rules: applies ability grants over base scores, clamped to 20', () => {
   assert.equal(sheet.abilities.CON.score, 14, '13 + 1');
   const capped = rec.provided.hydrate({ baseStats: { STR: 19 }, abilityGrants: [{ assign: { STR: 4 } }], className: 'Barbarian' }).sheet;
   assert.equal(capped.abilities.STR.score, 20, 'clamped at 20');           // AB-2
+});
+
+test('rules: a cap-raising grant (Epic Boon) pushes past 20 — hard ceiling 30, per-ability (AB-4)', () => {
+  const { rec } = withFake();
+  // 2024 Epic Boon: "+1, to a maximum of 30" — the grant carries cap:30.
+  const boon = rec.provided.hydrate({ baseStats: { INT: 20 }, className: 'Wizard',
+    abilityGrants: [{ id: 'asi:wizard:19:featability', source: { type: 'feat' }, assign: { INT: 1 }, cap: 30 }] }).sheet;
+  assert.equal(boon.abilities.INT.score, 21, 'the boon +1 lands above 20');
+  assert.equal(boon.abilities.INT.mod, 5, 'INT 21 → +5');
+  const plain = rec.provided.hydrate({ baseStats: { INT: 20 }, className: 'Wizard',
+    abilityGrants: [{ id: 'x', source: { type: 'feat' }, assign: { INT: 1 } }] }).sheet;
+  assert.equal(plain.abilities.INT.score, 20, 'a cap-less grant still clamps at 20');
+  const wild = rec.provided.hydrate({ baseStats: { STR: 28 }, className: 'Wizard',
+    abilityGrants: [{ id: 'x', assign: { STR: 5 }, cap: 99 }] }).sheet;
+  assert.equal(wild.abilities.STR.score, 30, 'nothing exceeds 30 (the 2024 absolute max)');
+  const scoped = rec.provided.hydrate({ baseStats: { INT: 20, WIS: 22 }, className: 'Wizard',
+    abilityGrants: [{ id: 'x', assign: { INT: 1 }, cap: 30 }] }).sheet;
+  assert.equal(scoped.abilities.WIS.score, 20, 'the raised cap applies ONLY to abilities that grant touches');
 });
 
 test('rules: computes weapon attacks for equipped weapons (EQ-3/4/5)', () => {
@@ -316,12 +347,18 @@ test('rules: single-class caster falls back to the heuristic when content lacks 
   assert.ok(r5.spellcasting.slots.length > 0, 'heuristic never yields empty slots for an odd-level half-caster');
 });
 
-test('rules: multiclassing two half-casters double-rounds (stingier than single)', () => {
+test('rules: multiclassing half-casters round UP per class (2024 change)', () => {
   const { rec } = withFake();
+  // 2024 PHB Multiclassing, Spell Slots: "Half your levels (round up) in the
+  // Paladin and Ranger classes" — 2014 rounded down; 2024 half-casters cast
+  // from level 1, so each odd-level half-caster contributes the extra level.
   const mc = rec.provided.hydrate({ classes: [{ classId: 'paladin', level: 5 }, { classId: 'ranger', level: 5 }] }).sheet;
-  assert.deepEqual(mc.spellcasting.slots, [4, 3], 'Pal5/Ran5 → floor(5/2)+floor(5/2)=4 combined → [4,3]');  // MC-2
+  assert.deepEqual(mc.spellcasting.slots, [4, 3, 3], 'Pal5/Ran5 → ceil(5/2)+ceil(5/2)=6 combined → [4,3,3]');  // MC-2
   const solo = rec.provided.hydrate({ classes: [{ classId: 'paladin', level: 10 }] }).sheet;
-  assert.deepEqual(solo.spellcasting.slots, [4, 3, 2], 'but single Paladin 10 keeps its own table');
+  assert.deepEqual(solo.spellcasting.slots, [4, 3, 2], 'single Paladin 10 keeps its own table');
+  // Even-level halves are unchanged by the rounding direction.
+  const even = rec.provided.hydrate({ classes: [{ classId: 'paladin', level: 4 }, { classId: 'ranger', level: 4 }] }).sheet;
+  assert.deepEqual(even.spellcasting.slots, [4, 3], 'Pal4/Ran4 → 2+2=4 combined → [4,3]');
 });
 
 test('rules: choose-grants resolve picks + expose pending choices (SP-10)', () => {
@@ -374,6 +411,23 @@ test('rules: first character level gets the max hit die; later levels average (H
   assert.equal(wizardFirst, 12, 'Wizard first (max d6=6) + Fighter (avg d10=6) = 12');
 });
 
+test('rules: an empty class-roster row (no class picked yet) contributes nothing', () => {
+  const { rec } = withFake();
+  // The Builder's "＋ Add class" placeholder ({classId:''}) must not add a
+  // phantom level (avg-d8 HP, PB scaling) while the player hasn't picked yet.
+  const cd = { abilities: { CON: 14 }, classes: [{ classId: 'wizard', level: 3, subclass: '' }] };
+  const base = rec.provided.hydrate(cd).sheet;
+  const withBlank = rec.provided.hydrate({ ...cd, classes: cd.classes.concat([{ classId: '', level: 1, subclass: '' }]) }).sheet;
+  assert.equal(withBlank.totalLevel, base.totalLevel, 'total level unchanged by a placeholder row');
+  assert.equal(withBlank.derived.maxHp, base.derived.maxHp, 'max HP unchanged by a placeholder row');
+  assert.equal(withBlank.derived.proficiencyBonus, base.derived.proficiencyBonus, 'PB unchanged by a placeholder row');
+  assert.equal(withBlank.classes.length, 1, 'the resolved class list skips the placeholder');
+  // All-placeholder roster (a brand-new engine-mode character): nothing computed yet.
+  const blank = rec.provided.hydrate({ classes: [{ classId: '', level: 1, subclass: '' }] }).sheet;
+  assert.equal(blank.derived.maxHp, 0, 'no class picked → no phantom HP');
+  assert.equal(blank.totalLevel, 1, 'total level falls back to the flat level (min 1)');
+});
+
 test('rules: AC never drops below the 10+DEX unarmored floor for a malformed armor record (AC-1)', () => {
   const { rec } = withFake();
   const abilities = { DEX: 14, CON: 10 };  // +2 DEX → floor 12
@@ -405,6 +459,24 @@ test('rules: martial-finesse-or-light proficiency covers only finesse/light mart
   // greatsword (STR +1, not proficient) is just +1.
   assert.equal(rapier.attackBonus, 5, 'DEX +3 + PB +2');
   assert.equal(greatsword.attackBonus, 1, 'STR +1, no PB (not proficient)');
+});
+
+test('rules: a non-origin class grants only its multiclassProficiencies weapons when declared (PR-5)', () => {
+  // The compendium doesn't ship the field yet — records WITHOUT it must keep
+  // the full starting set (the guard is inert), records WITH it reduce.
+  const inv = [{ id: 'w1', ref: 'longsword', location: 'equipped' }];
+  const abilities = { STR: 14, INT: 16 };
+  const plain = makeFake();
+  const { rec: r1 } = dryRunRegister(register, META, { deps: { 'dnd55e-compendium': plain } });
+  const noField = r1.provided.hydrate({ abilities, classes: [{ classId: 'wizard', level: 3 }, { classId: 'fighter', level: 1 }], inventory: inv }).sheet;
+  assert.equal(noField.weapons[0].proficient, true, 'no multiclassProficiencies field → full starting set (inert fallback)');
+  const reduced = makeFake();
+  reduced.getItem('class', 'fighter').multiclassProficiencies = { weapons: ['simple'] };
+  const { rec: r2 } = dryRunRegister(register, META, { deps: { 'dnd55e-compendium': reduced } });
+  const mc = r2.provided.hydrate({ abilities, classes: [{ classId: 'wizard', level: 3 }, { classId: 'fighter', level: 1 }], inventory: inv }).sheet;
+  assert.equal(mc.weapons[0].proficient, false, 'a MULTICLASSED-INTO fighter grants only its reduced set (no martial)');
+  const origin = r2.provided.hydrate({ abilities, classes: [{ classId: 'fighter', level: 1 }, { classId: 'wizard', level: 3 }], inventory: inv }).sheet;
+  assert.equal(origin.weapons[0].proficient, true, 'the ORIGIN fighter still grants its full starting set');
 });
 
 test('rules: saveProf manually unions extra saving-throw proficiencies (PR-4)', () => {
@@ -450,10 +522,10 @@ test('rules: emits pools + hit dice + slots + charges with structured recharge (
   assert.deepEqual(R(s1, 'insp').recharge, [{ on: 'short', amount: 1 }, { on: 'long', amount: 'full' }], 'array recharge kept');
   assert.equal(R(s1, 'pool').max, 5, 'per-level 5×1');
   assert.equal(R(s1, 'insp').max, 3, 'abilityMod CHA 16 → +3');
-  // Hit dice — aggregated by die, half-level long-rest regain.
+  // Hit dice — aggregated by die; 2024 long rest regains ALL spent dice.
   const hd = R(s1, 'hit-dice-d12');
   assert.ok(hd && hd.kind === 'hitdice' && hd.max === 1 && hd.die === 'd12', 'L1: 1× d12 hit die');
-  assert.deepEqual(hd.recharge, [{ on: 'long', amount: 'halfLevel' }]);
+  assert.deepEqual(hd.recharge, [{ on: 'long', amount: 'full' }]);
   const s6 = rec.provided.hydrate({ abilities: { CHA: 8 }, className: 'Barbarian', level: 6 }).sheet;
   assert.equal(R(s6, 'rage').max, 4, 'L6 Rage = 4');
   assert.equal(R(s6, 'hit-dice-d12').max, 6, 'L6 → 6 hit dice');

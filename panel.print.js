@@ -102,7 +102,7 @@ export function makePrintPanel(ctx) {
       const granted = (sc.granted || []).map((g) => esc(g.name)).join(', ');
       spells = `${per}${slots ? `<div><span class="k">Slots:</span> ${esc(slots)}</div>` : ''}${granted ? `<div><span class="k">Always prepared:</span> ${granted}</div>` : ''}`;
     }
-    const extraSpells = (s.spells || []).map((sp) => esc(sp.name || '')).filter(Boolean).join(', ');
+    const extraSpells = (s.spells || []).filter((sp) => !(comp && sp.origin === 'snapshot')).map((sp) => esc(sp.name || '')).filter(Boolean).join(', ');
 
     // Equipment + currency.
     const inv = (s.inventory || []).map((it) => `<li>${esc(it.name || '')}${num(it.qty, 1) !== 1 ? ' &times;' + num(it.qty, 1) : ''}${it.location ? ' <span class="k">' + esc(it.location) + '</span>' : ''}</li>`).join('');

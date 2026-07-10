@@ -191,14 +191,27 @@ export function makeEngine(ctx) {
     if (!r || !r.sheet) return;
     const cs = r.sheet, d = cs.derived || {};
     const m = builderModel(s, engine);
-    const first = m.classes[0] || {};
+    // First REAL class (placeholder "＋ Add class" rows carry no classId).
+    const named = m.classes.filter((cl) => cl && cl.classId);
+    const first = named[0] || m.classes[0] || {};
     const firstRec = first.classId ? engine.getItem('class', first.classId) : null;
-    s.className = firstRec ? firstRec.name : s.className;
-    s.subclass = first.subclass || '';
+    const classNameOf = (cl) => { const rec2 = engine.getItem ? engine.getItem('class', cl.classId) : null; return (rec2 && rec2.name) || cl.classId; };
+    // DEG-1: a MULTICLASS build materializes the whole joined line ("Fighter 5 /
+    // Wizard 5") — collapsing to the first class name alone lost the rest of
+    // the build when the engine was removed. Single-class keeps the bare name
+    // (the header template already prints the level).
+    s.className = named.length > 1
+      ? named.map((cl) => classNameOf(cl) + ' ' + Math.max(1, num(cl.level, 1))).join(' / ')
+      : (firstRec ? firstRec.name : s.className);
+    // The flat fallback stores resolved NAMES, not ids — `classes[]` keeps the
+    // id; a slug like "life-domain" in the header (and after engine removal)
+    // was the bug this closes.
+    const subRec = first.subclass && engine.getItem ? engine.getItem('subclass', first.subclass) : null;
+    s.subclass = subRec ? subRec.name : (first.subclass || '');
     s.level = num(cs.totalLevel, num(s.level, 1));
     for (const a of ABILITIES) if (cs.abilities && cs.abilities[a]) s.abilities[a] = num(cs.abilities[a].score, num(s.abilities[a], 10));
     s.maxHp = num(d.maxHp, s.maxHp);
-    s.hp = ctx.clampHp(num(s.hp, 0), s.maxHp);
+    s.hp = ctx.clampHp(num(s.hp, 0), effectiveMaxHp(s, cs));   // override-aware (ARCH-3)
     s.ac = num(d.armorClass, s.ac);
     s.initiative = num(d.initiative, s.initiative);
     s.speed = num(d.speed, s.speed);
@@ -207,6 +220,40 @@ export function makeEngine(ctx) {
     for (const a of ABILITIES) s.saveProf[a] = !!(cs.saves && cs.saves[a] && cs.saves[a].proficient);
     s.skillProf = {};
     for (const id of Object.keys(cs.skills || {})) s.skillProf[id] = !!cs.skills[id].proficient;
+    // DEG-1: expertise is part of the computed truth — materialize the flat map
+    // the standalone viewModel doubles PB from, so removing the engine keeps
+    // the same skill totals (they used to silently drop by PB).
+    s.skillExpertise = {};
+    for (const id of Object.keys(cs.skills || {})) if (cs.skills[id].expertise) s.skillExpertise[id] = true;
+    // DEG-1 (§14): a NAME-RESOLVED snapshot of the whole spell loadout —
+    // cantrips + prepared picks + granted/always-prepared — written into
+    // s.spells with origin:'snapshot'. The standalone spellbook renders
+    // s.spells, so removing the engine/book keeps the loadout visible as plain
+    // editable entries (the raw refs in preparedSpells/cantrips would no longer
+    // resolve). Replaced WHOLESALE on every materialize so stale snapshots
+    // never accumulate; the user's own manual/copied/other entries are kept;
+    // engine-mode renders filter snapshots out (the live prep UI owns them).
+    const nice = (x) => (typeof ctx.titleize === 'function' ? ctx.titleize(x) : String(x || ''));
+    const snap = [];
+    const seen = new Set();
+    const addSnap = (ref, note) => {
+      if (!ref || seen.has(ref)) return;
+      seen.add(ref);
+      const rec2 = engine.getItem ? engine.getItem('spell', ref) : null;
+      snap.push({
+        id: 'snap:' + ref, ref, origin: 'snapshot', prepared: true, sourceNote: note || '',
+        name: rec2 ? rec2.name : String(ref),
+        level: rec2 ? num(rec2.level, 0) : 0,
+        school: (rec2 && rec2.school) || '',
+      });
+    };
+    for (const p of (cs.spellcasting && cs.spellcasting.perClass) || []) {
+      const cn = ((engine.getItem && engine.getItem('class', p.classId)) || {}).name || nice(p.classId);
+      for (const ref of (s.cantrips && s.cantrips[p.classId]) || []) addSnap(ref, cn);
+      for (const ref of (s.preparedSpells && s.preparedSpells[p.classId]) || []) addSnap(ref, cn);
+    }
+    for (const g of (cs.spellcasting && cs.spellcasting.granted) || []) addSnap(g.ref, nice((g.source && (g.source.id || g.source.type)) || ''));
+    s.spells = (Array.isArray(s.spells) ? s.spells : []).filter((sp) => sp && sp.origin !== 'snapshot').concat(snap);
   };
 
   // ── The rules api — the built-in engine bound to live book data ──
@@ -230,6 +277,22 @@ export function makeEngine(ctx) {
   };
   const rulesApi = makeRulesApi(_probeData);
   const getRules = () => (_probeData() ? rulesApi : null);
+
+  /** ARCH-3 for max HP — the ONE value every HP clamp/heal respects (setField /
+   *  applyHp / the Rest wizard / materialize all route through this, so a clamp
+   *  can never disagree with the max the HP tile displays):
+   *    • engine mode: a stored override BEATS the computed max ("the DM said
+   *      so"), else the computed max (`comp`, when the caller already
+   *      hydrated), else the flat s.maxHp — which DEG-1 materialization keeps
+   *      equal to the computed max, so the cheap flat read stays correct.
+   *    • standalone: the flat hand-filled s.maxHp (the viewModel ignores
+   *      dormant overrides there, so the clamp does too). */
+  const effectiveMaxHp = (s, comp) => {
+    const ov = (s && s.overrides) || {};
+    if (getRules() && ov.maxHp != null) return num(ov.maxHp, 0);
+    if (comp && comp.derived && comp.derived.maxHp != null) return num(comp.derived.maxHp, 0);
+    return num(s && s.maxHp, 0);
+  };
 
   /** One value source for the read tabs: computed values from the engine when
    *  present (ARCH-1 — derive, don't store), else the hand-filled flat fields. A
@@ -272,7 +335,14 @@ export function makeEngine(ctx) {
       init: num(s.initiative, 0),
       speed: num(s.speed, 30),
       save: (a) => { const prof = !!s.saveProf[a]; return { prof, exp: false, total: abilityMod(s.abilities[a]) + (prof ? flatPb : 0) }; },
-      skill: (id, ab) => { const prof = !!s.skillProf[id]; return { prof, exp: false, total: abilityMod(s.abilities[ab]) + (prof ? flatPb : 0) }; },
+      // Expertise survives engine removal (DEG-1): the materialized flat
+      // skillExpertise map doubles PB exactly as the engine did — only where
+      // the skill is also proficient (PR-2).
+      skill: (id, ab) => {
+        const prof = !!s.skillProf[id];
+        const exp = prof && !!(s.skillExpertise && s.skillExpertise[id]);
+        return { prof, exp, total: abilityMod(s.abilities[ab]) + (exp ? 2 : prof ? 1 : 0) * flatPb };
+      },
     };
     // Same one-formula route in standalone: 10 + Perception skill total.
     vm.passivePerc = 10 + vm.skill('perception', 'WIS').total;
@@ -306,5 +376,6 @@ export function makeEngine(ctx) {
   return {
     builderModel, collectChoices, resolveChoices, reconcile, decisionsOf,
     safeHydrate, materializeInto, getRules, rulesApi, viewModel, mutate, builderMutate,
+    effectiveMaxHp,
   };
 }

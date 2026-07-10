@@ -11,8 +11,8 @@
 //  dependency; everything else is a free pure function exported directly.
 // ═══════════════════════════════════════════════════════════════
 
-import { ABILITIES, SKILL_ABILITY, num, abilityMod, POINT_BUY, pointCost, pointsSpent, clampHp } from './rules/engine.js';
-export { ABILITIES, num, abilityMod, POINT_BUY, pointCost, pointsSpent, clampHp };
+import { ABILITIES, SKILL_ABILITY, num, abilityMod, POINT_BUY, pointCost, pointsSpent, clampHp, hitDieAvg, scrollCopyCost, ASI_RULES, featAsiFrom, featAbilityCap } from './rules/engine.js';
+export { ABILITIES, num, abilityMod, POINT_BUY, pointCost, pointsSpent, clampHp, hitDieAvg, scrollCopyCost, ASI_RULES, featAsiFrom, featAbilityCap };
 
 // ── Domain constants (UI-side) ───────────────────────────────────
 export const COINS = ['pp', 'gp', 'ep', 'sp', 'cp'];
@@ -77,6 +77,7 @@ export const blank = () => ({
   abilities: { STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10 },
   maxHp: 0, hp: 0, tempHp: 0, ac: 10, initiative: 0, speed: 30, profBonus: 2,
   saveProf: {}, skillProf: {},
+  skillExpertise: {},  // { <skillId>: true } — DEG-1 fallback for expertise (materialized from the engine; the standalone viewModel doubles PB from it). In engine mode the Builder's expertise picks override it via resolveChoices.
   spells: [],      // manual/extra + copied spell entries [{id,name,level,school,origin}] (SP-1/SP-15)
   preparedSpells: {}, // engine mode: { <classId>: [spellRef,…] } prepared picks (SP-2)
   spellbook: {},      // engine mode: { <classId>: [spellRef,…] } the Wizard's LEARNED pool — prepared draws from this subset, not the whole class list (SP-5)
@@ -126,6 +127,7 @@ export function makeHelpers(host) {
       abilities: { ...b.abilities, ...(s.abilities || {}) },
       saveProf:  { ...(s.saveProf || {}) },
       skillProf: { ...(s.skillProf || {}) },
+      skillExpertise: { ...(s.skillExpertise || {}) },
       currency:  { ...b.currency, ...(s.currency || {}) },
       overrides: { ...(s.overrides || {}) },
       spells:    Array.isArray(s.spells) ? s.spells : [],

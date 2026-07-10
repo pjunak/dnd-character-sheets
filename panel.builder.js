@@ -11,7 +11,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 export function makeBuilderPanel(ctx) {
-  const { host, t, ABILITIES, SKILLS, num, signed, abilityMod, titleize, firstPara, featureRecordFor, ui, engine: E, POINT_BUY, pointCost, pointsSpent, builderState } = ctx;
+  const { host, t, ABILITIES, SKILLS, num, signed, abilityMod, titleize, firstPara, featureRecordFor, ui, engine: E, POINT_BUY, pointCost, pointsSpent, ASI_RULES, featAsiFrom, builderState } = ctx;
   const { esc, dataAction, dataOn } = host.h;
   const { section, miniStat, selectBox, fieldRow, choiceBlock, warningsBlock, numField, entityRef } = ui;
   const { builderModel, collectChoices } = E;
@@ -323,7 +323,7 @@ export function makeBuilderPanel(ctx) {
     if (!(bgRec && Array.isArray(bgRec.abilityScores) && bgRec.abilityScores.length)) return '';
     // 2024 background ASI: distribute 3 points across the background's abilities
     // (+2/+1 or +1/+1/+1), max +2 to any one — a number picker, not a split-select (B5).
-    const pickers = abilityBudgetPickers(c, 'bgasi', bgRec.abilityScores, assignOf(s, 'bgasi'), 3, 2, ro);
+    const pickers = abilityBudgetPickers(c, 'bgasi', bgRec.abilityScores, assignOf(s, 'bgasi'), ASI_RULES.bgBudget, ASI_RULES.bgPerMax, ro);
     const blocks = [choiceBlock(t('builder.bgAsi', { bg: bgRec.name }), pickers)];
     if (bgRec.originFeat) blocks.push(`<div style="color:var(--text-muted);font-size:var(--text-xs)">${esc(t('builder.originFeat', { feat: titleize(bgRec.originFeat) }))}</div>`);
     return section(t('builder.choices'), `<div style="display:flex;flex-direction:column;gap:var(--space-2)">${blocks.join('')}</div>`);
@@ -437,8 +437,13 @@ export function makeBuilderPanel(ctx) {
   }
 
   // ASI-vs-Feat at an ability-score-improvement level (descriptor kind asiMode).
+  // Level 19 is the 2024 EPIC BOON slot: "you gain an Epic Boon feat or another
+  // feat of your choice for which you qualify" — an ASI is itself a feat, so
+  // the mode select stays; the feat picker adds the epicBoon category (grouped)
+  // on top of the general feats. Earlier ASI levels stay general-only.
   function renderAsiLevel(c, s, ch, engine, ro) {
     const key = ch.id;   // 'asi:<classId>:<level>'
+    const isEpic = num(ch.level) === 19;
     const mode = s.featureChoices[key] || '';
     const modeOpts = [
       { value: 'asi', label: t('builder.asiOption') },
@@ -448,11 +453,15 @@ export function makeBuilderPanel(ctx) {
     let detail = '';
     if (mode === 'asi') {
       // 2024 ASI: distribute 2 points (+2 to one, or +1/+1 to two) — number pickers (B5).
-      detail = `<div style="margin-top:var(--space-2)">${abilityBudgetPickers(c, key + ':ability', ABILITIES, assignOf(s, key + ':ability'), 2, 2, ro)}</div>`;
+      detail = `<div style="margin-top:var(--space-2)">${abilityBudgetPickers(c, key + ':ability', ABILITIES, assignOf(s, key + ':ability'), ASI_RULES.budget, ASI_RULES.perMax, ro)}</div>`;
     } else if (mode === 'feat') {
       const featKey = key + ':feat';
       const chosenFeat = s.featureChoices[featKey] || '';
-      const featOpts = engine.listFeats({ category: 'general' }).map((f) => ({ value: f.id, label: f.name }));
+      const generalOpts = engine.listFeats({ category: 'general' }).map((f) => ({ value: f.id, label: f.name }));
+      const boonOpts = isEpic ? engine.listFeats({ category: 'epicBoon' }).map((f) => ({ value: f.id, label: f.name })) : [];
+      const featOpts = boonOpts.length
+        ? [{ label: t('builder.epicBoons'), options: boonOpts }, { label: t('builder.generalFeats'), options: generalOpts }]
+        : generalOpts;
       const featRec = chosenFeat ? engine.getItem('feat', chosenFeat) : null;
       // Chosen feat → a ↗ link to its compendium page (+ summary hover) beside the
       // picker, since a <select><option> can't itself be a link (B2.2, folded in).
@@ -462,13 +471,15 @@ export function makeBuilderPanel(ctx) {
       // single-option bump is auto-applied in builderChoose; granted spells +
       // the applied bump flow through the engine via abilityGrants.
       const asi = featRec && featRec.grants && featRec.grants.abilityScoreIncrease;
-      if (asi && Array.isArray(asi.from) && asi.from.length > 1) {
-        // Half-feat with a choice of ability → distribute its amount (usually +1) — pickers (B5).
+      // 'ANY' (Boon of Skill) expands to all six abilities for the picker.
+      const from = featAsiFrom(asi);
+      if (asi && from.length > 1) {
+        // Half-feat/boon with a choice of ability → distribute its amount (usually +1) — pickers (B5).
         const amt = Math.max(1, num(asi.amount, 1));
-        detail += `<div style="margin-top:var(--space-2)">${abilityBudgetPickers(c, key + ':featability', asi.from, assignOf(s, key + ':featability'), amt, amt, ro)}</div>`;
+        detail += `<div style="margin-top:var(--space-2)">${abilityBudgetPickers(c, key + ':featability', from, assignOf(s, key + ':featability'), amt, amt, ro)}</div>`;
       }
     }
-    return choiceBlock(label, `${selectBox(mode, modeOpts, dataOn('change', host.action('builderChoose'), c.id, key, '$value'), t('builder.choose'), ro)}${detail}`);
+    return choiceBlock(label, `${selectBox(mode, modeOpts, dataOn('change', host.action('builderChoose'), c.id, key, '$value'), t('builder.choose'), ro)}${detail}`, isEpic ? t('builder.epicBoonHint') : undefined);
   }
 
   return { panelBuilder };

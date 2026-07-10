@@ -63,7 +63,10 @@ export function makeFake() {
       rogue: {
         id: 'rogue', name: 'Rogue', kind: 'class', hitDie: 'd8', savingThrows: ['DEX', 'INT'],
         spellcasting: null, weaponMastery: { count: 2 }, acFormulas: [],
-        startingProficiencies: { weapons: ['martial-finesse-or-light'] },
+        // Skills choose + an L1 expertise choice — mirrors the real 2024 rogue
+        // (exercises the expertise → DEG-1 materialization path).
+        startingProficiencies: { weapons: ['martial-finesse-or-light'], skills: { choose: 4, from: ['acrobatics', 'athletics', 'deception', 'insight', 'intimidation', 'investigation', 'perception', 'persuasion', 'sleightOfHand', 'stealth'] } },
+        grants: { choices: [{ id: 'rogue-expertise-1', source: 'level:1', type: 'expertise', count: 2, prompt: 'Expertise (choose 2 skills)' }] },
         // Mirrors the real table's tricky rows: 'Expertise' repeats at two levels
         // (one record per occurrence — BOTH grant), and L3 mixes a recordless
         // generic label ('Rogue Subclass') with a real feature record.
@@ -95,7 +98,7 @@ export function makeFake() {
     subclass: {
       'eldritch-knight': {
         id: 'eldritch-knight', name: 'Eldritch Knight', kind: 'subclass', classId: 'fighter',
-        spellcasting: { ability: 'INT', type: 'third', prepares: 'list' },
+        spellcasting: { ability: 'INT', type: 'third', prepares: 'list', startLevel: 3 },
         features: [{ level: 3, id: 'war-bond', name: 'War Bond' }],
         progression: [{ level: 3, cantripsKnown: 2, preparedSpells: 3, spellSlots: [2] }],
         classResources: [{ key: 'ek-pool', name: 'EK Pool', recharge: [{ on: 'short', amount: 'full' }], progression: [{ level: 3, max: 2 }, { level: 7, max: 3 }] }],
@@ -110,6 +113,14 @@ export function makeFake() {
       tough: { id: 'tough', name: 'Tough', category: 'general', grants: { hpPerLevel: 2 } },
       // Single-option half-feat → the Builder auto-applies its +1 (smoke.mjs).
       'great-weapon-master': { id: 'great-weapon-master', name: 'Great Weapon Master', category: 'general', grants: { abilityScoreIncrease: { choose: 1, amount: 1, from: ['STR'] } } },
+      // 2024 Epic Boons (category epicBoon — the L19 slot). Real shapes: the
+      // ability increase is the standard grant; "to a maximum of 30" is prose
+      // (the cap rides on the category). One multi-option `from`, one
+      // single-option (exercises the auto-apply path), one 'ANY' token
+      // (Boon of Skill — "one ability score of your choice").
+      'boon-of-fate': { id: 'boon-of-fate', name: 'Boon of Fate', category: 'epicBoon', grants: { abilityScoreIncrease: { choose: 1, amount: 1, from: ['INT', 'WIS', 'CHA'] } } },
+      'boon-of-fortitude': { id: 'boon-of-fortitude', name: 'Boon of Fortitude', category: 'epicBoon', grants: { abilityScoreIncrease: { choose: 1, amount: 1, from: ['CON'] } } },
+      'boon-of-skill': { id: 'boon-of-skill', name: 'Boon of Skill', category: 'epicBoon', grants: { abilityScoreIncrease: { choose: 1, amount: 1, from: ['ANY'] } } },
       'magic-initiate': { id: 'magic-initiate', name: 'Magic Initiate', category: 'origin', grants: { spells: [
         { id: 'mi-cantrips', choose: 2, spellLevel: 0, from: { class: ['wizard'] }, alwaysPrepared: true },
         { id: 'mi-spell', choose: 1, spellLevel: 1, from: { class: ['wizard'] }, alwaysPrepared: true, free: '1/long' },

@@ -21,7 +21,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 export function makeUI(ctx) {
-  const { host, t, num, signed, compendiumHref, titleize } = ctx;
+  const { host, t, num, signed, compendiumHref, titleize, firstPara } = ctx;
   const { esc } = host.h;
 
   // ── Scoped stylesheet (tokens only) ──────────────────────────────
@@ -251,11 +251,17 @@ export function makeUI(ctx) {
       <div style="${S.miniStatValue}">${esc(String(value))}</div></div>`;
   }
 
-  // Native <select>. Read-only renders the chosen label as text.
+  // Native <select>. Read-only renders the chosen label as text. An options
+  // entry may be a GROUP — { label, options: [...] } → an <optgroup> (the Epic
+  // Boons vs general feats split); flat entries behave exactly as before.
   function selectBox(value, options, actionAttr, placeholder, ro) {
-    if (ro) { const sel = options.find((o) => String(o.value) === String(value)); return `<span style="color:var(--text-parchment)">${esc(sel ? sel.label : (value || t('misc.notSet')))}</span>`; }
+    const flat = options.flatMap((o) => (o && Array.isArray(o.options) ? o.options : [o]));
+    if (ro) { const sel = flat.find((o) => String(o.value) === String(value)); return `<span style="color:var(--text-parchment)">${esc(sel ? sel.label : (value || t('misc.notSet')))}</span>`; }
+    const opt = (o) => `<option value="${esc(o.value)}"${String(o.value) === String(value) ? ' selected' : ''}>${esc(o.label)}</option>`;
     const opts = (placeholder != null ? `<option value="">${esc(placeholder)}</option>` : '')
-      + options.map((o) => `<option value="${esc(o.value)}"${String(o.value) === String(value) ? ' selected' : ''}>${esc(o.label)}</option>`).join('');
+      + options.map((o) => (o && Array.isArray(o.options)
+          ? `<optgroup label="${esc(o.label)}">${o.options.map(opt).join('')}</optgroup>`
+          : opt(o))).join('');
     return `<select class="edit-input" ${actionAttr}>${opts}</select>`;
   }
   function fieldRow(label, control) {
@@ -266,6 +272,25 @@ export function makeUI(ctx) {
     return `<div style="background:var(--bg-raised);border:1px solid var(--border-subtle);border-radius:var(--radius);padding:var(--space-2) var(--space-3)">
       <div style="font-size:var(--text-sm);color:var(--text-light);margin-bottom:var(--space-1)">${esc(label)}</div>
       ${control}${hint ? `<div style="color:var(--text-muted);font-size:var(--text-xs);margin-top:var(--space-1)">${esc(hint)}</div>` : ''}</div>`;
+  }
+
+  // ── Spell ref → display info / hover legend — THE shared resolvers (used by
+  //    the Spellbook and Combat panels; they were duplicated there before). A
+  //    ref the compendium can't resolve gets a neutral placeholder (never a
+  //    slug-titleized id — titleize is reserved for known-clean keys) with
+  //    level:null, and a null legend (→ plain name, no hover card). ──
+  function spellInfo(engine, ref) {
+    const r = engine && engine.getItem ? engine.getItem('spell', ref) : null;
+    return r ? { ref, name: r.name, level: num(r.level, 0), school: r.school || '', ritual: !!r.ritual }
+             : { ref, name: t('misc.unknown'), level: null, school: '', ritual: false };
+  }
+  function spellLegend(engine, ref) {
+    const r = engine && engine.getItem ? engine.getItem('spell', ref) : null;
+    if (!r) return null;
+    const lvl = num(r.level, 0);
+    const terms = [{ label: t('spellbook.level'), value: lvl === 0 ? t('spellbook.cantrip') : lvl }];
+    if (r.school) terms.push({ label: t('spellbook.school'), value: r.school });
+    return { title: r.name, desc: r.text ? firstPara(r.text) : '', terms, aria: r.name };
   }
 
   function spellChip(name, sub, opts) {
@@ -320,6 +345,6 @@ export function makeUI(ctx) {
     S, styleTag, section, card, sectionLabel, subLabel,
     heroTile, abilityTile, profDot, profRow, rowLine, overrideControls,
     numField, statTip, entityRef, statBox, miniStat,
-    selectBox, fieldRow, choiceBlock, spellChip, warningsBlock, attacksBlock,
+    selectBox, fieldRow, choiceBlock, spellChip, spellInfo, spellLegend, warningsBlock, attacksBlock,
   };
 }

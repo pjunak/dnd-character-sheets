@@ -52,11 +52,17 @@ export function makeBackpackPanel(ctx) {
     return `<select class="edit-input" style="max-width:11rem"${dataOn('change', host.action('invAddRef'), c.id, kind, '$value')}>${opts}</select>`;
   }
 
-  // Resolve an inventory item → its compendium {kind, id, rec}, probing the kinds
-  // that can be ref-added (weapon, armor); falls back to a by-name weapon match.
-  // null for free-text items or when the book is absent (→ plain text, no link).
+  // Resolve an inventory item → its compendium {kind, id, rec}. The stored
+  // `it.kind` (written by invAddRef) is authoritative; the weapon→armor id
+  // probe survives only for LEGACY rows that predate the kind field, and the
+  // by-name fallback (free-text items) now tries both kinds. null for
+  // unresolvable items or when the book is absent (→ plain text, no link).
   function itemRef(engine, it) {
     if (!engine || !engine.getItem) return null;
+    if (it.ref && it.kind) {
+      const rec = engine.getItem(it.kind, it.ref);
+      if (rec) return { kind: it.kind, id: it.ref, rec };
+    }
     if (it.ref) {
       for (const kind of ['weapon', 'armor']) {
         const rec = engine.getItem(kind, it.ref);
@@ -64,8 +70,10 @@ export function makeBackpackPanel(ctx) {
       }
     }
     if (it.name && engine.getItemByName) {
-      const rec = engine.getItemByName('weapon', it.name);
-      if (rec) return { kind: 'weapon', id: rec.id, rec };
+      for (const kind of ['weapon', 'armor']) {
+        const rec = engine.getItemByName(kind, it.name);
+        if (rec) return { kind, id: rec.id, rec };
+      }
     }
     return null;
   }

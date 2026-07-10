@@ -71,12 +71,18 @@ export function makeHeaderPanel(ctx) {
     const clsPlain = [s.className, s.subclass ? '(' + s.subclass + ')' : ''].filter(Boolean).join(' ');
     let idHtml = '';
     if (clsPlain) {
-      const byName = (kind, name) => (engine && name && engine.getItemByName) ? engine.getItemByName(kind, name) : null;
+      // The flat fields hold resolved NAMES (materializeInto), but shipped
+      // blobs may still carry a subclass ID — resolve by id first, then by
+      // name, and display the record's name when it resolves (never a slug).
+      const resolve = (kind, v) => {
+        if (!engine || !v) return null;
+        return (engine.getItem && engine.getItem(kind, v)) || (engine.getItemByName && engine.getItemByName(kind, v)) || null;
+      };
       const mkLegend = (rec) => (rec && rec.text) ? { title: rec.name, desc: firstPara(rec.text), aria: rec.name } : null;
-      const clsRec = byName('class', s.className);
-      const subRec = byName('subclass', s.subclass);
-      const clsHtml = s.className ? entityRef('class', clsRec && clsRec.id, s.className, mkLegend(clsRec)) : '';
-      const subHtml = s.subclass ? ' (' + entityRef('subclass', subRec && subRec.id, s.subclass, mkLegend(subRec)) + ')' : '';
+      const clsRec = resolve('class', s.className);
+      const subRec = resolve('subclass', s.subclass);
+      const clsHtml = s.className ? entityRef('class', clsRec && clsRec.id, (clsRec && clsRec.name) || s.className, mkLegend(clsRec)) : '';
+      const subHtml = s.subclass ? ' (' + entityRef('subclass', subRec && subRec.id, (subRec && subRec.name) || s.subclass, mkLegend(subRec)) + ')' : '';
       const TOKEN = '@@CLS@@';
       const line = t('sheet.summary', { level: num(s.level, 1), cls: TOKEN }).trim();
       idHtml = `<div style="color:var(--text-light);font-size:var(--text-sm);font-weight:600;letter-spacing:.02em">${esc(line).replace(TOKEN, (clsHtml + subHtml).trim())}</div>`;
