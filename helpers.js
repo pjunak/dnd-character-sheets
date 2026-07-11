@@ -71,7 +71,7 @@ export function featureRecordFor(engine, cl, level, f) {
  *  the empty arrays). Multiclass `classes[]` arrives with the Builder. */
 export const blank = () => ({
   v: 2,
-  ruleset: '2024',
+  ruleset: '2024',   // ARCH-7: which edition's rules built this character — re-stamped from the data provider's ruleset record on every Builder save (model.js materializeInto)
   player: '', className: '', subclass: '', race: '', background: '', alignment: '',
   level: 1,
   abilities: { STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10 },

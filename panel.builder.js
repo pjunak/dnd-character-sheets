@@ -11,7 +11,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 export function makeBuilderPanel(ctx) {
-  const { host, t, ABILITIES, SKILLS, num, signed, abilityMod, titleize, firstPara, featureRecordFor, ui, engine: E, POINT_BUY, pointCost, pointsSpent, ASI_RULES, featAsiFrom, builderState } = ctx;
+  const { host, t, ABILITIES, SKILLS, num, signed, abilityMod, titleize, firstPara, featureRecordFor, ui, engine: E, POINT_BUY, pointCost, pointsSpent, featAsiFrom, builderState } = ctx;
   const { esc, dataAction, dataOn } = host.h;
   const { section, miniStat, selectBox, fieldRow, choiceBlock, warningsBlock, numField, entityRef } = ui;
   const { builderModel, collectChoices } = E;
@@ -321,9 +321,13 @@ export function makeBuilderPanel(ctx) {
   function builderCreationChoices(c, s, engine, ro) {
     const bgRec = s.background ? (engine.getItemByName('background', s.background) || engine.getItem('background', s.background)) : null;
     if (!(bgRec && Array.isArray(bgRec.abilityScores) && bgRec.abilityScores.length)) return '';
-    // 2024 background ASI: distribute 3 points across the background's abilities
-    // (+2/+1 or +1/+1/+1), max +2 to any one — a number picker, not a split-select (B5).
-    const pickers = abilityBudgetPickers(c, 'bgasi', bgRec.abilityScores, assignOf(s, 'bgasi'), ASI_RULES.bgBudget, ASI_RULES.bgPerMax, ro);
+    // Background ASI budgets come from the ruleset (ARCH-7): 2024 distributes 3
+    // points across the background's abilities (+2/+1 or +1/+1/+1, max +2 to any
+    // one); a ruleset with bgBudget 0 (2014 — backgrounds grant no ASI) hides the
+    // block entirely, even if a record carries a stray abilityScores field.
+    const asiRules = engine.getRuleset().constants.asi;
+    if (!(num(asiRules.bgBudget, 0) > 0)) return '';
+    const pickers = abilityBudgetPickers(c, 'bgasi', bgRec.abilityScores, assignOf(s, 'bgasi'), asiRules.bgBudget, asiRules.bgPerMax, ro);
     const blocks = [choiceBlock(t('builder.bgAsi', { bg: bgRec.name }), pickers)];
     if (bgRec.originFeat) blocks.push(`<div style="color:var(--text-muted);font-size:var(--text-xs)">${esc(t('builder.originFeat', { feat: titleize(bgRec.originFeat) }))}</div>`);
     return section(t('builder.choices'), `<div style="display:flex;flex-direction:column;gap:var(--space-2)">${blocks.join('')}</div>`);
@@ -437,13 +441,16 @@ export function makeBuilderPanel(ctx) {
   }
 
   // ASI-vs-Feat at an ability-score-improvement level (descriptor kind asiMode).
-  // Level 19 is the 2024 EPIC BOON slot: "you gain an Epic Boon feat or another
-  // feat of your choice for which you qualify" — an ASI is itself a feat, so
-  // the mode select stays; the feat picker adds the epicBoon category (grouped)
-  // on top of the general feats. Earlier ASI levels stay general-only.
+  // The ruleset's epicBoons capability marks one level (2024: 19) as the EPIC
+  // BOON slot: "you gain an Epic Boon feat or another feat of your choice for
+  // which you qualify" — an ASI is itself a feat, so the mode select stays; the
+  // feat picker adds the epicBoon category (grouped) on top of the general
+  // feats. Earlier ASI levels stay general-only; a ruleset without the
+  // capability (2014: epicBoons null) never marks any level.
   function renderAsiLevel(c, s, ch, engine, ro) {
     const key = ch.id;   // 'asi:<classId>:<level>'
-    const isEpic = num(ch.level) === 19;
+    const rsBoons = engine.getRuleset().capabilities.epicBoons;
+    const isEpic = !!rsBoons && num(ch.level) === num(rsBoons.atLevel, 19);
     const mode = s.featureChoices[key] || '';
     const modeOpts = [
       { value: 'asi', label: t('builder.asiOption') },
@@ -452,8 +459,10 @@ export function makeBuilderPanel(ctx) {
     const label = t('builder.asiLevel', { cls: (engine.getItem('class', ch.classId) || {}).name || ch.classId, lvl: ch.level });
     let detail = '';
     if (mode === 'asi') {
-      // 2024 ASI: distribute 2 points (+2 to one, or +1/+1 to two) — number pickers (B5).
-      detail = `<div style="margin-top:var(--space-2)">${abilityBudgetPickers(c, key + ':ability', ABILITIES, assignOf(s, key + ':ability'), ASI_RULES.budget, ASI_RULES.perMax, ro)}</div>`;
+      // ASI budgets from the ruleset (2024: distribute 2 points — +2 to one, or
+      // +1/+1 to two) — number pickers (B5).
+      const asiRules = engine.getRuleset().constants.asi;
+      detail = `<div style="margin-top:var(--space-2)">${abilityBudgetPickers(c, key + ':ability', ABILITIES, assignOf(s, key + ':ability'), asiRules.budget, asiRules.perMax, ro)}</div>`;
     } else if (mode === 'feat') {
       const featKey = key + ':feat';
       const chosenFeat = s.featureChoices[featKey] || '';

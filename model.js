@@ -40,13 +40,13 @@ export function makeEngine(ctx) {
     return { baseStats, classes };
   };
 
-  // ASI-opportunity levels for a class. The 2024 base is 4/8/12/16/19; some
-  // classes get extras (Fighter 6 & 14, Rogue 10) declared in the class's
-  // `progression` (levels whose features include an "Ability Score Improvement").
-  // Union with the base so extras are ADDED without dropping anything.
-  const ASI_BASE = [4, 8, 12, 16, 19];
+  // ASI-opportunity levels for a class. The base levels come from the ruleset
+  // (2024: 4/8/12/16/19 — ARCH-7); some classes get extras (Fighter 6 & 14,
+  // Rogue 10) declared in the class's `progression` (levels whose features
+  // include an "Ability Score Improvement"). Union with the base so extras are
+  // ADDED without dropping anything.
   const asiLevelsFor = (rec) => {
-    const set = new Set(ASI_BASE);
+    const set = new Set(rulesApi.getRuleset().constants.asi.baseLevels);
     for (const p of (Array.isArray(rec && rec.progression) ? rec.progression : []))
       if ((p.features || []).some((f) => /ability score improvement/i.test(String(f)))) { const n = num(p.level); if (n > 0) set.add(n); }
     return [...set].sort((a, b) => a - b);
@@ -58,6 +58,9 @@ export function makeEngine(ctx) {
    *  kind ∈ skills | expertise | weaponMastery | feat | enumerated | asiMode. */
   const collectChoices = (classes, engine) => {
     const out = [];
+    // ARCH-7: a ruleset without the weapon-mastery subsystem (2014) drops those
+    // descriptors — the engine zeroes the slots too, this keeps the picker away.
+    const noMastery = rulesApi.getRuleset().capabilities.weaponMastery === false;
     for (const cl of classes) {
       const rec = cl.classId ? engine.getItem('class', cl.classId) : null;
       if (!rec) continue;
@@ -69,7 +72,7 @@ export function makeEngine(ctx) {
         if (srcLevel > clvl) continue;
         let kind = 'enumerated';
         if (ch.type === 'expertise') kind = 'expertise';
-        else if (ch.type === 'weaponMastery') kind = 'weaponMastery';
+        else if (ch.type === 'weaponMastery') { if (noMastery) continue; kind = 'weaponMastery'; }
         else if (!Array.isArray(ch.from) && (ch.type === 'feat' || ch.category)) kind = 'feat';
         out.push({ id: ch.id, kind, count: num(ch.count, 1), from: ch.from, category: ch.category, prompt: ch.prompt, source: { type: 'class', id: cl.classId, level: srcLevel } });
       }
@@ -91,7 +94,7 @@ export function makeEngine(ctx) {
             if (!from && ch.fromCategory) from = engine.listFeatures({ category: ch.fromCategory }).map((o) => o.id);
             let kind = 'enumerated';
             if (ch.type === 'expertise') kind = 'expertise';
-            else if (ch.type === 'weaponMastery') kind = 'weaponMastery';
+            else if (ch.type === 'weaponMastery') { if (noMastery) continue; kind = 'weaponMastery'; }
             else if (!Array.isArray(from) && (ch.type === 'feat' || ch.category)) kind = 'feat';
             // Pool size grows with level: `countByLevel` maps a level → total known;
             // take the highest entry at or below this class's level (falls back to the
@@ -179,7 +182,16 @@ export function makeEngine(ctx) {
    *  the engine result { sheet, warnings } or null in standalone / on failure —
    *  so a broken engine never breaks the sheet (ARCH-4/ARCH-5). */
   const safeHydrate = (engine, s) => {
-    try { const r = engine && engine.hydrate && engine.hydrate(s); return (r && r.sheet) ? r : null; }
+    try {
+      const r = engine && engine.hydrate && engine.hydrate(s);
+      if (!(r && r.sheet)) return null;
+      // ARCH-7: a character built under another edition still renders — the
+      // installed provider's rules interpret the decisions — but says so
+      // (advisory, never blocking, like every other warning: ARCH-5).
+      const ed = engine.getRuleset ? engine.getRuleset().edition : null;
+      if (ed && s && s.ruleset && s.ruleset !== ed) r.warnings.unshift('Character was built with the ' + s.ruleset + ' ruleset; the installed rules are ' + ed);
+      return r;
+    }
     catch (_) { return null; }
   };
 
@@ -189,6 +201,10 @@ export function makeEngine(ctx) {
   const materializeInto = (s, engine) => {
     const r = safeHydrate(engine, decisionsOf(s, engine));
     if (!r || !r.sheet) return;
+    // ARCH-7: stamp which edition's rules computed this build — the provider
+    // selection key for campaigns with a non-2024 compendium (blank() seeds
+    // '2024' for blobs that predate providers shipping a ruleset record).
+    if (engine.getRuleset) { const ed = engine.getRuleset().edition; if (ed) s.ruleset = ed; }
     const cs = r.sheet, d = cs.derived || {};
     const m = builderModel(s, engine);
     // First REAL class (placeholder "＋ Add class" rows carry no classId).
@@ -258,22 +274,29 @@ export function makeEngine(ctx) {
 
   // ── The rules api — the built-in engine bound to live book data ──
   // The engine always ships with this addon now; what's optional is CONTENT.
-  // `_probeData()` soft-probes the Player's Handbook data addon (a manifest
-  // `optionalDependencies` entry: the host permits host.use() for it and
-  // load-orders it before us WHEN present, but never blocks us when it's
-  // absent — then use() throws → null → standalone). `getRules()` returns the
-  // api only while book data is actually present, so every engine-mode branch
-  // (Builder tab, computed vitals, the spellbook engine path) lights up exactly
-  // when there is content to compute from, and the sheet degrades to the
-  // hand-filled standalone paths otherwise (ARCH-4). The probe is lazy, per
-  // render, try/caught — installing/removing the book mid-session never breaks
-  // the sheet.
-  const DATA_ADDON = 'dnd55e-compendium';
+  // `_probeData()` soft-probes the known data providers IN ORDER (each a
+  // manifest `optionalDependencies` entry: the host permits host.use() for it
+  // and load-orders it before us WHEN present, but never blocks us when it's
+  // absent — then use() throws → skip → standalone). The probe is duck-typed
+  // (`apiVersion >= 1`), so ANY addon providing the compendium's api shape
+  // works; the first valid provider wins (ARCH-7: one edition per campaign —
+  // its `ruleset` record dictates the system rules; the character's stored
+  // `ruleset` tag records which edition built it, and a mismatch surfaces as a
+  // hydrate warning in safeHydrate). `getRules()` returns the api only while
+  // book data is actually present, so every engine-mode branch (Builder tab,
+  // computed vitals, the spellbook engine path) lights up exactly when there
+  // is content to compute from, and the sheet degrades to the hand-filled
+  // standalone paths otherwise (ARCH-4). The probe is lazy, per render,
+  // try/caught — installing/removing a book mid-session never breaks the sheet.
+  const DATA_ADDONS = ['dnd55e-compendium', 'dnd5e-compendium'];   // 2024, 2014 (future repo)
   const _probeData = () => {
-    try {
-      const d = host.use && host.use(DATA_ADDON);
-      return (d && d.apiVersion >= 1) ? d : null;
-    } catch (_) { return null; }
+    for (const id of DATA_ADDONS) {
+      try {
+        const d = host.use && host.use(id);
+        if (d && d.apiVersion >= 1) return d;
+      } catch (_) { /* not installed / not declared — try the next candidate */ }
+    }
+    return null;
   };
   const rulesApi = makeRulesApi(_probeData);
   const getRules = () => (_probeData() ? rulesApi : null);

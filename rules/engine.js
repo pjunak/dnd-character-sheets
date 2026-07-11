@@ -14,10 +14,10 @@
 //  ../docs/RULES_EDGE_CASES.md for the rule IDs referenced below.
 // ═══════════════════════════════════════════════════════════════
 
-export const ABILITIES = ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'];
+import { DEFAULT_RULESET, resolveRuleset } from './ruleset.js';
+export { DEFAULT_RULESET, resolveRuleset };
 
-// EQ-3: a character can attune to at most 3 magic items at once (2024 PHB).
-const ATTUNE_LIMIT = 3;
+export const ABILITIES = ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'];
 
 // Skill → governing ability. SYSTEM knowledge (not content), so it lives here
 // and the engine never needs the compendium just to total a skill.
@@ -38,37 +38,45 @@ export const dieSize = (hitDie) => num(String(hitDie || '').replace(/^d/i, ''), 
  *  as DIE_AVG tables in entry.js + panel.sheet.js). */
 export const hitDieAvg = (hitDie) => Math.floor(dieSize(hitDie) / 2) + 1;
 
-// 2024 PHB "Expanding and Replacing the Book": copying a spell into a wizard's
-// spellbook costs 50 gp per spell level (cantrips can't be copied; min level 1).
-export const SCROLL_COPY_GP_PER_LEVEL = 50;
-export const scrollCopyCost = (level) => SCROLL_COPY_GP_PER_LEVEL * Math.max(1, num(level, 1));
+// ── SYSTEM constants (ARCH-7) ───────────────────────────────────────
+// The numbers below live in rules/ruleset.js as DEFAULT_RULESET (the 2024
+// values) and may be overridden per edition by the data addon's `ruleset`
+// record. Every helper takes an optional resolved-ruleset `rs` that defaults
+// to the 2024 defaults, so existing call sites and standalone use never break.
+// The named exports (ASI_RULES, POINT_BUY, …) stay as views of the DEFAULTS
+// for back-compat; ruleset-aware callers read `rulesApi.getRuleset()` instead.
 
-// 2024 ASI budgets (AB-1/AB-2) — SYSTEM rules the Builder's pickers consume:
-// an ASI feat distributes 2 points (+2 or +1/+1); a background distributes 3
-// points (+2/+1 or +1/+1/+1) among its listed abilities, max +2 to any one.
-export const ASI_RULES = { budget: 2, perMax: 2, bgBudget: 3, bgPerMax: 2 };
+export const scrollCopyCost = (level, rs = DEFAULT_RULESET) =>
+  num(rs.constants.scrollCopyGpPerLevel, 50) * Math.max(1, num(level, 1));
+
+// 2024 ASI budgets (AB-1/AB-2) — SYSTEM rules the Builder's pickers consume.
+export const ASI_RULES = DEFAULT_RULESET.constants.asi;
 
 // Ability score caps (AB-4): 20 by default; a cap-raising grant (2024 Epic
-// Boon: "increase … by 1, to a maximum of 30") lifts it, never past 30 —
-// the 2024 absolute maximum for any score.
-export const ABILITY_CAP = 20;
-export const ABILITY_CAP_HARD = 30;
+// Boon: "increase … by 1, to a maximum of 30") lifts it, never past the hard
+// ceiling.
+export const ABILITY_CAP = DEFAULT_RULESET.constants.abilityCap;
+export const ABILITY_CAP_HARD = DEFAULT_RULESET.constants.abilityCapHard;
 /** Eligible abilities of a feat's abilityScoreIncrease grant. The 2024 data's
  *  'ANY' token ("one ability score of your choice" — e.g. Boon of Skill) means
  *  all six. [] when the grant is absent/malformed. */
 export const featAsiFrom = (asi) => (asi && Array.isArray(asi.from) ? (asi.from.includes('ANY') ? ABILITIES.slice() : asi.from) : []);
 /** The raised per-ability cap a feat's ASI carries, or null when the default
- *  (20) applies. 2024 Epic Boons print "to a maximum of 30" as prose, so the
- *  cap rides on the CATEGORY, not a per-record field. */
-export const featAbilityCap = (feat) => (feat && feat.category === 'epicBoon' ? ABILITY_CAP_HARD : null);
+ *  applies. 2024 Epic Boons print "to a maximum of 30" as prose, so the cap
+ *  rides on the CATEGORY (gated by the ruleset's epicBoons capability). */
+export const featAbilityCap = (feat, rs = DEFAULT_RULESET) => {
+  const boons = rs.capabilities.epicBoons;
+  return (boons && feat && feat.category === 'epicBoon') ? num(boons.abilityCap, rs.constants.abilityCapHard) : null;
+};
 
-// D&D 2024 standard point buy — 27 points; each BASE score 8–15; the cost per
-// point rises past 13. SYSTEM rules (the Builder's ability-score budget), so
-// they live here beside the rest of the math. `pointCost` clamps out-of-range
-// scores into [8,15] for costing; `pointsSpent` totals a {STR..CHA} base map.
-export const POINT_BUY = { budget: 27, min: 8, max: 15, cost: { 8: 0, 9: 1, 10: 2, 11: 3, 12: 4, 13: 5, 14: 7, 15: 9 } };
-export const pointCost = (v) => POINT_BUY.cost[Math.max(POINT_BUY.min, Math.min(POINT_BUY.max, num(v, POINT_BUY.min)))] || 0;
-export const pointsSpent = (base) => ABILITIES.reduce((sum, a) => sum + pointCost(base && base[a]), 0);
+// Standard point buy. `pointCost` clamps out-of-range scores into [min,max]
+// for costing; `pointsSpent` totals a {STR..CHA} base map.
+export const POINT_BUY = DEFAULT_RULESET.constants.pointBuy;
+export const pointCost = (v, rs = DEFAULT_RULESET) => {
+  const pb = rs.constants.pointBuy;
+  return pb.cost[Math.max(pb.min, Math.min(pb.max, num(v, pb.min)))] || 0;
+};
+export const pointsSpent = (base, rs = DEFAULT_RULESET) => ABILITIES.reduce((sum, a) => sum + pointCost(base && base[a], rs), 0);
 
 /** HP clamp — one rule for all sites. With a max>0, clamp into [0, max];
  *  with no max set (0), only floor at 0 (the ± action stays usable). */
@@ -80,37 +88,44 @@ export const clampHp = (hp, maxHp) => {
 // Standard multiclass spell-slot table, indexed by combined CASTER LEVEL
 // (MC-2). slots[i] = number of (i+1)-th-level slots. Single full casters land on
 // their own table row; this also covers multiclass + half/third casters.
-const MULTICLASS_SLOTS = {
-  1: [2], 2: [3], 3: [4, 2], 4: [4, 3], 5: [4, 3, 2], 6: [4, 3, 3], 7: [4, 3, 3, 1],
-  8: [4, 3, 3, 2], 9: [4, 3, 3, 3, 1], 10: [4, 3, 3, 3, 2], 11: [4, 3, 3, 3, 2, 1],
-  12: [4, 3, 3, 3, 2, 1], 13: [4, 3, 3, 3, 2, 1, 1], 14: [4, 3, 3, 3, 2, 1, 1],
-  15: [4, 3, 3, 3, 2, 1, 1, 1], 16: [4, 3, 3, 3, 2, 1, 1, 1], 17: [4, 3, 3, 3, 2, 1, 1, 1, 1],
-  18: [4, 3, 3, 3, 3, 1, 1, 1, 1], 19: [4, 3, 3, 3, 3, 2, 1, 1, 1], 20: [4, 3, 3, 3, 3, 2, 2, 1, 1],
+// A caster level above the table's top row clamps to the top row.
+export const multiclassSlots = (casterLevel, rs = DEFAULT_RULESET) => {
+  const table = rs.constants.multiclassSlots || {};
+  let lvl = Math.max(0, Math.floor(num(casterLevel, 0)));
+  const top = Object.keys(table).reduce((m, k) => Math.max(m, num(k)), 0);
+  if (lvl > top) lvl = top;
+  const row = table[lvl];
+  return Array.isArray(row) ? row.slice() : [];
 };
-export const multiclassSlots = (casterLevel) => (MULTICLASS_SLOTS[Math.max(0, Math.min(20, num(casterLevel, 0)))] || []).slice();
 
-/** A class's contribution to the combined caster level (MC-2): full = level,
- *  half (Paladin/Ranger) = ⌈level/2⌉, third (EK/AT subclass) = ⌊level/3⌋.
- *  2024 PHB Multiclassing, Spell Slots: "Half your levels (round up) in the
- *  Paladin and Ranger classes; one third of your Fighter or Rogue levels
- *  (round down) if you have the Eldritch Knight or Arcane Trickster
- *  subclass." The half-caster round-UP is a 2024 change from 2014 (they
- *  cast from level 1 now); thirds stayed round-down. */
-function casterContribution(type, level) {
+/** A class's contribution to the combined caster level (MC-2): full = level;
+ *  half/third divide by 2/3 with the ruleset's rounding direction. 2024 PHB
+ *  Multiclassing, Spell Slots: "Half your levels (round up) in the Paladin and
+ *  Ranger classes; one third of your Fighter or Rogue levels (round down) if
+ *  you have the Eldritch Knight or Arcane Trickster subclass." The half-caster
+ *  round-UP is a 2024 change from 2014 (they cast from level 1 now) — a 2014
+ *  ruleset record ships `casterFractions.half: 'down'`. */
+export function casterContribution(type, level, rs = DEFAULT_RULESET) {
   if (type === 'full') return level;
-  if (type === 'half') return Math.ceil(level / 2);
-  if (type === 'third') return Math.floor(level / 3);
-  return 0;   // 'pact' contributes 0 — Warlock Pact Magic never combines (see pactMagic)
+  const div = type === 'half' ? 2 : type === 'third' ? 3 : 0;
+  if (!div) return 0;   // 'pact' contributes 0 — Warlock Pact Magic never combines (see pactMagic)
+  const dir = (rs.constants.casterFractions || {})[type];
+  return dir === 'up' ? Math.ceil(level / div) : Math.floor(level / div);
 }
 
-/** 2024 Warlock Pact Magic: a small pool of slots, ALL at one level, recharged on a
+/** Warlock Pact Magic: a small pool of slots, ALL at one level, recharged on a
  *  SHORT rest — distinct from Spellcasting slots and NOT combined in multiclass.
- *  Slots: 1 (L1), 2 (L2–10), 3 (L11–16), 4 (L17+); slot level: min(5, ⌈level/2⌉).
- *  Derived by level (the class progression carries no pact table). null below L1. */
-export function pactMagic(level) {
+ *  2024: 1 slot (L1), 2 (L2–10), 3 (L11–16), 4 (L17+); slot level:
+ *  min(slotLevelCap, ⌈level/2⌉). Derived by level from the ruleset's ascending
+ *  tiers (the class progression carries no pact table). null below tier 1. */
+export function pactMagic(level, rs = DEFAULT_RULESET) {
   const L = Math.max(0, Math.floor(num(level, 0)));
   if (L < 1) return null;
-  return { slots: L >= 17 ? 4 : L >= 11 ? 3 : L >= 2 ? 2 : 1, level: Math.min(5, Math.ceil(L / 2)) };
+  const pm = rs.constants.pactMagic || {};
+  let slots = 0;
+  for (const t of pm.tiers || []) if (L >= num(t.level)) slots = num(t.slots);
+  if (slots < 1) return null;
+  return { slots, level: Math.min(num(pm.slotLevelCap, 5), Math.ceil(L / 2)) };
 }
 
 /** Pick the progression row at `level` (or the highest row ≤ level — handles the
@@ -280,8 +295,12 @@ export function computeWeaponAttack(rec, mods, pb, profW, masterySet) {
  * Hydrate player DECISIONS into a computed sheet. NEVER throws — every step is
  * error-isolated and failures accumulate in `warnings`. Returns { sheet, warnings }.
  * The engine only PROPOSES; the sheet layer lets a stored override win (ARCH-3).
+ * `ruleset` is the data provider's (possibly partial) `ruleset` record —
+ * resolved per constant over the 2024 defaults (ARCH-7), so omitting it keeps
+ * every existing call site byte-identical.
  */
-export function hydrate(decisions, api) {
+export function hydrate(decisions, api, ruleset) {
+  const rs = resolveRuleset(ruleset);
   const cd = decisions || {};
   const warnings = [];
   const warn = (m) => { if (m) warnings.push(String(m)); };
@@ -301,13 +320,14 @@ export function hydrate(decisions, api) {
   step(() => {
     const base = cd.baseStats || cd.abilities || {};
     const grants = Array.isArray(cd.abilityGrants) ? cd.abilityGrants : [];
+    const capDefault = num(rs.constants.abilityCap, 20), capHard = num(rs.constants.abilityCapHard, 30);
     for (const a of ABILITIES) {
-      let bonus = 0, cap = ABILITY_CAP;
+      let bonus = 0, cap = capDefault;
       for (const g of grants) {
         const v = g && g.assign && g.assign[a];
         if (!v) continue;
         bonus += num(v);
-        if (num(g.cap) > cap) cap = Math.min(ABILITY_CAP_HARD, num(g.cap));
+        if (num(g.cap) > cap) cap = Math.min(capHard, num(g.cap));
       }
       const score = Math.min(cap, num(base[a], 10) + bonus);
       const m = abilityMod(score);
@@ -403,11 +423,22 @@ export function hydrate(decisions, api) {
     sheet.derived.armorClass = ac.value;
   });
 
-  // Initiative (CX-2: DEX + Alert's PB in 2024).
+  // Initiative (CX-2): DEX + feat bonuses. A feat record carrying a structured
+  // `modifiers: [{target:'initiative', add:'PB'|<number>}]` is the authority
+  // (2024 Alert adds PB; a 2014 Alert record would add a flat 5) — the
+  // hardcoded alert→PB check survives only as the fallback for books that
+  // predate the field.
   step(() => {
     let init = num(mods.DEX);
-    const feats = Array.isArray(cd.feats) ? cd.feats.map((f) => (f && (f.featId || f.id || f))) : [];
-    if (feats.includes('alert')) init += pb;
+    for (const f of Array.isArray(cd.feats) ? cd.feats : []) {
+      const fid = f && (f.featId || f.id || f);
+      const frec = fid && api && api.getItem ? api.getItem('feat', fid) : null;
+      if (frec && Array.isArray(frec.modifiers)) {
+        for (const m of frec.modifiers) if (m && m.target === 'initiative') init += m.add === 'PB' ? pb : num(m.add);
+      } else if (fid === 'alert') {
+        init += pb;
+      }
+    }
     sheet.derived.initiative = init;
   });
 
@@ -457,7 +488,7 @@ export function hydrate(decisions, api) {
     const own = prog && Array.isArray(prog.spellSlots) ? prog.spellSlots : null;
     if (own) { let m = 0; for (let i = 0; i < own.length; i++) if (num(own[i]) > 0) m = i + 1; return m; }
     const d = type === 'full' ? 1 : type === 'half' ? 2 : type === 'third' ? 3 : 0;
-    return d ? multiclassSlots(Math.ceil(num(level) / d)).length : 0;
+    return d ? multiclassSlots(Math.ceil(num(level) / d), rs).length : 0;
   };
 
   // Spellcasting (MC-2/MC-3/SP-2/SP-4): per-class prepared limit + DC/attack,
@@ -479,13 +510,14 @@ export function hydrate(decisions, api) {
       casters.push({ type: eff.type, level: c.level, prog });
       // Warlock Pact Magic slots (short-rest, all one level) — derived by level; drives
       // the per-class prepare cap and a short-rest slot resource (below).
-      const pact = eff.type === 'pact' ? pactMagic(c.level) : null;
+      const pact = eff.type === 'pact' ? pactMagic(c.level, rs) : null;
       // Wizard-style spellbook (SP-5): prepared is chosen from a LEARNED pool, not
       // the whole class list. The free-learn allotment isn't in the class table, so
-      // derive the 2024 rule (6 spells at L1, +2 per Wizard level after → 2·L+4).
+      // derive it from the ruleset (2024: 6 spells at L1, +2 per Wizard level after).
       // Guidance only — copying from scrolls/other books grows the book beyond it.
       const prepares = eff.prepares || 'list';
-      const spellbookKnown = prepares === 'spellbook' ? 2 * num(c.level) + 4 : 0;
+      const sb = rs.constants.spellbook || {};
+      const spellbookKnown = prepares === 'spellbook' ? num(sb.baseKnown, 6) + num(sb.knownPerLevel, 2) * (num(c.level, 1) - 1) : 0;
       per.push({
         classId: c.classId, level: num(c.level), ability, type: eff.type, prepares, ritual: !!eff.ritual,
         saveDC: 8 + pb + mod, spellAttack: pb + mod,
@@ -509,7 +541,7 @@ export function hydrate(decisions, api) {
     //    odd levels aren't undercounted. (Full casters: ceil(level/1) == level.)
     //  • MULTIPLE caster classes → the combined-caster-level rule (2024: full
     //    levels + half levels rounded UP + third levels rounded DOWN, see
-    //    casterContribution) indexed into MULTICLASS_SLOTS.
+    //    casterContribution) indexed into the ruleset's multiclass slot table.
     //  • PACT (Warlock) → never leveled slots: even if a book prints the pact
     //    column as `spellSlots`, reading it here would DOUBLE-COUNT (pactMagic
     //    already emits the pact pool separately), so pact skips ownSlots.
@@ -524,9 +556,9 @@ export function hydrate(decisions, api) {
       combinedCasterLevel = d ? Math.ceil(only.level / d) : 0;
       if (ownSlots) slots = ownSlots.slice();
     } else {
-      combinedCasterLevel = casters.reduce((s, c) => s + casterContribution(c.type, c.level), 0);
+      combinedCasterLevel = casters.reduce((s, c) => s + casterContribution(c.type, c.level, rs), 0);
     }
-    if (!slots) slots = multiclassSlots(combinedCasterLevel);
+    if (!slots) slots = multiclassSlots(combinedCasterLevel, rs);
 
     // Granted spells (SP-1/SP-2/SP-12): subclass always-prepared + feat grants +
     // species lineage. Each is provenance-tagged so the sheet can separate them
@@ -583,11 +615,15 @@ export function hydrate(decisions, api) {
   });
 
   // Weapon Mastery slots (EQ-4): the best class count + Weapon Master feat.
+  // A 2024-only subsystem — a ruleset without the capability zeroes the slots
+  // (the data self-gates too: 2014 records carry no weaponMastery field).
   step(() => {
     let count = 0;
-    for (const c of classes) count = Math.max(count, num(c.record && c.record.weaponMastery && c.record.weaponMastery.count));
-    const feats = Array.isArray(cd.feats) ? cd.feats.map((f) => (f && (f.featId || f.id || f))) : [];
-    if (feats.includes('weapon-master')) count += 1;
+    if (rs.capabilities.weaponMastery !== false) {
+      for (const c of classes) count = Math.max(count, num(c.record && c.record.weaponMastery && c.record.weaponMastery.count));
+      const feats = Array.isArray(cd.feats) ? cd.feats.map((f) => (f && (f.featId || f.id || f))) : [];
+      if (feats.includes('weapon-master')) count += 1;
+    }
     sheet.weaponMastery = { slots: count, chosen: Array.isArray(cd.weaponMasteryChoices) ? cd.weaponMasteryChoices.slice() : [] };
   });
 
@@ -608,8 +644,9 @@ export function hydrate(decisions, api) {
       if (rec) weapons.push(computeWeaponAttack(rec, mods, pb, profW, masterySet));
     }
     sheet.weapons = weapons;
-    sheet.attunement = { count: attuned, limit: ATTUNE_LIMIT, over: attuned > ATTUNE_LIMIT };
-    if (attuned > ATTUNE_LIMIT) warn('Attuned to more than ' + ATTUNE_LIMIT + ' magic items (limit ' + ATTUNE_LIMIT + ')');
+    const attuneLimit = num(rs.constants.attunementLimit, 3);   // EQ-3
+    sheet.attunement = { count: attuned, limit: attuneLimit, over: attuned > attuneLimit };
+    if (attuned > attuneLimit) warn('Attuned to more than ' + attuneLimit + ' magic items (limit ' + attuneLimit + ')');
   });
 
   // Collected features (provenance-tagged) — feeds the Builder's level log.
@@ -712,14 +749,16 @@ export function hydrate(decisions, api) {
       }
     }
     // 2. Hit Dice — aggregate by die size. 2024 Long Rest: "You regain all
-    // lost Hit Points and all spent Hit Point Dice" — ALL of them, not the
-    // 2014 half-your-total.
+    // lost Hit Points and all spent Hit Point Dice" — ALL of them; a 2014
+    // ruleset sets rest.longRestHitDice to 'half' (regain up to half your
+    // total), which maps onto the recharge vocabulary's 'halfLevel' amount.
+    const hdAmount = rs.constants.rest && rs.constants.rest.longRestHitDice !== 'all' ? 'halfLevel' : 'full';
     const byDie = {};
     for (const c of classes) { const d = c.record && c.record.hitDie; if (d) byDie[d] = (byDie[d] || 0) + c.level; }
     for (const die of Object.keys(byDie)) {
       resources.push({
         key: 'hit-dice-' + die, name: 'Hit Dice (' + die + ')', max: byDie[die], kind: 'hitdice', die,
-        recharge: [{ on: 'long', amount: 'full' }], source: { type: 'class' },
+        recharge: [{ on: 'long', amount: hdAmount }], source: { type: 'class' },
       });
     }
     // 3. Spell slots (leveled). Long rest → full.

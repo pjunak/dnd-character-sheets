@@ -45,6 +45,17 @@ edge-case ledger: [`docs/RULES_EDGE_CASES.md`](docs/RULES_EDGE_CASES.md).
    Builder's class tabs call it with single-class sub-lists, so roster position is unknowable
    there without reworking its call convention (descriptors would need an `ownerClassId` so the
    spine can filter a full-roster collection). Do that rework when the compendium data lands.
+9. **2014-edition structural enablers (ARCH-7 stage 5).** The engine is ruleset-parameterized
+   (2026-07-10: constants + capability flags come from the data provider's `ruleset` record,
+   per-constant fallback to the built-in 2024 defaults; the provider probe is a candidate list
+   keyed on the character's `ruleset` tag). What remains is the structural 2014 shapes, gated on
+   record-field *presence* and deferred until a `dnd5e-compendium` repo actually starts: species
+   `abilityIncreases` (+ subraces), the spells-known / prepared-formula casting model, half-feat
+   ASIs. Each lands with a rules.mjs case proving 2024 fixtures are byte-identical.
+10. **Combat addon consumption (stage 6).** A future combat tracker consumes this addon's provided
+   rules api (`host.use('dnd55e-sheets')` — surface documented in `rules/README.md`, shape-locked
+   by tests). Extract a dedicated rules addon only if that proves painful in practice; a host
+   `discover()` capability registry only if a third provider family ever appears.
 
 (Closed 2026-07-08: `aria-live` budget counts — point-buy/ASI edits now announce "{n} pts left"
 through the host's persistent live region, `host.ui.announce`, which survives the full-panel

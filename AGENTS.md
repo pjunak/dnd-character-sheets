@@ -85,12 +85,10 @@ components; standalone (no book) degrades to a hand-filled sheet (DEG-1).
 
 ## Working here — the facts that bite
 
-- **Branch workflow**: ALL agent work on the long-lived **`agentic-dev`** branch
-  (never per-task branches); the maintainer integrates → `main`. Verify
-  `git branch --show-current` == `agentic-dev` immediately before EVERY commit
-  (post-integration syncs land the checkout back on `main` — a guard has caught
-  real slips). Sync `agentic-dev` onto `main` before each new batch. When a
-  batch spans the host, integrate **`ttrpg-codex` first** — addon CI checks out
+- **Branch workflow** *(changed 2026-07-10)*: development happens directly on
+  **`main`** — the old long-lived `agentic-dev` branch is retired; don't create
+  it or per-task branches. Commit only when the maintainer asks. When a batch
+  spans the host, integrate **`ttrpg-codex` first** — addon CI checks out
   `ttrpg-codex@main` for the test harness.
 - **Sibling checkouts assumed**: `../ttrpg-codex` (harness + dev-install),
   `../dnd55e-compendium` (the data this consumes; its `data/SCHEMA.md`
@@ -129,8 +127,8 @@ components; standalone (no book) degrades to a hand-filled sheet (DEG-1).
   buttons, a bespoke tab underline, a local SVG glyph set): budget/live-play logic
   can live addon-side, but the *control* is the host's. Quick-adjust action
   buttons (HP ±, tracker ±) use `.inline-create-btn`. When something addon-local
-  proves generic (a 2nd consumer appears), promote it INTO `ttrpg-codex` (its
-  `agentic-dev`) rather than copying it between addons — that's how the `.codex-*`
+  proves generic (a 2nd consumer appears), promote it INTO `ttrpg-codex`
+  rather than copying it between addons — that's how the `.codex-*`
   family grew; domain *semantics* (save shields, prof dots) stay addon-side,
   built from host tokens.
 - **What deliberately stays addon-local** (boundary, not debt): composition

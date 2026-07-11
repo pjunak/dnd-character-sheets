@@ -609,3 +609,178 @@ test('rules: renderers survive the smoke pass', () => {
   const { rec } = dryRunRegister(register, META);
   assert.ok(smokeRegistrations(rec).ok, JSON.stringify(smokeRegistrations(rec).failures));
 });
+
+// ── ARCH-7: ruleset parameterization ────────────────────────────────
+// The engine's system constants come from the data provider's `ruleset`
+// record, resolved per constant over the 2024 defaults (rules/ruleset.js).
+
+import * as Engine from '../rules/engine.js';
+import { DEFAULT_RULESET, resolveRuleset } from '../rules/ruleset.js';
+import { makeRulesApi } from '../rules/api.js';
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
+// Representative builds spanning every ruleset-touched path: printed slots,
+// multiclass fractions, pact magic, spellbook, resources, mastery, caps,
+// attunement.
+const GOLDEN_BUILDS = [
+  { className: 'Wizard', level: 5, baseStats: { INT: 16, CON: 14 } },
+  { classes: [{ classId: 'paladin', level: 5 }, { classId: 'sorcerer', level: 1 }], baseStats: { CHA: 16 } },
+  { className: 'Warlock', level: 5, baseStats: { CHA: 16 } },
+  { className: 'Barbarian', level: 3, race: 'Dwarf', lineage: 'hill-dwarf', background: 'Sage',
+    inventory: [{ ref: 'longsword', location: 'equipped' }, { ref: 'breastplate', location: 'equipped', attuned: true }] },
+  { className: 'Fighter', level: 19, feats: [{ featId: 'weapon-master' }],
+    abilityGrants: [{ source: 'boon', assign: { STR: 1 }, cap: 30 }], baseStats: { STR: 20 } },
+];
+
+test('ruleset: golden regression — no record / null / full default record are byte-identical (ARCH-7)', () => {
+  const fake = makeFake();
+  for (const cd of GOLDEN_BUILDS) {
+    const bare = Engine.hydrate(cd, fake);
+    assert.deepEqual(Engine.hydrate(cd, fake, null), bare, 'explicit null ruleset changes nothing');
+    assert.deepEqual(Engine.hydrate(cd, fake, {}), bare, 'empty partial record changes nothing');
+    assert.deepEqual(Engine.hydrate(cd, fake, DEFAULT_RULESET), bare, 'the full default record changes nothing');
+  }
+});
+
+test('ruleset: casterFractions.half="down" flips the 2014 multiclass rounding (MC-2)', () => {
+  const fake = makeFake();
+  const cd = { classes: [{ classId: 'paladin', level: 5 }, { classId: 'sorcerer', level: 1 }] };
+  // 2024 default: ceil(5/2)+1 = 4 → [4,3].
+  assert.deepEqual(Engine.hydrate(cd, fake).sheet.spellcasting.slots, [4, 3]);
+  // 2014 rounding: floor(5/2)+1 = 3 → [4,2].
+  const rs2014 = { constants: { casterFractions: { half: 'down' } } };
+  const out = Engine.hydrate(cd, fake, rs2014).sheet.spellcasting;
+  assert.equal(out.casterLevel, 3);
+  assert.deepEqual(out.slots, [4, 2]);
+});
+
+test('ruleset: rest.longRestHitDice="half" maps hit-dice recharge to halfLevel (2014)', () => {
+  const fake = makeFake();
+  const cd = { className: 'Barbarian', level: 4 };
+  const hd = (rs) => Engine.hydrate(cd, fake, rs).sheet.resources.find((r) => r.kind === 'hitdice');
+  assert.deepEqual(hd(null).recharge, [{ on: 'long', amount: 'full' }], '2024: ALL hit dice back');
+  assert.deepEqual(hd({ constants: { rest: { longRestHitDice: 'half' } } }).recharge,
+    [{ on: 'long', amount: 'halfLevel' }], '2014: half-your-total');
+});
+
+test('ruleset: capabilities.weaponMastery=false zeroes mastery slots (2014 has no mastery)', () => {
+  const fake = makeFake();
+  const cd = { className: 'Fighter', level: 5, feats: [{ featId: 'weapon-master' }] };
+  assert.equal(Engine.hydrate(cd, fake).sheet.weaponMastery.slots, 4, '2024: class 3 + feat 1');
+  assert.equal(Engine.hydrate(cd, fake, { capabilities: { weaponMastery: false } }).sheet.weaponMastery.slots, 0);
+});
+
+test('ruleset: ability/attunement caps + epic-boon capability come from the record', () => {
+  const fake = makeFake();
+  // Lower ability cap clamps the granted score (default 20 stays 20).
+  const cd = { className: 'Fighter', level: 1, baseStats: { STR: 16 }, abilityGrants: [{ source: 'x', assign: { STR: 4 } }] };
+  assert.equal(Engine.hydrate(cd, fake).sheet.abilities.STR.score, 20);
+  assert.equal(Engine.hydrate(cd, fake, { constants: { abilityCap: 18 } }).sheet.abilities.STR.score, 18);
+  // Attunement limit 1 → two attuned items over-attune.
+  const inv = { className: 'Fighter', level: 1, inventory: [{ ref: 'longsword', attuned: true }, { ref: 'dagger', attuned: true }] };
+  assert.equal(Engine.hydrate(inv, fake).sheet.attunement.over, false, '2024 limit 3');
+  const tight = Engine.hydrate(inv, fake, { constants: { attunementLimit: 1 } }).sheet.attunement;
+  assert.deepEqual({ limit: tight.limit, over: tight.over }, { limit: 1, over: true });
+  // epicBoons: null (2014) removes the category's raised cap.
+  const boon = { category: 'epicBoon' };
+  assert.equal(Engine.featAbilityCap(boon), 30, '2024: boons raise the cap to 30');
+  assert.equal(Engine.featAbilityCap(boon, resolveRuleset({ capabilities: { epicBoons: null } })), null);
+});
+
+test('ruleset: a partial record only overrides what it names (per-constant fallback)', () => {
+  const rs = resolveRuleset({ edition: '2014', constants: { abilityCap: 22 } });
+  assert.equal(rs.edition, '2014');
+  assert.equal(rs.constants.abilityCap, 22, 'named constant overrides');
+  assert.deepEqual(rs.constants.multiclassSlots['20'] || rs.constants.multiclassSlots[20],
+    [4, 3, 3, 3, 3, 2, 2, 1, 1], 'unnamed constants keep the 2024 defaults');
+  assert.equal(rs.capabilities.weaponMastery, true, 'unnamed capabilities keep the defaults');
+  assert.equal(resolveRuleset(undefined), DEFAULT_RULESET, 'no record → the default object itself');
+});
+
+test('ruleset: DEFAULT_RULESET matches the compendium dnd-2024 record (drift guard)', (t) => {
+  // Dev-only cross-repo guard: the printed record and the engine defaults must
+  // agree exactly. Skips when the sibling checkout is absent (CI without it).
+  const p = fileURLToPath(new URL('../../dnd55e-compendium/data/phb/rulesets/dnd-2024.json', import.meta.url));
+  if (!existsSync(p)) return t.skip('dnd55e-compendium sibling checkout not present');
+  const rec = JSON.parse(readFileSync(p, 'utf8'));
+  assert.deepEqual(rec.constants, DEFAULT_RULESET.constants, 'constants drifted between record and engine defaults');
+  assert.deepEqual(rec.capabilities, DEFAULT_RULESET.capabilities, 'capabilities drifted');
+  assert.equal(rec.edition, DEFAULT_RULESET.edition);
+});
+
+test('ruleset: provided rules api surface is the documented contract (shape lock)', () => {
+  // rules/README.md documents this surface for other addons (a future combat
+  // tracker consumes it via host.use('dnd55e-sheets')). Removing/renaming a
+  // method is a BREAKING change: bump apiVersion and update the doc.
+  const { rec } = withFake();
+  const api = rec.provided;
+  assert.equal(api.apiVersion, 1);
+  assert.deepEqual(Object.keys(api).sort(), [
+    'apiVersion', 'derive', 'getFeature', 'getItem', 'getItemByName', 'getRecords', 'getRuleset',
+    'hydrate', 'listArmor', 'listBackgrounds', 'listClasses', 'listEquipment', 'listFeats',
+    'listFeatures', 'listSkills', 'listSpecies', 'listSpells', 'listSubclasses', 'listWeapons',
+  ].sort());
+  assert.deepEqual(Object.keys(api.derive).sort(),
+    ['abilityMod', 'armorClass', 'initiative', 'maxHp', 'multiclassSlots', 'proficiencyBonus', 'saveDC'].sort());
+  // getRuleset always returns a RESOLVED ruleset (fake data has no record → defaults).
+  assert.equal(api.getRuleset().edition, '2024');
+  assert.equal(api.getRuleset().constants.abilityCap, 20);
+  // A provider that ships a record sees it merged in.
+  const withRecord = makeRulesApi(() => ({ ...makeFake(), getRuleset: () => ({ edition: '2014', constants: { abilityCap: 22 } }) }));
+  assert.equal(withRecord.getRuleset().edition, '2014');
+  assert.equal(withRecord.getRuleset().constants.abilityCap, 22);
+  assert.equal(withRecord.getRuleset().constants.attunementLimit, 3, 'unnamed constants still default');
+});
+
+test('ruleset: a feat record\'s structured initiative modifiers beat the alert fallback (CX-2)', () => {
+  const fake = makeFake();
+  // A 2014-style Alert: flat +5, no PB — the record field is the authority.
+  fake.getItem = ((orig) => (kind, id) => {
+    const r = orig(kind, id);
+    if (kind === 'feat' && id === 'alert') return { id: 'alert', name: 'Alert', category: 'general', modifiers: [{ target: 'initiative', add: 5 }] };
+    return r;
+  })(fake.getItem);
+  const cd = { className: 'Fighter', level: 5, baseStats: { DEX: 14 }, feats: [{ featId: 'alert' }] };
+  assert.equal(Engine.hydrate(cd, fake).sheet.derived.initiative, 2 + 5, 'record modifiers win: DEX +2, flat +5');
+  // Without a record (name-only book), the legacy alert→PB fallback still fires.
+  const bare = makeFake();
+  bare.getItem = ((orig) => (kind, id) => (kind === 'feat' && id === 'alert' ? null : orig(kind, id)))(bare.getItem);
+  assert.equal(Engine.hydrate(cd, bare).sheet.derived.initiative, 2 + 3, 'fallback: DEX +2, PB +3');
+});
+
+// ── ARCH-7 stage 4: provider candidate list + the character's ruleset tag ──
+
+const make2014Provider = () => ({
+  ...makeFake(),
+  getRuleset: () => ({ edition: '2014', constants: { casterFractions: { half: 'down' } }, capabilities: { weaponMastery: false, epicBoons: null, backgroundAsi: false } }),
+});
+
+test('ruleset: provider probe walks the candidate list — a 2014 provider under the second id drives the rules', () => {
+  const META2 = { ...META, optionalDependencies: { ...META.optionalDependencies, 'dnd5e-compendium': { range: '>=0.1.0' } } };
+  const { rec } = dryRunRegister(register, META2, { deps: { 'dnd5e-compendium': make2014Provider() } });
+  const api = rec.provided;
+  assert.equal(api.getRuleset().edition, '2014', 'second candidate id found when the first is absent');
+  const out = api.hydrate({ classes: [{ classId: 'paladin', level: 5 }, { classId: 'sorcerer', level: 1 }] }).sheet.spellcasting;
+  assert.deepEqual(out.slots, [4, 2], '2014 half-caster round-down flows through the provided api');
+  assert.equal(api.hydrate({ className: 'Fighter', level: 5 }).sheet.weaponMastery.slots, 0, 'capability gate flows through');
+});
+
+test('ruleset: edition mismatch warns (advisory) and Builder saves re-stamp the tag', () => {
+  const fake2014 = make2014Provider();
+  const host = { use: (id) => (id === 'dnd5e-compendium' ? fake2014 : null) };
+  const num2 = (v, d = 0) => { const n = Number(v); return Number.isFinite(n) ? n : d; };
+  const model = makeEngine({ num: num2, host, NS: 'x', ABILITIES: [], SKILLS: [], abilityMod: () => 0, sheetOf: () => ({}), clampHp: (hp) => num2(hp, 0) });
+  const engine = model.getRules();
+  assert.ok(engine, 'candidate-list probe finds the provider');
+  // A 2024-built character under a 2014 provider: renders + warns (ARCH-5 advisory).
+  const r = model.safeHydrate(engine, { ruleset: '2024', className: 'Wizard', level: 1 });
+  assert.ok(r && r.sheet, 'mismatch never blocks rendering');
+  assert.match(r.warnings[0], /2024.*2014/, 'the mismatch is surfaced as the first warning');
+  // Same-edition characters get no such warning.
+  assert.ok(!model.safeHydrate(engine, { ruleset: '2014', className: 'Wizard', level: 1 }).warnings.some((w) => /ruleset/.test(w)));
+  // materializeInto re-stamps the tag from the provider's edition (DEG-1 save path).
+  const s = { ruleset: '2024', className: 'Wizard', level: 1, abilities: {} };
+  model.materializeInto(s, engine);
+  assert.equal(s.ruleset, '2014', 'Builder save stamps the active provider edition');
+});
