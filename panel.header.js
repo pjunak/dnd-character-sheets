@@ -6,9 +6,10 @@
 //  (HP / AC / Initiative / Speed / Proficiency / Passive Perception, plus —
 //  engine mode, per casting class — Spell Save DC / Spell Attack).
 //
-//  HP is the live-play centrepiece: the current HP is a directly-editable host
-//  stepper (type a value, or ± by 1; clamped to [0,max]) with Max + Temp HP as
-//  small steppers beneath. AC / Init / Speed / Proficiency come from the build:
+//  HP is the live-play centrepiece: one host stepper holds "cur / max" as a
+//  single counter (type a value, or ± the current by 1; clamped to [0,max])
+//  with Max + Temp HP as small steppers beneath. AC / Init / Speed / Proficiency
+//  come from the build:
 //  engine-mode read-only (fill them in the Builder), standalone hand-editable.
 //
 //  Every vital carries a hover/focus legend (statTip) that explains what it is,
@@ -113,32 +114,34 @@ export function makeHeaderPanel(ctx) {
     </div>`;
   }
 
-  // ── HP tile — the live-play centrepiece. The current HP is a directly-editable
-  //    host `.codex-stepper` (type a value, or ± by 1; clamped to [0,max] by
-  //    setField), with Max (standalone only) + Temp HP as small steppers beneath —
-  //    no more separate heal/damage-by-amount field. The "/ max" carries the HP
-  //    legend; the stepper border flags "bloodied" (≤35%). ──
+  // ── HP tile — the live-play centrepiece. ONE counter, "− cur / max ＋": the
+  //    current HP and the max live INSIDE the same host `.codex-stepper` so the
+  //    pair reads as a single number (± steps / type the current, clamped to
+  //    [0,max] by setField; the " / max" half is display-only). The TILE LABEL
+  //    carries the max-HP hover legend — the stepper is overflow:hidden, so a
+  //    popover anchored inside it would be clipped. Max (standalone only) +
+  //    Temp HP are small steppers beneath. Bloodied (≤35%) flags the counter
+  //    with a red border + number. ──
   function hpTile(cid, cur, max, temp, editable, vm, L) {
-    const hpVal = statTip(
-      `<span style="color:${hpColor(cur, max)}">${esc(String(cur))}</span><span style="color:var(--text-muted);font-size:var(--text-lg)"> / ${esc(String(max))}</span>`,
-      L.hp(), { align: 'l' });
-    const hpLabel = `<div class="codex-tile-label">${esc(t('stat.hp'))}</div>`;
+    const hpLabel = `<div class="codex-tile-label">${statTip(esc(t('stat.hp')), L.hp(), { align: 'l', underline: true })}</div>`;
 
-    // Read view (anonymous): just the number + temp, no controls.
+    // Read view (anonymous): the plain cur / max pair + temp note, no controls.
     if (!editable) {
+      const hpVal = `<span style="color:${hpColor(cur, max)}">${esc(String(cur))}</span><span style="color:var(--text-muted);font-size:var(--text-lg)"> / ${esc(String(max))}</span>`;
       const tempSub = temp > 0 ? `<div style="font-size:var(--text-xs);color:var(--color-success);margin-top:1px">+${esc(String(temp))} ${esc(t('stat.temp'))}</div>` : '';
       return `<div class="codex-tile codex-tile-accent codex-tile-wide">
         ${hpLabel}
         <div class="codex-tile-value">${hpVal}</div>${tempSub}</div>`;
     }
 
-    // Editable current HP — one host stepper: type or ± by 1, clamped [0,max] by
-    // setField. A red stepper border flags bloodied. Max shown beside (carries the legend).
     const bloodied = max > 0 && (cur <= 0 || cur / max <= 0.35);
+    const maxIn = `<span style="align-self:center;padding-right:var(--space-1);color:var(--text-muted);font-size:var(--text-lg);font-variant-numeric:tabular-nums;white-space:nowrap"> / ${esc(String(max))}</span>`;
     const curField = numField(host.h.dataOn('change', host.action('setField'), cid, 'hp', '$value'), cur,
-      { min: 0, max: max > 0 ? max : null, ariaLabel: t('stat.hp'), width: '3.6rem', wrapStyle: 'font-size:1.5rem' + (bloodied ? ';border-color:var(--color-danger)' : '') });
-    const maxOut = statTip(`<span style="color:var(--text-muted);font-size:var(--text-lg);font-variant-numeric:tabular-nums"> / ${esc(String(max))}</span>`, L.hp(), { align: 'l', underline: true });
-    const hpRow = `<div style="display:flex;align-items:center;justify-content:center;gap:var(--space-2)">${curField}${maxOut}</div>`;
+      { min: 0, max: max > 0 ? max : null, ariaLabel: t('stat.hp'), width: '2.9rem',
+        inputStyle: `font-size:var(--text-xl);font-weight:700;color:${hpColor(cur, max)};padding-top:0.15rem;padding-bottom:0.15rem`,
+        suffixHtml: maxIn,
+        wrapStyle: bloodied ? 'border-color:var(--color-danger)' : '' });
+    const hpRow = `<div style="display:flex;justify-content:center">${curField}</div>`;
 
     // Max (standalone only — engine computes it) + Temp HP, small labelled steppers.
     const lbl = (txt, field, value, min) => `<label style="display:inline-flex;flex-direction:column;align-items:center;gap:1px;font-size:var(--text-xs);color:var(--text-muted)"><span>${esc(txt)}</span>${numField(host.h.dataOn('change', host.action('setField'), cid, field, '$value'), value, { min, ariaLabel: txt })}</label>`;

@@ -134,7 +134,9 @@ test('sheets: vital tiles carry text labels + the compact strip adds spell DC/at
     const out = renderBody(rec, { id: 'cvi', name: 'Mage', addonData: { 'dnd55e-sheets': { className: 'Wizard', abilities: { DEX: 14 } } } });
     // Stat names are spelled-out text labels again (the icon-glyph vitals were
     // reverted — icons read too cryptic for the width they saved).
-    assert.match(out, /class="codex-tile-label">Hit Points</, 'the HP tile is text-labelled');
+    // The HP label text sits inside a hover-legend tip (the stepper value can't
+    // anchor a popover — .codex-stepper is overflow:hidden).
+    assert.match(out, /codex-tip-u">Hit Points</, 'the HP tile is text-labelled + carries the legend');
     assert.match(out, /class="codex-tile-label">Initiative</, 'a computed vital is text-labelled');
     assert.doesNotMatch(out, /codex-icon/, 'no stat glyphs in the vitals');
     // The width the compact tiles free up carries the caster stats (engine mode).

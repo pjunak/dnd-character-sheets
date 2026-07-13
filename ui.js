@@ -166,9 +166,15 @@ export function makeUI(ctx) {
   //    number <input>. The host hides the native spin-buttons app-wide and steps
   //    the input on button click (see edit.css / app.js), so every number entry
   //    on the sheet is on-theme and click-friendly. `changeAttr` is a
-  //    host.h.dataOn('change', …) string; `value` the current value. ──
+  //    host.h.dataOn('change', …) string; `value` the current value.
+  //    `inputStyle` adds inline style to the input (sizing/colour overrides);
+  //    `suffixHtml` renders INSIDE the control between the input and the ＋
+  //    button (display-only companion text — the HP tile's " / max"; the host
+  //    click handler finds the input by querySelector, so extra children are
+  //    safe). ──
   function numField(changeAttr, value, opts) {
     opts = opts || {};
+    const style = [opts.width ? `width:${opts.width}` : '', opts.inputStyle || ''].filter(Boolean).join(';');
     const a = [
       'class="edit-input"', 'type="number"', 'inputmode="numeric"',
       opts.min != null ? `min="${num(opts.min)}"` : '',
@@ -178,12 +184,13 @@ export function makeUI(ctx) {
       opts.ariaLabel ? `aria-label="${esc(opts.ariaLabel)}"` : '',
       opts.placeholder != null ? `placeholder="${esc(String(opts.placeholder))}"` : '',
       `value="${esc(String(value == null ? '' : value))}"`,
-      opts.width ? `style="width:${opts.width}"` : '',
+      style ? `style="${style}"` : '',
       changeAttr || '',
     ].filter(Boolean).join(' ');
     return `<span class="codex-stepper"${opts.wrapStyle ? ` style="${esc(opts.wrapStyle)}"` : ''}>`
       + `<button type="button" class="codex-stepper-btn" data-num-step="-1" tabindex="-1" aria-hidden="true">−</button>`
       + `<input ${a}>`
+      + (opts.suffixHtml || '')
       + `<button type="button" class="codex-stepper-btn" data-num-step="1" tabindex="-1" aria-hidden="true">＋</button>`
       + `</span>`;
   }
