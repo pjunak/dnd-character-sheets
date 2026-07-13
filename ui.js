@@ -41,10 +41,16 @@ export function makeUI(ctx) {
     .addon-dnd55e-sheets .dse-cards { display:flex; flex-direction:column; gap:var(--space-3); flex:0 1 17rem; min-width:14rem }
     .addon-dnd55e-sheets .dse-cols-main { flex:1 1 20rem; min-width:0 }
     @media (max-width:720px){ .addon-dnd55e-sheets .dse-cards { flex-basis:100% } }
-    /* Compact vitals strip: tiles hug their label/value width instead of growing
-       to fill the row (the host default is flex:1 1 5rem), so the strip wastes no
-       width and has room for the spell save DC / spell attack tiles. */
+    /* Compact vitals strip: two tall anchor tiles (the HP counter + the AC/shield
+       tile) with the small stats stacked two-high in a column-flow grid, so the
+       whole strip reads as ONE uniform-height band. Tiles hug their label/value
+       width instead of growing to fill the row (the host default is flex:1 1 5rem)
+       — no wasted width, and the band stays narrow enough to sit beside the
+       ability cards eventually. */
+    .addon-dnd55e-sheets .dse-vitals { display:flex; flex-wrap:wrap; gap:var(--space-2); align-items:stretch }
     .addon-dnd55e-sheets .dse-vitals .codex-tile { flex:0 1 auto; min-width:3.5rem; padding:var(--space-2) }
+    .addon-dnd55e-sheets .dse-tile-tall { display:flex; flex-direction:column }
+    .addon-dnd55e-sheets .dse-vitals-grid { display:grid; grid-auto-flow:column; grid-template-rows:1fr 1fr; gap:var(--space-2) }
     /* Progression spine row — the full-row overlay toggle. A hover/focus tint makes
        the whole-row click target discoverable; focus-visible draws a keyboard ring. */
     .addon-dnd55e-sheets .dse-spine-toggle { border-radius:var(--radius-sm); transition:background var(--dur-fast) var(--ease-out); }

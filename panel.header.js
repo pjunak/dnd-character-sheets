@@ -4,7 +4,9 @@
 //  The host's native side-card owns name / portrait / species / facts, so this
 //  bar adds ONLY the D&D bits: a class / level line and the vital stat strip
 //  (HP / AC / Initiative / Speed / Proficiency / Passive Perception, plus —
-//  engine mode, per casting class — Spell Save DC / Spell Attack).
+//  engine mode, per casting class — Spell Save DC / Spell Attack). The strip
+//  is one uniform-height band: the HP counter and the AC/shield tile stand
+//  tall, and the small stats stack two-high in a grid beside them.
 //
 //  HP is the live-play centrepiece: one host stepper holds "cur / max" as a
 //  single counter (type a value, or ± the current by 1; clamped to [0,max])
@@ -21,22 +23,41 @@ export function makeHeaderPanel(ctx) {
   const { esc } = host.h;
   const { heroTile, numField, statTip, entityRef } = ui;
 
-  // Shield-equipped indicator for the AC tile: the shield SHAPE itself — filled
-  // gold when a shield contributes to AC, an empty outline struck through when
-  // none is equipped. Inline SVG (a domain indicator like the proficiency dots,
-  // not a stat glyph) reusing the host icon set's shield path so the silhouette
-  // matches the rest of the app. Engine-only (the bonus comes from
-  // comp.ac.shield); standalone AC is hand-entered, so it's omitted.
+  // Shield-equipped row for the AC tile's bottom edge: the shield SHAPE itself —
+  // filled gold with its +N bonus beside it when a shield contributes to AC, an
+  // empty outline struck through (no number) when none is equipped. Inline SVG
+  // (a domain indicator like the proficiency dots, not a stat glyph) reusing the
+  // host icon set's shield path so the silhouette matches the rest of the app.
+  // Engine-only (the bonus comes from comp.ac.shield); standalone AC is
+  // hand-entered, so the row is omitted there.
   const SHIELD_PATH = 'M12 2.6 19 5.3V11C19 15.6 16 19.4 12 21.4 8 19.4 5 15.6 5 11V5.3Z';
-  const shieldMark = (equipped) => {
-    const body = equipped
+  const shieldRow = (bonus) => {
+    const on = num(bonus, 0) > 0;
+    const body = on
       ? `<path d="${SHIELD_PATH}" fill="var(--accent-gold)" stroke="var(--accent-gold)" stroke-width="1.6" stroke-linejoin="round"/>`
       : `<path d="${SHIELD_PATH}" fill="none" stroke="var(--text-muted)" stroke-width="1.6" stroke-linejoin="round"/>`
         + `<line x1="4.2" y1="3.4" x2="19.8" y2="20.6" stroke="var(--text-muted)" stroke-width="1.6" stroke-linecap="round"/>`;
-    const label = equipped ? t('stat.shieldOn') : t('stat.shieldOff');
-    return `<span title="${esc(label)}" role="img" aria-label="${esc(label)}" style="display:inline-flex;justify-content:center;line-height:0">`
-      + `<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">${body}</svg></span>`;
+    const label = on ? t('stat.shieldOn') : t('stat.shieldOff');
+    const bonusHtml = on ? `<span style="font-size:var(--text-xs);color:var(--text-muted);font-variant-numeric:tabular-nums">${esc(signed(num(bonus)))}</span>` : '';
+    return `<div title="${esc(label)}" role="img" aria-label="${esc(label)}" style="display:flex;align-items:center;justify-content:center;gap:3px;margin-top:var(--space-1)">`
+      + `<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" style="display:block">${body}</svg>${bonusHtml}</div>`;
   };
+
+  // ── AC tile — tall like the HP counter (the two anchor the strip's height):
+  //    the AC value centred in the tile, the shield row pinned to the bottom.
+  //    Standalone keeps the hand-edit stepper; the shield row is engine-only. ──
+  function acTile(cid, editable, vm, comp, L) {
+    const valueHtml = statTip(`<span>${esc(String(vm.ac))}</span>`, L.ac(), { align: 'l', underline: true });
+    const editHtml = (editable && !vm.auto)
+      ? `<div style="margin-top:var(--space-1);display:flex;justify-content:center">${numField(host.h.dataOn('change', host.action('setField'), cid, 'ac', '$value'), num(vm.ac), { ariaLabel: t('stat.ac') })}</div>`
+      : '';
+    const shield = (comp && comp.ac) ? shieldRow(comp.ac.shield) : '';
+    return `<div class="codex-tile codex-tile-accent dse-tile-tall" title="${esc(t('stat.ac'))}">
+      <div class="codex-tile-label">${esc(t('stat.ac'))}</div>
+      <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center">
+        <div class="codex-tile-value">${valueHtml}</div>${editHtml}</div>
+      ${shield}</div>`;
+  }
 
   const hpColor = (cur, max) => {
     if (max <= 0) return 'var(--text-parchment)';
@@ -98,19 +119,19 @@ export function makeHeaderPanel(ctx) {
            + vital(cid, t('spell.attack'), null, signed(num(p.spellAttack)), vm, editable, L.spellAtk(p), { align: 'r', sub });
     }).join('');
 
-    const strip = [
-      hpTile(cid, cur, max, temp, editable, vm, L),
-      vital(cid, t('stat.ac'), 'ac', vm.ac, vm, editable, L.ac(), { accent: true, align: 'l', sub: (comp && comp.ac) ? shieldMark(num(comp.ac.shield, 0) > 0) : '' }),
+    // Two tall anchors (HP counter + AC/shield) set the strip's height; the
+    // small stats stack two-high in a column-flow grid beside them (layout in
+    // ui.js STYLE → .dse-vitals / .dse-vitals-grid).
+    const smallTiles = [
       vital(cid, t('stat.init'), 'initiative', signed(vm.init), vm, editable, L.init()),
       vital(cid, t('stat.speed'), 'speed', vm.speed, vm, editable, L.speed()),
-      vital(cid, t('stat.pb'), 'profBonus', signed(vm.pb), vm, editable, L.pb(), { align: 'r' }),
+      vital(cid, t('stat.pb'), 'profBonus', signed(vm.pb), vm, editable, L.pb()),
       vital(cid, t('stat.passivePercAbbr'), null, vm.passivePerc, vm, editable, L.passive(), { align: 'r' }),
-      spellTiles,
-    ].join('');
+    ].join('') + spellTiles;
 
     return `<div style="display:flex;flex-direction:column;gap:var(--space-3);margin-bottom:var(--space-4)">
       ${idHtml}
-      <div class="dse-vitals" style="display:flex;flex-wrap:wrap;gap:var(--space-2);align-items:flex-start">${strip}</div>
+      <div class="dse-vitals">${hpTile(cid, cur, max, temp, editable, vm, L)}${acTile(cid, editable, vm, comp, L)}<div class="dse-vitals-grid">${smallTiles}</div></div>
     </div>`;
   }
 
