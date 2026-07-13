@@ -78,9 +78,10 @@ the guided per-level **tabbed Builder** (progression spines, ASI ± steppers ove
 a shared budget, reconcile-on-change), the **spellbook** (Wizard learned pool,
 copy-from-scroll, Warlock Pact Magic), **print/PDF + JSON export/import**, and
 the full **UI polish** pass — whole-row click targets with hover/focus rings,
-editable-HP tile, host stat glyphs on the vitals (PB = `medal`), 3-state
-proficiency dots + AC shield indicator, keyboard-navigable sub-tabs, host
-`.codex-chip` spell/inventory chips. All repeatable UI renders host `.codex-*`
+editable-HP tile, a compact text-labelled vitals strip (incl. per-class spell
+save DC / spell attack tiles; the icon-glyph vitals were reverted), 3-state
+proficiency dots + a filled/struck shield-shaped AC indicator,
+keyboard-navigable sub-tabs, host `.codex-chip` spell/inventory chips. All repeatable UI renders host `.codex-*`
 components; standalone (no book) degrades to a hand-filled sheet (DEG-1).
 
 ## Working here — the facts that bite

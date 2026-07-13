@@ -127,31 +127,21 @@ test('sheets: HP is a directly-editable stepper — no heal/damage-by-amount fie
   } finally { clearLocalStorage(); }
 });
 
-test('sheets: vital tiles use the HOST stat glyphs with the full label kept as aria-label', () => {
+test('sheets: vital tiles carry text labels + the compact strip adds spell DC/attack', () => {
   mockLocalStorage('stats');
   try {
     const { rec } = dryRunRegister(register, META, PHB());
     const out = renderBody(rec, { id: 'cvi', name: 'Mage', addonData: { 'dnd55e-sheets': { className: 'Wizard', abilities: { DEX: 14 } } } });
-    // A stat name is a compact glyph from the host icon set (h.icon → .codex-icon,
-    // promoted from this addon); the word stays as aria-label (a11y).
-    assert.match(out, /class="codex-tile-label" role="img" aria-label="/, 'a vital tile labels its icon for screen readers');
-    assert.match(out, /<svg class="codex-icon"/, 'the glyph is the host icon component');
-    // The old addon-local vitals SVG carried its stroke styling inline — gone.
-    // (The save shield + proficiency dots keep theirs: domain indicators, not glyphs.)
-    assert.doesNotMatch(out, /margin:0 auto;fill:none;stroke:var\(--text-muted\)/, 'no addon-local vitals SVG remains');
-  } finally { clearLocalStorage(); }
-});
-
-test('sheets: vitals degrade to text labels on a host without h.icon', () => {
-  mockLocalStorage('stats');
-  try {
-    // Simulate an older host: same mock, minus the icon facade.
-    const { host, rec } = createMockHost(META, PHB());
-    delete host.h.icon;
-    register(host);
-    const out = renderBody(rec, { id: 'cvo', name: 'Mage', addonData: { 'dnd55e-sheets': { className: 'Wizard' } } });
-    assert.doesNotMatch(out, /codex-icon/, 'no glyphs without the facade');
-    assert.match(out, /class="codex-tile-label">Hit Points</, 'the HP tile falls back to its text label');
+    // Stat names are spelled-out text labels again (the icon-glyph vitals were
+    // reverted — icons read too cryptic for the width they saved).
+    assert.match(out, /class="codex-tile-label">Hit Points</, 'the HP tile is text-labelled');
+    assert.match(out, /class="codex-tile-label">Initiative</, 'a computed vital is text-labelled');
+    assert.doesNotMatch(out, /codex-icon/, 'no stat glyphs in the vitals');
+    // The width the compact tiles free up carries the caster stats (engine mode).
+    assert.match(out, /class="codex-tile-label">Save DC</, 'spell save DC joins the vitals strip');
+    assert.match(out, /class="codex-tile-label">Spell Attack</, 'spell attack bonus joins the vitals strip');
+    // The strip is wrapped so the addon stylesheet can stop the tiles growing.
+    assert.match(out, /class="dse-vitals"/, 'the compact-width wrapper class is present');
   } finally { clearLocalStorage(); }
 });
 
@@ -165,8 +155,12 @@ test('sheets: 3-state SVG proficiency dots + AC shield-equipped indicator (UI po
     // (mastery = a larger ring + filled centre, same helper).
     assert.match(out, /<circle cx="8" cy="8" r="3\.6" fill="none"/, 'unproficient skills → small outline dot');
     assert.match(out, /<circle cx="8" cy="8" r="4\.2" fill="var\(--accent-gold\)"/, 'a proficient skill → small filled dot');
-    // AC tile carries a shield-equipped indicator (this Wizard has none → off-state).
+    // AC tile carries a shield-equipped indicator (this Wizard has none → the
+    // off-state: an EMPTY shield outline struck through by a diagonal line).
     assert.match(out, /No shield equipped/, 'AC shows the shield indicator');
+    assert.match(out, /M12 2\.6 19 5\.3V11[^"]*" fill="none"/, 'off-state = the shield shape, unfilled');
+    assert.match(out, /<line x1="4\.2" y1="3\.4"/, 'off-state shield is struck through');
+    assert.doesNotMatch(out, /d="M12 2\.6[^"]*" fill="var\(--accent-gold\)"/, 'no filled shield without one equipped');
   } finally { clearLocalStorage(); }
 });
 

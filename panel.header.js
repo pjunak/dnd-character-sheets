@@ -3,7 +3,8 @@
 //
 //  The host's native side-card owns name / portrait / species / facts, so this
 //  bar adds ONLY the D&D bits: a class / level line and the vital stat strip
-//  (HP / AC / Initiative / Speed / Proficiency / Passive Perception).
+//  (HP / AC / Initiative / Speed / Proficiency / Passive Perception, plus —
+//  engine mode, per casting class — Spell Save DC / Spell Attack).
 //
 //  HP is the live-play centrepiece: the current HP is a directly-editable host
 //  stepper (type a value, or ± by 1; clamped to [0,max]) with Max + Temp HP as
@@ -15,28 +16,25 @@
 // ═══════════════════════════════════════════════════════════════
 
 export function makeHeaderPanel(ctx) {
-  const { host, t, num, signed, firstPara, ui, viewModel, legends } = ctx;
+  const { host, t, num, signed, titleize, firstPara, ui, viewModel, legends } = ctx;
   const { esc } = host.h;
   const { heroTile, numField, statTip, entityRef } = ui;
 
-  // Vitals glyphs come from the host's shared stat-icon set (`h.icon` → a
-  // `.codex-icon` SVG, stroke:currentColor — inside the tile label slot it
-  // inherits the muted label colour). A compact icon reads faster and sits
-  // narrower than a spelled-out stat name (the tile keeps the full label as
-  // its title + the slot's aria-label). Feature-detected: on an older host
-  // icon() returns '' and every call site falls back to its text label.
-  const GLYPH = { hp: 'heart', ac: 'shield', init: 'bolt', speed: 'chevrons', pb: 'medal', passive: 'eye' };
-  const icon = (name) => (typeof host.h.icon === 'function') ? host.h.icon(GLYPH[name] || name) : '';
-
-  // Shield-equipped indicator for the AC tile: a filled circle when a shield contributes
-  // to AC, an outline circle when it doesn't (mirrors the proficiency dots). Engine-only
-  // (the bonus comes from comp.ac.shield); standalone AC is hand-entered, so it's omitted.
-  const shieldDot = (equipped) => {
-    const c = equipped
-      ? `<circle cx="8" cy="8" r="4.2" fill="var(--accent-gold)"/>`
-      : `<circle cx="8" cy="8" r="3.6" fill="none" stroke="var(--text-muted)" stroke-width="1.6"/>`;
-    const svg = `<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" style="display:block">${c}</svg>`;
-    return `<span title="${esc(equipped ? t('stat.shieldOn') : t('stat.shieldOff'))}" style="display:inline-flex;align-items:center;gap:3px">${svg}${esc(t('stat.shield'))}</span>`;
+  // Shield-equipped indicator for the AC tile: the shield SHAPE itself — filled
+  // gold when a shield contributes to AC, an empty outline struck through when
+  // none is equipped. Inline SVG (a domain indicator like the proficiency dots,
+  // not a stat glyph) reusing the host icon set's shield path so the silhouette
+  // matches the rest of the app. Engine-only (the bonus comes from
+  // comp.ac.shield); standalone AC is hand-entered, so it's omitted.
+  const SHIELD_PATH = 'M12 2.6 19 5.3V11C19 15.6 16 19.4 12 21.4 8 19.4 5 15.6 5 11V5.3Z';
+  const shieldMark = (equipped) => {
+    const body = equipped
+      ? `<path d="${SHIELD_PATH}" fill="var(--accent-gold)" stroke="var(--accent-gold)" stroke-width="1.6" stroke-linejoin="round"/>`
+      : `<path d="${SHIELD_PATH}" fill="none" stroke="var(--text-muted)" stroke-width="1.6" stroke-linejoin="round"/>`
+        + `<line x1="4.2" y1="3.4" x2="19.8" y2="20.6" stroke="var(--text-muted)" stroke-width="1.6" stroke-linecap="round"/>`;
+    const label = equipped ? t('stat.shieldOn') : t('stat.shieldOff');
+    return `<span title="${esc(label)}" role="img" aria-label="${esc(label)}" style="display:inline-flex;justify-content:center;line-height:0">`
+      + `<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">${body}</svg></span>`;
   };
 
   const hpColor = (cur, max) => {
@@ -55,7 +53,7 @@ export function makeHeaderPanel(ctx) {
       ? `<div style="margin-top:var(--space-1);display:flex;justify-content:center">${numField(host.h.dataOn('change', host.action('setField'), cid, field, '$value'), num(display), { min: field === 'speed' ? 0 : null, ariaLabel: label })}</div>`
       : '';
     const valueHtml = statTip(`<span>${esc(String(display))}</span>`, legend, { align: opts.align, underline: true });
-    return heroTile(label, valueHtml, { accent: opts.accent, editHtml, icon: opts.icon, sub: opts.sub });
+    return heroTile(label, valueHtml, { accent: opts.accent, editHtml, sub: opts.sub });
   }
 
   function vitalsBar(c, s, comp, editable, engine) {
@@ -88,18 +86,30 @@ export function makeHeaderPanel(ctx) {
       idHtml = `<div style="color:var(--text-light);font-size:var(--text-sm);font-weight:600;letter-spacing:.02em">${esc(line).replace(TOKEN, (clsHtml + subHtml).trim())}</div>`;
     }
 
+    // Spell save DC + spell attack per casting class (engine mode; SP-4 — each
+    // class keeps its own numbers). With one caster class the labels speak for
+    // themselves; multiclass tiles carry the class name as a sub-line.
+    const perClass = (comp && comp.spellcasting && comp.spellcasting.perClass) || [];
+    const multi = perClass.length > 1;
+    const spellTiles = perClass.map((p) => {
+      const sub = multi ? esc(titleize(p.classId)) : '';
+      return vital(cid, t('spell.saveDC'), null, num(p.saveDC), vm, editable, L.spellDC(p), { align: 'r', sub })
+           + vital(cid, t('spell.attack'), null, signed(num(p.spellAttack)), vm, editable, L.spellAtk(p), { align: 'r', sub });
+    }).join('');
+
     const strip = [
       hpTile(cid, cur, max, temp, editable, vm, L),
-      vital(cid, t('stat.ac'), 'ac', vm.ac, vm, editable, L.ac(), { accent: true, align: 'l', icon: icon('ac'), sub: (comp && comp.ac) ? shieldDot(num(comp.ac.shield, 0) > 0) : '' }),
-      vital(cid, t('stat.init'), 'initiative', signed(vm.init), vm, editable, L.init(), { icon: icon('init') }),
-      vital(cid, t('stat.speed'), 'speed', vm.speed, vm, editable, L.speed(), { icon: icon('speed') }),
-      vital(cid, t('stat.pb'), 'profBonus', signed(vm.pb), vm, editable, L.pb(), { align: 'r', icon: icon('pb') }),
-      vital(cid, t('stat.passivePercAbbr'), null, vm.passivePerc, vm, editable, L.passive(), { align: 'r', icon: icon('passive') }),
+      vital(cid, t('stat.ac'), 'ac', vm.ac, vm, editable, L.ac(), { accent: true, align: 'l', sub: (comp && comp.ac) ? shieldMark(num(comp.ac.shield, 0) > 0) : '' }),
+      vital(cid, t('stat.init'), 'initiative', signed(vm.init), vm, editable, L.init()),
+      vital(cid, t('stat.speed'), 'speed', vm.speed, vm, editable, L.speed()),
+      vital(cid, t('stat.pb'), 'profBonus', signed(vm.pb), vm, editable, L.pb(), { align: 'r' }),
+      vital(cid, t('stat.passivePercAbbr'), null, vm.passivePerc, vm, editable, L.passive(), { align: 'r' }),
+      spellTiles,
     ].join('');
 
     return `<div style="display:flex;flex-direction:column;gap:var(--space-3);margin-bottom:var(--space-4)">
       ${idHtml}
-      <div style="display:flex;flex-wrap:wrap;gap:var(--space-2);align-items:flex-start">${strip}</div>
+      <div class="dse-vitals" style="display:flex;flex-wrap:wrap;gap:var(--space-2);align-items:flex-start">${strip}</div>
     </div>`;
   }
 
@@ -112,10 +122,7 @@ export function makeHeaderPanel(ctx) {
     const hpVal = statTip(
       `<span style="color:${hpColor(cur, max)}">${esc(String(cur))}</span><span style="color:var(--text-muted);font-size:var(--text-lg)"> / ${esc(String(max))}</span>`,
       L.hp(), { align: 'l' });
-    const hpGlyph = icon('hp');
-    const hpLabel = hpGlyph
-      ? `<div class="codex-tile-label" role="img" aria-label="${esc(t('stat.hp'))}" style="line-height:0">${hpGlyph}</div>`
-      : `<div class="codex-tile-label">${esc(t('stat.hp'))}</div>`;
+    const hpLabel = `<div class="codex-tile-label">${esc(t('stat.hp'))}</div>`;
 
     // Read view (anonymous): just the number + temp, no controls.
     if (!editable) {

@@ -16,13 +16,13 @@
 //  becomes our first "Overview" tab (reused, not copied), so the tab strip sits
 //  at the very top of the page; only the host's breadcrumb bar rides above. Tabs:
 //    • Overview        — the host's lore (description), passed in as `html`.
-//    • Character Sheet — ability scores, saving throws, skills, notes.
+//    • Character Sheet — ability scores, saving throws, skills + the Backpack
+//                        (inventory & currency) under the vitals in its main column.
 //    • Combat          — attacks from equipped/ready weapons + resource trackers.
-//    • Backpack        — inventory grouped by carry location + currency.
 //    • Spellbook       — prepared/cantrip slots, granted/choose-grant (UI-4).
 //    • Builder         — guided progression; engine mode + editors only, rightmost.
-//  A slim vitals bar (HP ± / AC / Init / Speed / PB / Passive + class-level line)
-//  sits under the tabs on the mechanical tabs (panel.header.js).
+//  A slim vitals bar (HP ± / AC / Init / Speed / PB / Passive + spell DC/attack
+//  + class-level line) sits under the tabs on the mechanical tabs (panel.header.js).
 //
 //  ── Editing: direct, role-gated, NO separate mode ──
 //  The host already owns the one edit affordance — "✏ Upravit" rides the
@@ -103,7 +103,7 @@ export default function register(host) {
   };
 
   const { getRules, safeHydrate, decisionsOf, mutate, effectiveMaxHp } = ctx.engine;
-  const { vitalsBar, panelOverview, panelSheet, panelSpellbook, panelBackpack, panelBuilder, restModal, spellSwapModal, spellbookMgrModal, buildPrintHtml, importModal } = ctx.panels;
+  const { vitalsBar, panelOverview, panelSheet, panelSpellbook, panelBuilder, restModal, spellSwapModal, spellbookMgrModal, buildPrintHtml, importModal } = ctx.panels;
 
   // ── Tab model ────────────────────────────────────────────────────
   //  Overview (lore) + the mechanical tabs. Spellbook only when the character has
@@ -167,12 +167,10 @@ export default function register(host) {
       // The Overview tab is the host lore itself; mechanical tabs get the vitals bar.
       let panel = '';
       if (active === 'overview') panel = lorePanel(html);
-      // The Backpack (inventory + currency) now lives at the bottom of the Character
-      // Sheet tab — its own tab was retired — appended full-width below the columns.
-      else if (active === 'stats') panel = panelOverview(c, s, editable, comp, engine)
-        + `<div style="margin-top:var(--space-5);border-top:1px solid var(--border-subtle);padding-top:var(--space-4)">
-            <div style="font-size:var(--text-lg);font-weight:600;color:var(--text-parchment);margin-bottom:var(--space-3);display:flex;align-items:center;gap:var(--space-2)"><span aria-hidden="true">🎒</span> ${esc(t('tab.backpack'))}</div>
-            ${panelBackpack(c, s, editable, comp, engine)}</div>`;
+      // The Backpack (inventory + currency) lives inside the Character Sheet tab —
+      // its own tab was retired; panelOverview renders it in its main column,
+      // right under the vitals, beside the ability cards.
+      else if (active === 'stats') panel = panelOverview(c, s, editable, comp, engine);
       else if (active === 'combat') panel = panelSheet(c, s, editable, comp, engine);
       else if (active === 'spellbook') panel = panelSpellbook(c, s, editable, comp, engine);
       else if (active === 'builder') panel = panelBuilder(c, s, editable, comp, warnings, engine);

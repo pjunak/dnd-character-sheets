@@ -3,9 +3,11 @@
 //
 //  Full-width layout (UX): the ability CARDS — each ability with its SAVING
 //  THROW integrated (🛡) and its skills listed beneath (panel.rail.js) — stack
-//  vertically down the LEFT from the very top. The vital strip (HP control +
-//  AC/Init/Speed/PB/Passive) sits in the column to the RIGHT. Every save/skill
-//  total carries a hover legend explaining its formula and terms (UX-7).
+//  vertically down the LEFT from the very top. The column to the RIGHT holds
+//  the vital strip (HP control + AC/Init/Speed/PB/Passive + spell DC/attack),
+//  then the Backpack (inventory + currency — it has no tab of its own), so the
+//  bag sits right under the stats beside the abilities. Every save/skill total
+//  carries a hover legend explaining its formula and terms (UX-7).
 //
 //  Editing is direct and role-gated (`edit`): standalone turns ability scores
 //  into inputs and save/skill dots into toggles (in the cards); engine mode is
@@ -45,8 +47,13 @@ export function makeOverviewPanel(ctx) {
   function panelOverview(c, s, edit, comp, engine) {
     const standaloneEdit = edit && !engine;
     const identity = standaloneEdit ? identitySection(c, s) : '';
+    // The Backpack panel, headed like a mini-tab. ctx.panels is assembled after
+    // the panel factories run (entry.js), so resolve it lazily at render time.
+    const backpack = `<div style="border-top:1px solid var(--border-subtle);padding-top:var(--space-4)">
+      <div style="font-size:var(--text-lg);font-weight:600;color:var(--text-parchment);margin-bottom:var(--space-3);display:flex;align-items:center;gap:var(--space-2)"><span aria-hidden="true">🎒</span> ${esc(t('tab.backpack'))}</div>
+      ${ctx.panels.panelBackpack(c, s, edit, comp, engine)}</div>`;
     const right = `<div style="display:flex;flex-direction:column;gap:var(--space-5)">
-      ${vitalsBar(c, s, comp, edit, engine)}${identity}</div>`;
+      ${vitalsBar(c, s, comp, edit, engine)}${identity}${backpack}</div>`;
     return `<div class="dse-cols">
       <div class="dse-cards">${abilityRail(c, s, comp, edit)}</div>
       <div class="dse-cols-main">${right}</div>

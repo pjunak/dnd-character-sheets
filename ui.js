@@ -41,6 +41,10 @@ export function makeUI(ctx) {
     .addon-dnd55e-sheets .dse-cards { display:flex; flex-direction:column; gap:var(--space-3); flex:0 1 17rem; min-width:14rem }
     .addon-dnd55e-sheets .dse-cols-main { flex:1 1 20rem; min-width:0 }
     @media (max-width:720px){ .addon-dnd55e-sheets .dse-cards { flex-basis:100% } }
+    /* Compact vitals strip: tiles hug their label/value width instead of growing
+       to fill the row (the host default is flex:1 1 5rem), so the strip wastes no
+       width and has room for the spell save DC / spell attack tiles. */
+    .addon-dnd55e-sheets .dse-vitals .codex-tile { flex:0 1 auto; min-width:3.5rem; padding:var(--space-2) }
     /* Progression spine row — the full-row overlay toggle. A hover/focus tint makes
        the whole-row click target discoverable; focus-visible draws a keyboard ring. */
     .addon-dnd55e-sheets .dse-spine-toggle { border-radius:var(--radius-sm); transition:background var(--dur-fast) var(--ease-out); }
@@ -109,14 +113,8 @@ export function makeUI(ctx) {
     const cls = 'codex-tile' + (opts.accent ? ' codex-tile-accent' : '') + (opts.wide ? ' codex-tile-wide' : '');
     const sub = opts.sub ? `<div style="font-size:var(--text-xs);color:var(--text-muted);margin-top:1px">${opts.sub}</div>` : '';
     const edit = opts.editHtml ? `<div style="margin-top:var(--space-1)">${opts.editHtml}</div>` : '';
-    // An icon (raw SVG) can stand in for the text label — more compact + it reads
-    // faster than a spelled-out stat name. The full label stays as the tile title
-    // AND the icon's aria-label, so it's still fully labelled for hover + a11y.
-    const labelHtml = opts.icon
-      ? `<div class="codex-tile-label" role="img" aria-label="${esc(label)}" style="line-height:0">${opts.icon}</div>`
-      : `<div class="codex-tile-label">${esc(label)}</div>`;
     return `<div class="${cls}" title="${esc(opts.title || label)}">
-      ${labelHtml}
+      <div class="codex-tile-label">${esc(label)}</div>
       <div class="codex-tile-value">${valueHtml}</div>${sub}${edit}</div>`;
   }
 
