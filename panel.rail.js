@@ -75,8 +75,10 @@ export function makeRail(ctx) {
     // ATK +3" — so the pair always shares a line at full size (two hover
     // legends inside one chip, split by a dot). Sits in the right column above
     // the skills; the mod/score box stays level with every other card.
+    // Centred in the right column — equal distance to the mod/score box on the
+    // left and the card edge on the right (the skills below stay left-aligned).
     const casterRow = casting.length
-      ? `<div style="display:flex;gap:var(--space-1);flex-wrap:wrap;padding:2px var(--space-2) var(--space-1)">${casting.map((p) => {
+      ? `<div style="display:flex;gap:var(--space-1);flex-wrap:wrap;justify-content:center;padding:2px 0 var(--space-1)">${casting.map((p) => {
           const pre = multiCaster ? esc(titleize(p.classId)) + ' ' : '';
           const dc = statTip(`${pre}${esc(t('spell.saveDC'))} <strong>${esc(String(num(p.saveDC)))}</strong>`, L.spellDC(p));
           const atk = statTip(`${esc(t('dock.spellAtk'))} <strong>${esc(signed(num(p.spellAttack)))}</strong>`, L.spellAtk(p));
