@@ -1072,9 +1072,14 @@ test('sheets: COMPACT layout docks Init / passive / DC / Atk onto the ability ca
     // the caster card (accent ring only — no "caster" text).
     assert.match(out, /dse-dock">⚡ Init <strong>\+2</, 'Initiative docks onto the DEX card');
     assert.match(out, /dse-dock">👁 Passive <strong>10</, 'passive Perception docks onto the WIS title row');
+    // The title-row chips sit in the centring slot (equal gaps name↔chip↔shield).
+    assert.match(out, /dse-dock-slot"><span class="codex-tip[^>]*><span class="dse-dock">⚡ Init/, 'the Init chip rides the centred dock slot');
     assert.doesNotMatch(out, /✦ caster/, 'no "caster" text — the gold ring alone marks the card');
-    assert.match(out, /dse-dock">Save DC <strong>10</, 'Save DC docks onto the casting ability (8+PB2+INT0)');
-    assert.match(out, /dse-dock">Spell Atk <strong>\+2</, 'Spell Attack docks beside it');
+    // DC + Atk share ONE merged chip (a dot between two hover zones) so the
+    // pair never wraps to two lines at full size.
+    assert.match(out, /Save DC <strong>10</, 'Save DC docks onto the casting ability (8+PB2+INT0)');
+    assert.match(out, /Spell Atk <strong>\+2</, 'Spell Attack docks beside it');
+    assert.match(out, /dse-dock-sep/, 'DC and Atk are merged into a single chip');
     assert.doesNotMatch(out, /passive 10</, 'the old inline passive on the Perception row is gone');
     // The band sheds the docked tiles — only Speed remains beside HP/AC.
     assert.doesNotMatch(out, /class="codex-tile-label">Pass\. Perc\.</, 'no Passive tile in the band');

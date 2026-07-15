@@ -29,11 +29,12 @@ export function makeRail(ctx) {
   }
 
   // One save/skill line: trained dot + label + total (total carries a legend).
-  // Tight vertical padding keeps the stacked cards compact.
+  // Zero vertical padding + a tightened line-height keep the stacked cards
+  // compact — six cards of skills add up fast.
   function line(state, labelHtml, legend, dotAttr) {
     const dot = profDot(state, dotAttr);
     const total = statTip(`<strong style="${S.profTotal}">${esc(legend.total)}</strong>`, legend, { align: 'r' });
-    return `<div style="display:flex;align-items:center;gap:var(--space-2);padding:2px var(--space-2)">${dot}<span style="${S.profLabel}">${labelHtml}</span>${total}</div>`;
+    return `<div style="display:flex;align-items:center;gap:var(--space-2);padding:0 var(--space-2);line-height:1.3">${dot}<span style="${S.profLabel}">${labelHtml}</span>${total}</div>`;
   }
 
   // The saving-throw indicator IS the shield: an outline (empty) when not
@@ -70,13 +71,16 @@ export function makeRail(ctx) {
     const multiCaster = compact && comp && comp.spellcasting && (comp.spellcasting.perClass || []).length > 1;
     const initDock = (compact && a === 'DEX') ? dock('⚡ ' + t('dock.init'), signed(vm.init), L.init()) : '';
     const passiveDock = (compact && a === 'WIS') ? dock('👁 ' + t('dock.passiveShort'), String(num(vm.passivePerc)), L.passive()) : '';
-    // The chips sit in the RIGHT column above the skills (not full-width under
-    // the title), so the mod/score box stays at the same height as every card.
+    // ONE combined spellcasting chip per casting class — "SAVE DC 11 · SPELL
+    // ATK +3" — so the pair always shares a line at full size (two hover
+    // legends inside one chip, split by a dot). Sits in the right column above
+    // the skills; the mod/score box stays level with every other card.
     const casterRow = casting.length
       ? `<div style="display:flex;gap:var(--space-1);flex-wrap:wrap;padding:2px var(--space-2) var(--space-1)">${casting.map((p) => {
-          const pre = multiCaster ? titleize(p.classId) + ' ' : '';
-          return dock(pre + t('spell.saveDC'), String(num(p.saveDC)), L.spellDC(p))
-               + dock(pre + t('dock.spellAtk'), signed(num(p.spellAttack)), L.spellAtk(p));
+          const pre = multiCaster ? esc(titleize(p.classId)) + ' ' : '';
+          const dc = statTip(`${pre}${esc(t('spell.saveDC'))} <strong>${esc(String(num(p.saveDC)))}</strong>`, L.spellDC(p));
+          const atk = statTip(`${esc(t('dock.spellAtk'))} <strong>${esc(signed(num(p.spellAttack)))}</strong>`, L.spellAtk(p));
+          return `<span class="dse-dock">${dc}<span class="dse-dock-sep">·</span>${atk}</span>`;
         }).join('')}</div>`
       : '';
 
@@ -89,9 +93,13 @@ export function makeRail(ctx) {
     const saveTotal = statTip(`<strong style="${S.profTotal}">${esc(signed(sv.total))}</strong>`, L.save(a), { align: 'r' });
     const saveTitle = t('sheet.saves') + ' · ' + (sv.prof ? t('misc.proficient') : t('misc.notProficient'));
     const saveLabel = `<span style="display:inline-flex;align-items:center;gap:4px;font-size:var(--text-xs);color:var(--accent-gold)">${saveShield(sv.prof, saveDot, saveTitle)}${compact ? '' : esc(t('sheet.saveTag'))}</span>`;
+    // The dock slot owns ALL the space between the name and the shield and
+    // centres its chip in it — equal gaps on both sides (with no chip it's
+    // just the spacer, so classic + chipless cards look unchanged).
     const titleRow = `<div style="display:flex;align-items:center;gap:var(--space-2);padding-bottom:var(--space-1);border-bottom:1px solid var(--border-subtle);margin-bottom:var(--space-1)">
-      <span style="color:var(--text-parchment);font-weight:600;font-size:var(--text-sm);letter-spacing:.03em;flex:1">${esc(t('ability.' + a))}</span>
-      ${initDock}${passiveDock}${saveLabel}${saveTotal}</div>`;
+      <span style="color:var(--text-parchment);font-weight:600;font-size:var(--text-sm);letter-spacing:.03em">${esc(t('ability.' + a))}</span>
+      <span class="dse-dock-slot">${initDock}${passiveDock}</span>
+      ${saveLabel}${saveTotal}</div>`;
 
     // Skills governed by this ability (alphabetical), beneath the title.
     const skillsFor = SKILLS.filter((sk) => sk.ability === a)

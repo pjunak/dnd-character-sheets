@@ -73,6 +73,11 @@ export function makeUI(ctx) {
        ability card — Init on DEX, Save DC / Spell Atk on the casting ability. */
     .addon-dnd55e-sheets .dse-dock { display:inline-flex; align-items:center; gap:4px; background:var(--bg-raised); border:1px solid rgba(var(--accent-gold-rgb),.35); border-radius:var(--radius-sm); padding:1px var(--space-1); font-size:var(--text-xs); color:var(--text-muted); text-transform:uppercase; letter-spacing:.03em; white-space:nowrap }
     .addon-dnd55e-sheets .dse-dock strong { color:var(--text-parchment); font-variant-numeric:tabular-nums }
+    /* The title-row slot between the ability name and the save shield: takes
+       all the leftover width and centres its docked chip (equal space each
+       side). Empty on chipless cards — a pure spacer. */
+    .addon-dnd55e-sheets .dse-dock-slot { flex:1; display:flex; justify-content:center; align-items:center; min-width:0 }
+    .addon-dnd55e-sheets .dse-dock-sep { color:var(--text-muted); padding:0 3px }
     /* Backpack split: active (Equipped+Ready) left, stored (Pack+coin) right; a
        header row carries the title + the Add-item button (which opens the wizard). */
     .addon-dnd55e-sheets .dse-bp-head { display:flex; align-items:center; gap:var(--space-2); border-bottom:1px solid var(--border-subtle); padding-bottom:var(--space-1) }
