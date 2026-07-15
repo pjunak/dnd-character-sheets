@@ -69,6 +69,10 @@ export function makeUI(ctx) {
     .addon-dnd55e-sheets .dse-slot-name-empty { flex:1; color:var(--text-muted); font-style:italic; font-size:var(--text-xs) }
     .addon-dnd55e-sheets .dse-slot-x { margin-left:auto; flex:none; padding:0 4px; line-height:1 }
     .addon-dnd55e-sheets .dse-slot-pick { flex:1; min-width:0; width:auto; font-size:var(--text-xs); padding:2px 4px }
+    /* Docked-stat chip (COMPACT layout): a tiny labelled number riding an
+       ability card — Init on DEX, Save DC / Spell Atk on the casting ability. */
+    .addon-dnd55e-sheets .dse-dock { display:inline-flex; align-items:center; gap:4px; background:var(--bg-raised); border:1px solid rgba(var(--accent-gold-rgb),.35); border-radius:var(--radius-sm); padding:1px var(--space-1); font-size:var(--text-xs); color:var(--text-muted); text-transform:uppercase; letter-spacing:.03em; white-space:nowrap }
+    .addon-dnd55e-sheets .dse-dock strong { color:var(--text-parchment); font-variant-numeric:tabular-nums }
     /* Backpack split: active (Equipped+Ready) left, stored (Pack+coin) right; a
        header row carries the title + the Add-item button (which opens the wizard). */
     .addon-dnd55e-sheets .dse-bp-head { display:flex; align-items:center; gap:var(--space-2); border-bottom:1px solid var(--border-subtle); padding-bottom:var(--space-1) }

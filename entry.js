@@ -87,6 +87,12 @@ export default function register(host) {
   // NOT persisted: the Builder is only opened to create/level a character, so it defaults to the
   // Character tab each load, and this saves any localStorage plumbing (B4.5b).
   ctx.builderState = {};
+  // Per-browser UI layout preference (Settings → Doplňky → Character Sheets):
+  // 'classic' keeps every stat tile in the vitals band; 'compact' docks the
+  // derived stats onto their ability cards (Init→DEX, passive→Perception row,
+  // Save DC / Spell Attack→the casting ability). localStorage so each player
+  // picks their own; absent key = classic.
+  ctx.uiLayout = () => { try { return localStorage.getItem('dse-ui:layout') === 'compact' ? 'compact' : 'classic'; } catch (_) { return 'classic'; } };
   ctx.engine = makeEngine(ctx);
   ctx.viewModel = ctx.engine.viewModel;     // hot path — promote for panel destructuring
   ctx.ui = makeUI(ctx);
@@ -994,10 +1000,19 @@ export default function register(host) {
     });
   });
 
-  // ── Info tab (Settings → 🎲 Character Sheets) ─────────────────────
-  // Also reports the rules status: the engine is built in; the CONTENT comes
-  // from installed book addons (Player's Handbook), so show whether one is
-  // connected and how many classes it currently serves.
+  // ── Settings tab (Settings → Doplňky → 🎲 Character Sheets) ───────
+  // UI options for the sheet (per-browser, each player picks their own) plus
+  // the rules status: the engine is built in; the CONTENT comes from installed
+  // book addons (Player's Handbook), so show whether one is connected.
+  // The layout switch drives ctx.uiLayout() — see panel.rail.js /
+  // panel.header.js for what 'compact' rearranges.
+  host.registerAction('uiLayoutSet', (mode) => {
+    try {
+      if (String(mode) === 'compact') localStorage.setItem('dse-ui:layout', 'compact');
+      else localStorage.removeItem('dse-ui:layout');
+    } catch (_) {}
+    host.ui.rerender();
+  });
   host.registerSettingsTab({
     id: 'info', label: t('settings.label'), icon: '🎲',
     render: () => {
@@ -1005,8 +1020,23 @@ export default function register(host) {
       const status = engine
         ? t('rules.connected', { count: engine.listClasses().length })
         : t('rules.disconnected');
+      const layout = ctx.uiLayout();
+      const opt = (mode, label, desc) => `
+        <label style="display:flex;align-items:flex-start;gap:var(--space-2);padding:var(--space-2);border:1px solid ${layout === mode ? 'rgba(var(--accent-gold-rgb),.45)' : 'var(--border-subtle)'};border-radius:var(--radius);cursor:pointer">
+          <input type="radio" name="dse-layout" value="${esc(mode)}" ${layout === mode ? 'checked' : ''} ${host.h.dataOn('change', host.action('uiLayoutSet'), mode)}>
+          <span><strong style="color:var(--text-parchment)">${esc(label)}</strong>
+            <span style="display:block;color:var(--text-muted);font-size:var(--text-sm)">${esc(desc)}</span></span>
+        </label>`;
       return `
       <div class="settings-editor-head"><h2>🎲 ${esc(t('help.title'))}</h2></div>
+      <div class="settings-panel">
+        <h3 style="margin:0 0 var(--space-1)">${esc(t('settings.layoutTitle'))}</h3>
+        <p class="settings-hint">${esc(t('settings.layoutHint'))}</p>
+        <div style="display:flex;flex-direction:column;gap:var(--space-2);max-width:34rem">
+          ${opt('classic', t('settings.layoutClassic'), t('settings.layoutClassicDesc'))}
+          ${opt('compact', t('settings.layoutCompact'), t('settings.layoutCompactDesc'))}
+        </div>
+      </div>
       <div class="settings-panel">
         <p class="settings-hint">${esc(t('help.body', { count: host.store.getCharacters().length }))}</p>
         <p class="settings-hint" style="color:${engine ? 'var(--color-success)' : 'var(--text-muted)'}">${esc(status)}</p>

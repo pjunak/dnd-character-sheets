@@ -69,6 +69,18 @@ export default {
   'stat.shieldNone':  'none',
   'stat.shieldOn':    'Shield equipped (counted in AC)',
   'stat.shieldOff':   'No shield equipped',
+  // ── Sheet layout switch (Settings → Doplňky → Character Sheets) ──
+  'settings.layoutTitle':       'Sheet layout',
+  'settings.layoutHint':        'How the Character Sheet arranges its stats. Saved in this browser — each player picks their own.',
+  'settings.layoutClassic':     'Classic',
+  'settings.layoutClassicDesc': 'Every stat as a tile in the vitals band: Passive Perception, Save DC and Spell Attack beside HP and AC.',
+  'settings.layoutCompact':     'Compact',
+  'settings.layoutCompactDesc': 'Derived stats dock onto their ability cards: Initiative on Dexterity, passive Perception on the Perception row, Save DC and Spell Attack on the casting ability.',
+  // ── Docked-stat chips (compact layout) ───────────────────────────
+  'dock.init':    'Init',
+  'dock.spellAtk': 'Spell Atk',
+  'dock.passive': 'passive {n}',
+  'dock.caster':  'caster',
   // ── Equipment slots (band: Worn Armor/Shield + Attunement) ───────
   'equip.wornTitle':  'Worn',
   'equip.attuneTitle': 'Attunement',

@@ -24,7 +24,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 export function makeHeaderPanel(ctx) {
-  const { host, t, num, signed, titleize, firstPara, ui, viewModel, legends } = ctx;
+  const { host, t, num, signed, titleize, firstPara, ui, viewModel, legends, uiLayout } = ctx;
   const { esc } = host.h;
   const { heroTile, numField, statTip, entityRef, equipmentModel } = ui;
 
@@ -189,9 +189,14 @@ export function makeHeaderPanel(ctx) {
     const line = t('sheet.summary', { level: TOKEN_L, cls: TOKEN_C }).trim();
     const idHtml = `<div style="color:var(--text-light);font-size:var(--text-sm);font-weight:600;letter-spacing:.02em">${esc(line).replace(TOKEN_L, lvlHtml).replace(TOKEN_C, (clsHtml + subHtml).trim())}</div>`;
 
+    // COMPACT layout (Settings → Character Sheets): Passive, Save DC, Spell
+    // Attack and Initiative are docked onto the ability cards (panel.rail.js),
+    // so the band keeps only Speed beside HP/AC. CLASSIC keeps every tile here.
+    const compact = uiLayout() === 'compact';
+
     // Spell save DC + spell attack per casting class (engine mode; SP-4 — each
     // class keeps its own numbers). Multiclass tiles carry the class name.
-    const perClass = (comp && comp.spellcasting && comp.spellcasting.perClass) || [];
+    const perClass = compact ? [] : ((comp && comp.spellcasting && comp.spellcasting.perClass) || []);
     const multi = perClass.length > 1;
     const spellTiles = perClass.map((p) => {
       const sub = multi ? esc(titleize(p.classId)) : '';
@@ -200,12 +205,14 @@ export function makeHeaderPanel(ctx) {
     }).join('');
 
     // Small stats: Speed · Passive, then per-class Save DC · Spell Attack. Initiative
-    // rides only on the Combat tab (a start-of-fight number). Proficiency has no tile
+    // rides only on the Combat tab (a start-of-fight number) — and in compact it's
+    // docked on the DEX card, so no tile at all. Proficiency has no tile
     // (it lives in the level hover above).
-    const initTile = opts.combat ? vital(cid, t('stat.init'), 'initiative', signed(vm.init), vm, editable, L.init()) : '';
+    const initTile = (opts.combat && !compact) ? vital(cid, t('stat.init'), 'initiative', signed(vm.init), vm, editable, L.init()) : '';
+    const passiveTile = compact ? '' : vital(cid, t('stat.passivePercAbbr'), null, vm.passivePerc, vm, editable, L.passive(), { align: 'r' });
     const smallTiles = initTile
       + vital(cid, t('stat.speed'), 'speed', vm.speed, vm, editable, L.speed())
-      + vital(cid, t('stat.passivePercAbbr'), null, vm.passivePerc, vm, editable, L.passive(), { align: 'r' })
+      + passiveTile
       + spellTiles;
 
     return `<div style="display:flex;flex-direction:column;gap:var(--space-3);margin-bottom:var(--space-4)">

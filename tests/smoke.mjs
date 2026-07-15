@@ -1063,6 +1063,41 @@ test('sheets: equipment — free-form Worn slots + strict Attunement, de-duped f
   } finally { clearLocalStorage(); }
 });
 
+test('sheets: COMPACT layout docks Init / passive / DC / Atk onto the ability cards', () => {
+  mapLocalStorage({ 'dse-tab:cc': 'stats', 'dse-ui:layout': 'compact' });
+  try {
+    const { rec } = dryRunRegister(register, META, PHB());
+    const out = renderBody(rec, { id: 'cc', name: 'Mage', addonData: { 'dnd55e-sheets': { className: 'Wizard', abilities: { DEX: 14 } } } });
+    // Docked chips: Initiative on DEX, Save DC / Spell Atk on the caster card.
+    assert.match(out, /dse-dock">⚡ Init <strong>\+2</, 'Initiative docks onto the DEX card');
+    assert.match(out, /✦ caster/, 'the casting ability card is marked');
+    assert.match(out, /dse-dock">Save DC <strong>10</, 'Save DC docks onto the casting ability (8+PB2+INT0)');
+    assert.match(out, /dse-dock">Spell Atk <strong>\+2</, 'Spell Attack docks beside it');
+    assert.match(out, /passive 10/, 'passive Perception rides the Perception skill row');
+    // The band sheds the docked tiles — only Speed remains beside HP/AC.
+    assert.doesNotMatch(out, /class="codex-tile-label">Pass\. Perc\.</, 'no Passive tile in the band');
+    assert.doesNotMatch(out, /class="codex-tile-label">Save DC</, 'no Save DC tile in the band');
+    assert.doesNotMatch(out, /class="codex-tile-label">Spell Attack</, 'no Spell Attack tile in the band');
+    assert.match(out, /class="codex-tile-label">Speed</, 'Speed keeps its tile');
+  } finally { clearLocalStorage(); }
+});
+
+test('sheets: settings tab offers the classic/compact switch + uiLayoutSet persists it', () => {
+  const ls = mapLocalStorage({});
+  try {
+    const { rec } = dryRunRegister(register, META, PHB());
+    const html = rec.settingsTabs[0].render();
+    assert.match(html, /name="dse-layout"/, 'layout radios render');
+    assert.match(html, /value="classic"[^>]*checked/, 'classic is the default');
+    assert.match(html, /uiLayoutSet/, 'radios wire to the uiLayoutSet action');
+    const act = (name, ...args) => rec.actions.find((a) => a.name === name).fn(...args);
+    act('uiLayoutSet', 'compact');
+    assert.equal(ls.get('dse-ui:layout'), 'compact', 'compact persists to localStorage');
+    act('uiLayoutSet', 'classic');
+    assert.equal(ls.has('dse-ui:layout'), false, 'classic clears the key (default)');
+  } finally { clearLocalStorage(); }
+});
+
 test('sheets: empty equipment slots render click-to-fill pickers (editor)', () => {
   mockLocalStorage('stats');
   try {
