@@ -75,12 +75,11 @@ export default {
   'settings.layoutClassic':     'Classic',
   'settings.layoutClassicDesc': 'Every stat as a tile in the vitals band: Passive Perception, Save DC and Spell Attack beside HP and AC.',
   'settings.layoutCompact':     'Compact',
-  'settings.layoutCompactDesc': 'Derived stats dock onto their ability cards: Initiative on Dexterity, passive Perception on the Perception row, Save DC and Spell Attack on the casting ability.',
+  'settings.layoutCompactDesc': 'Derived stats dock onto their ability cards: Initiative on Dexterity, passive Perception on Wisdom, Save DC and Spell Attack on the casting ability.',
   // ── Docked-stat chips (compact layout) ───────────────────────────
   'dock.init':    'Init',
   'dock.spellAtk': 'Spell Atk',
-  'dock.passive': 'passive {n}',
-  'dock.caster':  'caster',
+  'dock.passiveShort': 'Passive',
   // ── Equipment slots (band: Worn Armor/Shield + Attunement) ───────
   'equip.wornTitle':  'Worn',
   'equip.attuneTitle': 'Attunement',

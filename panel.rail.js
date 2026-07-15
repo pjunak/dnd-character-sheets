@@ -62,15 +62,18 @@ export function makeRail(ctx) {
     const leftTile = `<div style="flex:none;text-align:center;background:var(--bg-raised);border:1px solid var(--border-subtle);border-radius:var(--radius);padding:var(--space-1) var(--space-2);min-width:3.5rem">
       ${modBig}<div style="margin-top:1px">${scoreCell}</div></div>`;
 
-    // COMPACT docks: Initiative rides the DEX title row; the casting classes'
-    // Save DC / Spell Attack ride their ability's card (SP-4 — per class), the
-    // card marked "✦ caster" with a gold ring. Empty strings in classic.
+    // COMPACT docks: Initiative rides the DEX title row, passive Perception the
+    // WIS title row (same slot, eye emoji); the casting classes' Save DC /
+    // Spell Attack ride their ability's card (SP-4 — per class), which gets the
+    // gold accent ring (no "caster" text — the ring says it). Empty in classic.
     const casting = compact ? (casters[a] || []) : [];
     const multiCaster = compact && comp && comp.spellcasting && (comp.spellcasting.perClass || []).length > 1;
     const initDock = (compact && a === 'DEX') ? dock('⚡ ' + t('dock.init'), signed(vm.init), L.init()) : '';
-    const casterMark = casting.length ? ` <span style="color:var(--accent-gold);font-size:var(--text-xs);font-weight:600">✦ ${esc(t('dock.caster'))}</span>` : '';
+    const passiveDock = (compact && a === 'WIS') ? dock('👁 ' + t('dock.passiveShort'), String(num(vm.passivePerc)), L.passive()) : '';
+    // The chips sit in the RIGHT column above the skills (not full-width under
+    // the title), so the mod/score box stays at the same height as every card.
     const casterRow = casting.length
-      ? `<div style="display:flex;gap:var(--space-1);flex-wrap:wrap;margin-bottom:var(--space-1)">${casting.map((p) => {
+      ? `<div style="display:flex;gap:var(--space-1);flex-wrap:wrap;padding:2px var(--space-2) var(--space-1)">${casting.map((p) => {
           const pre = multiCaster ? titleize(p.classId) + ' ' : '';
           return dock(pre + t('spell.saveDC'), String(num(p.saveDC)), L.spellDC(p))
                + dock(pre + t('dock.spellAtk'), signed(num(p.spellAttack)), L.spellAtk(p));
@@ -78,19 +81,19 @@ export function makeRail(ctx) {
       : '';
 
     // Save integrated onto the ability's title line: the shield's fill IS the
-    // proficiency (full = proficient, outline = not), then the total.
+    // proficiency (full = proficient, outline = not), then the total. Compact
+    // drops the "Save" word — the shield alone carries the meaning (its title/
+    // aria keep the full wording).
     const sv = vm.save(a);
     const saveDot = standaloneEdit ? dataAction(host.action('toggleSave'), c.id, a) : null;
     const saveTotal = statTip(`<strong style="${S.profTotal}">${esc(signed(sv.total))}</strong>`, L.save(a), { align: 'r' });
     const saveTitle = t('sheet.saves') + ' · ' + (sv.prof ? t('misc.proficient') : t('misc.notProficient'));
-    const saveLabel = `<span style="display:inline-flex;align-items:center;gap:4px;font-size:var(--text-xs);color:var(--accent-gold)">${saveShield(sv.prof, saveDot, saveTitle)}${esc(t('sheet.saveTag'))}</span>`;
+    const saveLabel = `<span style="display:inline-flex;align-items:center;gap:4px;font-size:var(--text-xs);color:var(--accent-gold)">${saveShield(sv.prof, saveDot, saveTitle)}${compact ? '' : esc(t('sheet.saveTag'))}</span>`;
     const titleRow = `<div style="display:flex;align-items:center;gap:var(--space-2);padding-bottom:var(--space-1);border-bottom:1px solid var(--border-subtle);margin-bottom:var(--space-1)">
-      <span style="color:var(--text-parchment);font-weight:600;font-size:var(--text-sm);letter-spacing:.03em;flex:1">${esc(t('ability.' + a))}${casterMark}</span>
-      ${initDock}${saveLabel}${saveTotal}</div>`;
+      <span style="color:var(--text-parchment);font-weight:600;font-size:var(--text-sm);letter-spacing:.03em;flex:1">${esc(t('ability.' + a))}</span>
+      ${initDock}${passiveDock}${saveLabel}${saveTotal}</div>`;
 
-    // Skills governed by this ability (alphabetical), beneath the title. In
-    // compact, the Perception row carries its passive value inline — passive
-    // IS 10 + that row, so it lives where its source lives.
+    // Skills governed by this ability (alphabetical), beneath the title.
     const skillsFor = SKILLS.filter((sk) => sk.ability === a)
       .map((sk) => ({ sk, name: t('skill.' + sk.id) }))
       .sort((x, y) => x.name.localeCompare(y.name));
@@ -99,23 +102,20 @@ export function makeRail(ctx) {
           const kv = vm.skill(sk.id, sk.ability);
           const state = kv.exp ? 'exp' : kv.prof ? 'prof' : 'none';
           const dotAttr = standaloneEdit ? dataAction(host.action('toggleSkill'), c.id, sk.id) : null;
-          const passive = (compact && sk.id === 'perception')
-            ? ` <span style="color:var(--text-muted);font-size:var(--text-xs)">${esc(t('dock.passive', { n: vm.passivePerc }))}</span>`
-            : '';
-          return line(state, esc(name) + passive, L.skill(sk.id, sk.ability), dotAttr);
+          return line(state, esc(name), L.skill(sk.id, sk.ability), dotAttr);
         }).join('')
       : `<div style="color:var(--text-muted);font-size:var(--text-xs);padding:var(--space-1) var(--space-2)">${esc(t('sheet.noSkills'))}</div>`;
 
     // CLASSIC: title row + skills sit beside the mod box. COMPACT: the title
     // row spans the card top (name in the left corner, docks + save right),
-    // the mod box drops BELOW it beside the skills — so docked chips never
-    // force the card wider.
+    // the mod box drops BELOW it — level with every other card's box — and the
+    // caster chips open the right column above the skills.
     if (!compact) {
       return card(`<div style="display:flex;gap:var(--space-2);align-items:flex-start">
         ${leftTile}<div style="flex:1;min-width:0">${titleRow}${skillRows}</div></div>`, { style: 'padding:var(--space-2) var(--space-3)' });
     }
-    return card(`${titleRow}${casterRow}<div style="display:flex;gap:var(--space-2);align-items:flex-start">
-      ${leftTile}<div style="flex:1;min-width:0">${skillRows}</div></div>`, { style: 'padding:var(--space-2) var(--space-3)', accent: casting.length > 0 });
+    return card(`${titleRow}<div style="display:flex;gap:var(--space-2);align-items:flex-start">
+      ${leftTile}<div style="flex:1;min-width:0">${casterRow}${skillRows}</div></div>`, { style: 'padding:var(--space-2) var(--space-3)', accent: casting.length > 0 });
   }
 
   // The stacked ability cards. Callers wrap in `.dse-cards`.

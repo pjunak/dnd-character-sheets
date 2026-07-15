@@ -1068,12 +1068,14 @@ test('sheets: COMPACT layout docks Init / passive / DC / Atk onto the ability ca
   try {
     const { rec } = dryRunRegister(register, META, PHB());
     const out = renderBody(rec, { id: 'cc', name: 'Mage', addonData: { 'dnd55e-sheets': { className: 'Wizard', abilities: { DEX: 14 } } } });
-    // Docked chips: Initiative on DEX, Save DC / Spell Atk on the caster card.
+    // Docked chips: Initiative on DEX, passive on WIS, Save DC / Spell Atk on
+    // the caster card (accent ring only — no "caster" text).
     assert.match(out, /dse-dock">⚡ Init <strong>\+2</, 'Initiative docks onto the DEX card');
-    assert.match(out, /✦ caster/, 'the casting ability card is marked');
+    assert.match(out, /dse-dock">👁 Passive <strong>10</, 'passive Perception docks onto the WIS title row');
+    assert.doesNotMatch(out, /✦ caster/, 'no "caster" text — the gold ring alone marks the card');
     assert.match(out, /dse-dock">Save DC <strong>10</, 'Save DC docks onto the casting ability (8+PB2+INT0)');
     assert.match(out, /dse-dock">Spell Atk <strong>\+2</, 'Spell Attack docks beside it');
-    assert.match(out, /passive 10/, 'passive Perception rides the Perception skill row');
+    assert.doesNotMatch(out, /passive 10</, 'the old inline passive on the Perception row is gone');
     // The band sheds the docked tiles — only Speed remains beside HP/AC.
     assert.doesNotMatch(out, /class="codex-tile-label">Pass\. Perc\.</, 'no Passive tile in the band');
     assert.doesNotMatch(out, /class="codex-tile-label">Save DC</, 'no Save DC tile in the band');
