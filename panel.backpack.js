@@ -3,54 +3,55 @@
 //  the Character Sheet tab's main column right under the vitals, beside the
 //  ability cards (it no longer has its own tab).
 //
-//  Inventory grouped by carry location (Equipped / Ready / Pack), each a titled
-//  section with an item count. In modification mode: compendium add-pickers
-//  (weapon/armor → resolve for AC/attacks) + a free-text item, per-row qty /
-//  attune / move / remove controls, and editable currency. The engine attunement
-//  counter shows in both modes. Read view is a clean, control-free list.
+//  Two columns: LEFT holds the ACTIVE items (Equipped + Ready — the gear that
+//  carries attacks/uses in the Combat tab; here it's names + a hover legend);
+//  RIGHT holds STORED items (Pack) + currency. A "＋ Add item" button in the
+//  header opens the add-item wizard (panel.additem.js). Per-row qty / attune /
+//  move / remove controls show in modification mode; read view is control-free.
+//  The attunement tally lives in the band's Attunement group now, not here.
 // ═══════════════════════════════════════════════════════════════
 
 export function makeBackpackPanel(ctx) {
-  const { host, t, COINS, LOCATIONS, num, titleize, ui } = ctx;
+  const { host, t, COINS, num, titleize, ui } = ctx;
   const { esc, dataAction, dataOn } = host.h;
-  const { section, card, numField, entityRef } = ui;
+  const { section, numField, entityRef, equipmentModel } = ui;
 
   function panelBackpack(c, s, edit, comp, engine) {
-    // Add bar (modification mode): compendium pickers + free-text item.
-    const addBar = edit ? card(`<div style="display:flex;flex-wrap:wrap;gap:var(--space-2);align-items:center">
-      ${engine && engine.listWeapons ? addRefSelect(c, 'weapon', engine.listWeapons() || [], t('backpack.addWeapon')) : ''}
-      ${engine && engine.listArmor ? addRefSelect(c, 'armor', engine.listArmor() || [], t('backpack.addArmor')) : ''}
-      <button class="inline-create-btn"${dataAction(host.action('invAdd'), c.id)}>＋ ${esc(t('backpack.add'))}</button>
-    </div>`, { style: 'padding:var(--space-2) var(--space-3)' }) : '';
-
-    const att = comp && comp.attunement;
-    const attHtml = att
-      ? `<div style="color:${att.over ? 'var(--color-danger)' : 'var(--text-muted)'};font-size:var(--text-sm)">
-           ${esc(t('combat.attunement'))}: <strong style="color:${att.over ? 'var(--color-danger)' : 'var(--text-light)'}">${esc(t('backpack.attunement', { n: att.count, limit: att.limit }))}</strong>${att.over ? ' ⚠' : ''}</div>`
+    // Header: title + the "＋ Add item" button (editor only) that opens the
+    // add-item wizard (search + drill-down tree + batch tray). The old inline
+    // pickers + free-text row are gone — the wizard owns adding now. The
+    // attunement TALLY moved to the band's Attunement group (panel.header.js).
+    const addBtn = edit
+      ? `<button class="inline-create-btn"${dataAction(host.action('addItemOpen'), c.id)}>＋ ${esc(t('backpack.add'))}</button>`
       : '';
+    const head = `<div class="dse-bp-head"><span class="dse-bp-title"><span aria-hidden="true">🎒</span> ${esc(t('tab.backpack'))}</span>${addBtn}</div>`;
 
-    const groups = LOCATIONS.map((loc) => {
-      const items = s.inventory.filter((it) => (it.location || 'pack') === loc);
+    // De-dup: whatever the band shows in a Worn / Attunement slot (equipped
+    // armor+shield, and every attuned item) is NOT repeated here — it lives in
+    // the band's paper-doll. The backpack holds everything else.
+    const inBand = (engine && comp) ? equipmentModel(s, engine).slotIds : new Set();
+
+    // One carry-location group: a small label + count, then the item rows.
+    const group = (loc) => {
+      const items = s.inventory.filter((it) => (it.location || 'pack') === loc && !inBand.has(it.id));
       if (!items.length && !edit) return '';
       const rows = items.length
         ? items.map((it) => invRow(c, it, edit, engine)).join('')
         : `<div style="color:var(--text-muted);font-size:var(--text-xs);padding:var(--space-1) 0">${esc(t('backpack.empty'))}</div>`;
-      const count = items.length ? `<span style="color:var(--text-muted);font-size:var(--text-xs)">${esc(String(items.length))}</span>` : '';
-      return section(t('loc.' + loc), rows, { right: count });
-    }).join('');
+      return `<div class="dse-bp-grp"><div class="dse-bp-lbl">${esc(t('loc.' + loc))} <span class="dse-bp-cnt">${esc(String(items.length))}</span></div>${rows}</div>`;
+    };
 
-    return `<div style="display:flex;flex-direction:column;gap:var(--space-5)">
-      ${addBar}
-      ${attHtml}
-      ${groups}
-      ${currencySection(c, s, edit)}
-    </div>`;
-  }
+    // Left = the ACTIVE items (Equipped + Ready — they carry attacks/uses in
+    // Combat; here just names + hover). Right = STORED (Pack) + currency.
+    const left = ['equipped', 'ready'].map(group).join('');
+    const right = group('pack') + currencySection(c, s, edit);
 
-  function addRefSelect(c, kind, list, placeholder) {
-    if (!list.length) return '';
-    const opts = `<option value="">${esc(placeholder)}</option>` + list.map((o) => `<option value="${esc(o.id)}">${esc(o.name)}</option>`).join('');
-    return `<select class="edit-input" style="max-width:11rem"${dataOn('change', host.action('invAddRef'), c.id, kind, '$value')}>${opts}</select>`;
+    return `<div style="display:flex;flex-direction:column;gap:var(--space-3)">
+      ${head}
+      <div class="dse-bp-split">
+        <div class="dse-bp-col">${left}</div>
+        <div class="dse-bp-col dse-bp-right">${right}</div>
+      </div></div>`;
   }
 
   // Resolve an inventory item → its compendium {kind, id, rec}. The stored

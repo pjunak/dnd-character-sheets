@@ -51,6 +51,77 @@ export function makeUI(ctx) {
     .addon-dnd55e-sheets .dse-vitals .codex-tile { flex:0 1 auto; min-width:3.5rem; padding:var(--space-2) }
     .addon-dnd55e-sheets .dse-tile-tall { display:flex; flex-direction:column }
     .addon-dnd55e-sheets .dse-vitals-grid { display:grid; grid-auto-flow:column; grid-template-rows:1fr 1fr; gap:var(--space-2) }
+    /* AC tile: value centred, a dotted rule, then the shield line (label + icon). */
+    .addon-dnd55e-sheets .dse-ac-tile { justify-content:center }
+    .addon-dnd55e-sheets .dse-ac-div { align-self:stretch; border-top:1px dotted var(--text-muted); opacity:.6; margin:var(--space-1) 0 }
+    /* Equipment: a Worn group + a dynamic Attunement group, each a header row over
+       a 3-up slot grid. Slots hug the band height beside the stat grid. */
+    .addon-dnd55e-sheets .dse-eqwrap { display:flex; flex-direction:column; gap:var(--space-2); flex:1 1 15rem; min-width:13rem }
+    .addon-dnd55e-sheets .dse-eqgrp { display:flex; flex-direction:column; gap:4px }
+    .addon-dnd55e-sheets .dse-eqh { display:flex; align-items:center; gap:var(--space-1); font-size:var(--text-xs); text-transform:uppercase; letter-spacing:.05em; color:var(--text-muted) }
+    .addon-dnd55e-sheets .dse-eqh-cnt { margin-left:auto; color:var(--accent-gold); font-weight:600; font-variant-numeric:tabular-nums }
+    .addon-dnd55e-sheets .dse-eqh-over { color:var(--color-danger) }
+    .addon-dnd55e-sheets .dse-eqrow { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:var(--space-1) }
+    .addon-dnd55e-sheets .dse-slot { background:var(--bg-raised); border:1px solid rgba(var(--accent-gold-rgb),.3); border-radius:var(--radius); padding:var(--space-1) var(--space-2); min-height:2.3rem; display:flex; align-items:center; gap:var(--space-1) }
+    .addon-dnd55e-sheets .dse-slot-empty { border-style:dashed; border-color:var(--border-subtle); background:transparent }
+    .addon-dnd55e-sheets .dse-slot-tag { font-size:var(--text-xs); text-transform:uppercase; letter-spacing:.04em; color:var(--text-muted); flex:none }
+    .addon-dnd55e-sheets .dse-slot-name { flex:1; min-width:0; font-size:var(--text-sm); color:var(--text-parchment); line-height:1.15; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+    .addon-dnd55e-sheets .dse-slot-name-empty { flex:1; color:var(--text-muted); font-style:italic; font-size:var(--text-xs) }
+    .addon-dnd55e-sheets .dse-slot-x { margin-left:auto; flex:none; padding:0 4px; line-height:1 }
+    .addon-dnd55e-sheets .dse-slot-pick { flex:1; min-width:0; width:auto; font-size:var(--text-xs); padding:2px 4px }
+    /* Backpack split: active (Equipped+Ready) left, stored (Pack+coin) right; a
+       header row carries the title + the Add-item button (which opens the wizard). */
+    .addon-dnd55e-sheets .dse-bp-head { display:flex; align-items:center; gap:var(--space-2); border-bottom:1px solid var(--border-subtle); padding-bottom:var(--space-1) }
+    .addon-dnd55e-sheets .dse-bp-title { font-size:var(--text-lg); font-weight:600; color:var(--text-parchment); display:flex; align-items:center; gap:var(--space-2) }
+    .addon-dnd55e-sheets .dse-bp-head > .inline-create-btn { margin-left:auto }
+    .addon-dnd55e-sheets .dse-bp-split { display:grid; grid-template-columns:1fr 1fr; gap:var(--space-4) }
+    .addon-dnd55e-sheets .dse-bp-col { display:flex; flex-direction:column; gap:var(--space-3); min-width:0 }
+    .addon-dnd55e-sheets .dse-bp-right { border-left:1px solid var(--border-subtle); padding-left:var(--space-4) }
+    @media (max-width:640px){
+      .addon-dnd55e-sheets .dse-bp-split { grid-template-columns:1fr }
+      .addon-dnd55e-sheets .dse-bp-right { border-left:0; padding-left:0 }
+    }
+    .addon-dnd55e-sheets .dse-bp-lbl { font-size:var(--text-xs); text-transform:uppercase; letter-spacing:.05em; color:var(--text-muted); margin-bottom:var(--space-1) }
+    .addon-dnd55e-sheets .dse-bp-cnt { opacity:.65 }
+    /* Add-item wizard: a wide panel with a browse column + a batch-tray rail. */
+    .addon-dnd55e-sheets .dse-aiw-panel { width:min(94vw,640px); max-width:none }
+    .addon-dnd55e-sheets .dse-aiw { display:grid; grid-template-columns:1fr 200px; gap:var(--space-3) }
+    .addon-dnd55e-sheets .dse-aiw-browse { min-width:0; display:flex; flex-direction:column; gap:var(--space-2) }
+    .addon-dnd55e-sheets .dse-aiw-search { display:flex; align-items:center; gap:var(--space-2); background:var(--bg-surface); border:1px solid rgba(var(--accent-gold-rgb),.4); border-radius:var(--radius); padding:var(--space-1) var(--space-2) }
+    .addon-dnd55e-sheets .dse-aiw-search input { border:none; background:transparent; flex:1; min-width:0 }
+    .addon-dnd55e-sheets .dse-aiw-crumbs { display:flex; align-items:center; gap:4px; flex-wrap:wrap; font-size:var(--text-sm) }
+    .addon-dnd55e-sheets .dse-aiw-cr { background:none; border:none; color:var(--accent-gold); cursor:pointer; padding:2px 6px; border-radius:var(--radius-sm); font:inherit }
+    .addon-dnd55e-sheets .dse-aiw-cr:hover { background:rgba(var(--accent-gold-rgb),.1) }
+    .addon-dnd55e-sheets .dse-aiw-cr.here { color:var(--text-parchment); font-weight:600; cursor:default }
+    .addon-dnd55e-sheets .dse-aiw-sep { color:var(--text-muted) }
+    .addon-dnd55e-sheets .dse-aiw-up { margin-left:auto; background:none; border:1px solid var(--border-subtle); border-radius:var(--radius-sm); color:var(--text-muted); cursor:pointer; padding:2px 8px; font:inherit; font-size:var(--text-xs) }
+    .addon-dnd55e-sheets .dse-aiw-folders { display:flex; flex-direction:column; gap:2px }
+    .addon-dnd55e-sheets .dse-aiw-folder { display:flex; align-items:center; gap:var(--space-2); padding:var(--space-1) var(--space-2); border-radius:var(--radius-sm); cursor:pointer; border:1px solid transparent; background:none; font:inherit; text-align:left; width:100% }
+    .addon-dnd55e-sheets .dse-aiw-folder:hover { background:rgba(var(--accent-gold-rgb),.08); border-color:rgba(var(--accent-gold-rgb),.2) }
+    .addon-dnd55e-sheets .dse-aiw-fi { color:var(--accent-gold) }
+    .addon-dnd55e-sheets .dse-aiw-fn { color:var(--text-parchment); flex:1; font-size:var(--text-sm) }
+    .addon-dnd55e-sheets .dse-aiw-fc { color:var(--text-muted); font-size:var(--text-xs) }
+    .addon-dnd55e-sheets .dse-aiw-divlbl { font-size:var(--text-xs); text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted); margin:var(--space-2) 0 var(--space-1) }
+    .addon-dnd55e-sheets .dse-aiw-results { display:flex; flex-direction:column; gap:2px; max-height:320px; overflow-y:auto }
+    .addon-dnd55e-sheets .dse-aiw-res { display:flex; align-items:center; gap:var(--space-2); padding:var(--space-1) var(--space-2); border-radius:var(--radius-sm) }
+    .addon-dnd55e-sheets .dse-aiw-res:hover { background:rgba(var(--accent-gold-rgb),.06) }
+    .addon-dnd55e-sheets .dse-aiw-meta { flex:1; min-width:0 }
+    .addon-dnd55e-sheets .dse-aiw-rn { color:var(--text-parchment); font-size:var(--text-sm) }
+    .addon-dnd55e-sheets .dse-aiw-rt { color:var(--text-muted); font-size:var(--text-xs) }
+    .addon-dnd55e-sheets .dse-aiw-more, .addon-dnd55e-sheets .dse-aiw-empty { color:var(--text-muted); font-size:var(--text-xs); padding:var(--space-2); font-style:italic }
+    .addon-dnd55e-sheets .dse-aiw-custom { display:flex; gap:var(--space-1); align-items:center; border-top:1px solid var(--border-subtle); padding-top:var(--space-2) }
+    .addon-dnd55e-sheets .dse-aiw-custom input { flex:1; min-width:0 }
+    .addon-dnd55e-sheets .dse-aiw-cart { border-left:1px solid var(--border-subtle); padding-left:var(--space-3); display:flex; flex-direction:column; min-width:0 }
+    .addon-dnd55e-sheets .dse-aiw-ch { font-size:var(--text-xs); text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted); margin-bottom:var(--space-2) }
+    .addon-dnd55e-sheets .dse-aiw-cc { color:var(--accent-gold); font-weight:600 }
+    .addon-dnd55e-sheets .dse-aiw-cbody { display:flex; flex-direction:column; gap:2px; flex:1 }
+    .addon-dnd55e-sheets .dse-aiw-ci { display:flex; align-items:center; gap:var(--space-1); font-size:var(--text-sm); color:var(--text-parchment); padding:var(--space-1) 0; border-bottom:1px solid var(--border-subtle) }
+    .addon-dnd55e-sheets .dse-aiw-cn { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+    .addon-dnd55e-sheets .dse-aiw-cfoot { margin-top:var(--space-2); display:flex; flex-direction:column; gap:var(--space-1) }
+    @media (max-width:640px){
+      .addon-dnd55e-sheets .dse-aiw { grid-template-columns:1fr }
+      .addon-dnd55e-sheets .dse-aiw-cart { border-left:0; padding-left:0; border-top:1px solid var(--border-subtle); padding-top:var(--space-2) }
+    }
     /* Progression spine row — the full-row overlay toggle. A hover/focus tint makes
        the whole-row click target discoverable; focus-visible draws a keyboard ring. */
     .addon-dnd55e-sheets .dse-spine-toggle { border-radius:var(--radius-sm); transition:background var(--dur-fast) var(--ease-out); }
@@ -352,8 +423,56 @@ export function makeUI(ctx) {
     return section(t('combat.title'), rows);
   }
 
+  // ── Shared equipment classifier (used by the band's equipment panel AND the
+  //    backpack de-dup). WORN is free-form: every equipped, non-attuned item gets
+  //    a slot. Armor + Shield are just the two RECOMMENDED anchors — an equipped
+  //    item that resolves as body armor / a shield fills its labelled slot (and
+  //    drives the AC math); everything else equipped sits in an untagged slot.
+  //    ATTUNEMENT is strict: only items flagged attuned live there (filling a
+  //    slot IS how an attunement item is equipped), and the picker offers only
+  //    items that require attunement. Everything shown in a slot is listed in
+  //    `slotIds` so the backpack never repeats it. `eligible*` are the pools the
+  //    empty-slot pickers choose from. ──
+  function equipmentModel(s, engine) {
+    const inv = Array.isArray(s.inventory) ? s.inventory : [];
+    const armorRec = (it) => {
+      if (!engine || !engine.getItem) return null;
+      let r = it.ref ? engine.getItem('armor', it.ref) : null;
+      if (!r && it.name && engine.getItemByName) r = engine.getItemByName('armor', it.name);
+      return r;
+    };
+    const bodyType = (r) => r && ['light', 'medium', 'heavy'].includes(r.armorType);
+    let armor = null, shield = null;
+    const wornOther = [];
+    for (const it of inv) {
+      if ((it.location || 'pack') !== 'equipped' || it.attuned) continue;
+      const r = armorRec(it);
+      if (r && r.armorType === 'shield' && !shield) shield = it;
+      else if (r && bodyType(r) && !armor) armor = it;
+      else wornOther.push(it);
+    }
+    const attuned = inv.filter((it) => !!it.attuned);
+    const slotIds = new Set([armor, shield, ...wornOther, ...attuned].filter(Boolean).map((it) => it.id));
+    // Picker pools. Worn is unrestricted — ANY item not already placed can be
+    // equipped (armor/shield pickers pre-filter to their recommended type; the
+    // generic slot takes anything). Attunement offers only non-attuned MAGIC
+    // ITEMS that require attunement (no scrolls / rope / rations); an unresolved
+    // record (no book / homebrew magic item) is allowed rather than blocked.
+    const notPlaced = (it) => (it.location || 'pack') !== 'equipped' && !it.attuned;
+    const eligibleArmor = inv.filter((it) => notPlaced(it) && bodyType(armorRec(it)));
+    const eligibleShield = inv.filter((it) => notPlaced(it) && armorRec(it) && armorRec(it).armorType === 'shield');
+    const eligibleWorn = inv.filter(notPlaced);
+    const attunable = (it) => {
+      if (it.attuned || it.kind !== 'magic-item') return false;
+      const r = it.ref && engine && engine.getItem ? engine.getItem('magic-item', it.ref) : null;
+      return r ? !!r.attunement : true;
+    };
+    const eligibleAttune = inv.filter(attunable);
+    return { armor, shield, wornOther, attuned, slotIds, eligibleArmor, eligibleShield, eligibleWorn, eligibleAttune };
+  }
+
   return {
-    S, styleTag, section, card, sectionLabel, subLabel,
+    S, styleTag, section, card, sectionLabel, subLabel, equipmentModel,
     heroTile, abilityTile, profDot, profRow, rowLine, overrideControls,
     numField, statTip, entityRef, statBox, miniStat,
     selectBox, fieldRow, choiceBlock, spellChip, spellInfo, spellLegend, warningsBlock, attacksBlock,

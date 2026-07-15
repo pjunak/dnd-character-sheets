@@ -235,7 +235,7 @@ export function makeSheetPanel(ctx) {
     // Ability cards stack down the left; the vital strip (shifted here from the
     // full-width top) leads the right column, above attacks · spells · trackers.
     const main = `<div style="display:flex;flex-direction:column;gap:var(--space-5)">
-      ${vitalsBar(c, s, comp, edit, engine)}
+      ${vitalsBar(c, s, comp, edit, engine, { combat: true })}
       <div style="color:var(--text-muted);font-size:var(--text-xs)">${esc(t('combat.weaponsHint'))}</div>
       ${attacks}
       ${combatSpells(c, s, comp, engine)}

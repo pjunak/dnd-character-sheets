@@ -47,10 +47,10 @@ export function makeOverviewPanel(ctx) {
   function panelOverview(c, s, edit, comp, engine) {
     const standaloneEdit = edit && !engine;
     const identity = standaloneEdit ? identitySection(c, s) : '';
-    // The Backpack panel, headed like a mini-tab. ctx.panels is assembled after
-    // the panel factories run (entry.js), so resolve it lazily at render time.
+    // The Backpack panel renders its own header (title + Add-item button), so we
+    // just frame it with the divider. ctx.panels is assembled after the panel
+    // factories run (entry.js), so resolve it lazily at render time.
     const backpack = `<div style="border-top:1px solid var(--border-subtle);padding-top:var(--space-4)">
-      <div style="font-size:var(--text-lg);font-weight:600;color:var(--text-parchment);margin-bottom:var(--space-3);display:flex;align-items:center;gap:var(--space-2)"><span aria-hidden="true">🎒</span> ${esc(t('tab.backpack'))}</div>
       ${ctx.panels.panelBackpack(c, s, edit, comp, engine)}</div>`;
     const right = `<div style="display:flex;flex-direction:column;gap:var(--space-5)">
       ${vitalsBar(c, s, comp, edit, engine)}${identity}${backpack}</div>`;

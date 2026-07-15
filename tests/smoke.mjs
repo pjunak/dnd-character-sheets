@@ -134,10 +134,13 @@ test('sheets: vital tiles carry text labels + the compact strip adds spell DC/at
     const out = renderBody(rec, { id: 'cvi', name: 'Mage', addonData: { 'dnd55e-sheets': { className: 'Wizard', abilities: { DEX: 14 } } } });
     // Stat names are spelled-out text labels again (the icon-glyph vitals were
     // reverted — icons read too cryptic for the width they saved).
-    // The HP label text sits inside a hover-legend tip (the stepper value can't
-    // anchor a popover — .codex-stepper is overflow:hidden).
-    assert.match(out, /codex-tip-u">Hit Points</, 'the HP tile is text-labelled + carries the legend');
-    assert.match(out, /class="codex-tile-label">Initiative</, 'a computed vital is text-labelled');
+    assert.match(out, /class="codex-tile-label">Hit Points</, 'the HP tile is plainly text-labelled');
+    // The HP hover legend rides the MAX number (the "where did that come from"
+    // value), not the label — the max is wrapped in the has-info tip.
+    assert.match(out, /codex-tip-u"><span[^>]*> \/ \d/, 'the max-HP number carries the hover legend');
+    assert.match(out, /class="codex-tile-label">Speed</, 'a computed vital is text-labelled');
+    // Initiative is a start-of-fight number → it lives on the Combat tab only.
+    assert.doesNotMatch(out, /class="codex-tile-label">Initiative</, 'no Initiative tile on the Character Sheet');
     assert.doesNotMatch(out, /codex-icon/, 'no stat glyphs in the vitals');
     // The width the compact tiles free up carries the caster stats (engine mode).
     assert.match(out, /class="codex-tile-label">Save DC</, 'spell save DC joins the vitals strip');
@@ -622,13 +625,17 @@ test('sheets: scroll-copy offers only scrolls of the picked spell + never consum
     ],
   });
   const char = { id: 'cscr', name: 'Mage', addonData: { 'dnd55e-sheets': blob() } };
+  // Scope assertions to the copy modal's scroll-consume SELECT — the band's
+  // generic equip picker legitimately lists every unplaced item (scrolls incl.),
+  // so whole-page matching would false-positive on it.
+  const scrollSelect = (out) => { const m = /<select[^>]*id="dse-copy-scroll-cscr"[\s\S]*?<\/select>/.exec(out); return m ? m[0] : ''; };
   // Picked spell = Fireball: only the Fireball scroll is offered (ROADMAP 5b).
   globalThis.localStorage = modeLS('copy', 'fireball');
   try {
     const { rec } = dryRunRegister(register, META, PHB());
     const out = renderBody(rec, char);
-    assert.match(out, /Spell Scroll of Fireball/, 'the scroll holding the picked spell is offered');
-    assert.doesNotMatch(out, /Scroll of Healing Word/, 'a scroll of a DIFFERENT spell is never offered');
+    assert.match(scrollSelect(out), /Spell Scroll of Fireball/, 'the scroll holding the picked spell is offered');
+    assert.doesNotMatch(scrollSelect(out), /Scroll of Healing Word/, 'a scroll of a DIFFERENT spell is never offered');
     assert.match(out, /spellCopyPick/, 'changing the picked spell re-filters (wired to spellCopyPick)');
   } finally { clearLocalStorage(); }
   // Picked spell = Detect Magic: no matching scroll → disabled message, wrong scrolls hidden.
@@ -637,7 +644,7 @@ test('sheets: scroll-copy offers only scrolls of the picked spell + never consum
     const { rec } = dryRunRegister(register, META, PHB());
     const out = renderBody(rec, char);
     assert.match(out, /No scroll of this spell/, 'a no-match state instead of wrong scrolls');
-    assert.doesNotMatch(out, /Scroll of Healing Word/, 'wrong scrolls stay hidden in the no-match state');
+    assert.doesNotMatch(scrollSelect(out), /Scroll of Healing Word/, 'wrong scrolls stay hidden in the no-match state');
   } finally { clearLocalStorage(); }
   // Apply-time guard: a mismatched scroll id is NOT consumed (the copy still lands).
   const { host, rec } = createMockHost(META, PHB());
@@ -1023,16 +1030,73 @@ test('sheets: overrides.maxHp governs every HP clamp + the rest heal (ARCH-3)', 
   assert.equal(stored.hp, 32, 'override cleared → the computed/materialized max clamps again');
 });
 
-test('sheets: Backpack (folded into the Character Sheet tab) offers pickers + attunement', () => {
-  mockLocalStorage('stats');   // backpack now lives at the bottom of the Character Sheet tab
+test('sheets: equipment — free-form Worn slots + strict Attunement, de-duped from the pack', () => {
+  mockLocalStorage('stats');
   try {
     const { rec } = dryRunRegister(register, META, PHB());
-    const out = renderBody(rec, { id: 'cb2', name: 'Knight', addonData: { 'dnd55e-sheets': { className: 'Fighter', inventory: [{ id: 'i1', ref: 'longsword', name: 'Longsword', location: 'equipped', attuned: true }] } } });
-    assert.match(out, /Weapon…|Armor…/, 'compendium add pickers');
-    assert.match(out, /Attuned 1\/3/, 'attunement counter from the engine');
-    assert.match(out, /✦/, 'attunement toggle');
-    assert.match(out, /Sap/, 'weapon mastery shown on the row');
+    const out = renderBody(rec, { id: 'cb2', name: 'Knight', addonData: { 'dnd55e-sheets': { className: 'Fighter', inventory: [
+      { id: 'i1', ref: 'leather', name: 'Leather Armor', kind: 'armor', location: 'equipped' },
+      { id: 'i2', name: 'Ring of Protection', kind: 'magic-item', location: 'pack', attuned: true },
+      { id: 'i3', name: 'Rope', qty: 1, location: 'pack' },
+      { id: 'i4', name: 'Goggles of Night', kind: 'magic-item', location: 'equipped' },
+    ] } } });
+    // Worn: Armor + Shield are the recommended anchors; ANY equipped item gets a slot.
+    assert.match(out, /Worn/, 'a Worn group');
+    assert.match(out, /dse-slot-tag">Armor</, 'the recommended Armor anchor');
+    assert.match(out, /dse-slot-tag">Shield</, 'the recommended Shield anchor');
+    assert.match(out, /Leather Armor/, 'the equipped armor fills its anchor');
+    assert.match(out, /Goggles of Night/, 'a non-armor equipped item gets its own worn slot');
+    assert.match(out, /"cb2","any","\$value"/, 'a generic take-anything picker is offered (slotEquip · any)');
+    // Attunement stays strict: only the attuned item lands there; count vs limit.
+    assert.match(out, /Attunement/, 'an Attunement group');
+    assert.match(out, /Ring of Protection/, 'the attuned item fills an Attunement slot');
+    assert.match(out, /1 \/ 3/, 'the attunement count (1 of 3)');
+    // Adding is via the wizard; the old inline pickers are gone.
+    assert.match(out, /addItemOpen/, 'the ＋ Add item button opens the wizard');
+    assert.doesNotMatch(out, /Weapon…|Armor…/, 'no old inline pickers');
+    // De-dup: band-slot items are shown once (in the band), never repeated as an
+    // editable pack row. Rope (not equipped, not attuned) stays in the pack.
+    assert.match(out, /value="Rope"/, 'a non-equipped, non-attuned item stays in the pack');
+    assert.doesNotMatch(out, /value="Ring of Protection"/, 'the attuned item is not repeated as a pack row');
+    assert.doesNotMatch(out, /value="Leather Armor"/, 'the equipped armor is not repeated as a pack row');
+    assert.doesNotMatch(out, /value="Goggles of Night"/, 'a generic worn item is not repeated as a pack row');
   } finally { clearLocalStorage(); }
+});
+
+test('sheets: empty equipment slots render click-to-fill pickers (editor)', () => {
+  mockLocalStorage('stats');
+  try {
+    const { rec } = dryRunRegister(register, META, PHB());
+    const out = renderBody(rec, { id: 'ce', name: 'Mage', addonData: { 'dnd55e-sheets': { className: 'Wizard', inventory: [
+      { id: 'p1', ref: 'leather', name: 'Leather Armor', kind: 'armor', location: 'pack' },   // owned, not worn
+      { id: 'p2', name: 'Cloak of Protection', kind: 'magic-item', location: 'pack' },          // owned, not attuned
+    ] } } });
+    assert.match(out, /dse-slot-pick/, 'an empty slot renders a picker select');
+    assert.match(out, /slotEquip/, 'the Armor picker equips the owned armor (slotEquip)');
+    assert.match(out, /slotAttune/, 'the Attunement picker attunes an item (slotAttune)');
+    assert.match(out, /Cloak of Protection/, 'an attunable magic item is offered in the attune picker');
+  } finally { clearLocalStorage(); }
+});
+
+test('sheets: equipment slot actions (equip / attune / clear) mutate without throwing', () => {
+  const { host, rec } = createMockHost(META, PHB());
+  let stored = { inventory: [{ id: 'x1', ref: 'leather', name: 'Leather Armor', kind: 'armor', location: 'pack' }, { id: 'x2', name: 'Amulet', kind: 'magic-item', location: 'pack' }] };
+  host.store.patchAddonData = (_c, itemId, fn) => { stored = fn(stored) || stored; return { id: itemId, addonData: { 'dnd55e-sheets': stored } }; };
+  register(host);
+  const act = (name, ...args) => rec.actions.find((a) => a.name === name).fn(...args);
+  act('slotEquip', 'cX', 'armor', 'x1');
+  assert.equal(stored.inventory.find((i) => i.id === 'x1').location, 'equipped', 'equip sets the armor equipped');
+  // The generic slot equips ANYTHING and never bumps the anchors' occupants.
+  act('slotEquip', 'cX', 'any', 'x2');
+  assert.equal(stored.inventory.find((i) => i.id === 'x2').location, 'equipped', 'the generic slot equips a non-armor item');
+  assert.equal(stored.inventory.find((i) => i.id === 'x1').location, 'equipped', 'an "any" equip does not bump the worn armor');
+  act('slotUnequip', 'cX', 'x2');
+  act('slotUnequip', 'cX', 'x1');
+  assert.equal(stored.inventory.find((i) => i.id === 'x1').location, 'pack', 'unequip returns it to the pack');
+  act('slotAttune', 'cX', 'x2');
+  assert.equal(stored.inventory.find((i) => i.id === 'x2').attuned, true, 'attune flags the item');
+  act('slotUnattune', 'cX', 'x2');
+  assert.equal(stored.inventory.find((i) => i.id === 'x2').attuned, false, 'unattune clears the flag');
 });
 
 test('sheets: Backpack tab retired — no backpack tab button, content in Character Sheet (UI polish)', () => {
@@ -1150,6 +1214,65 @@ test('sheets: Backpack add-item + attune actions do not throw', () => {
   assert.doesNotThrow(() => act('invAddRef', 'c1', 'weapon', 'longsword'));
   assert.doesNotThrow(() => act('invAddRef', 'c1', 'armor', 'leather'));
   assert.doesNotThrow(() => act('invAttune', 'c1', 'someid'));
+});
+
+// A Map-backed localStorage (the top stub is a no-op setItem, so the wizard's
+// open flag / cart can't round-trip through it).
+function mapLocalStorage(initial) {
+  const m = new Map(Object.entries(initial || {}));
+  globalThis.localStorage = {
+    getItem: (k) => (m.has(String(k)) ? m.get(String(k)) : null),
+    setItem: (k, v) => m.set(String(k), String(v)),
+    removeItem: (k) => m.delete(String(k)),
+  };
+  return m;
+}
+
+test('sheets: add-item wizard — search box, category tree, batch tray with typed quantity', () => {
+  const ls = mapLocalStorage({ 'dse-tab:cw': 'stats', 'dse-additem:cw': 'open' });
+  try {
+    const { rec } = dryRunRegister(register, META, PHB());
+    const char = { id: 'cw', name: 'Mage', addonData: { 'dnd55e-sheets': { className: 'Wizard' } } };
+    const out = renderBody(rec, char);
+    assert.match(out, /Add to Backpack/, 'the wizard overlay is open');
+    assert.match(out, /Search all items/, 'a search box');
+    assert.match(out, /dse-aiw-folder[^>]*>[\s\S]*?Weapons/, 'a drill-down category (Weapons)');
+    assert.match(out, /Magic Items/, 'a drill-down category (Magic Items)');
+    assert.match(out, /Nothing selected yet/, 'the batch tray starts empty');
+    assert.match(out, /addItemStageCustom/, 'a custom-item field is offered');
+    // With items staged, the tray shows each with a quantity stepper + a commit total.
+    ls.set('dse-additem-cart:cw', JSON.stringify([{ key: 'weapon:dagger', kind: 'weapon', ref: 'dagger', name: 'Dagger', qty: 2 }]));
+    const out2 = renderBody(rec, char);
+    assert.match(out2, /Dagger/, 'a staged item shows in the tray');
+    assert.match(out2, /codex-stepper/, 'each staged item gets a quantity stepper (type the count)');
+    assert.match(out2, /addItemQty/, 'the stepper writes the quantity');
+    assert.match(out2, /Add 2</, 'the commit button totals the staged quantities');
+  } finally { clearLocalStorage(); }
+});
+
+test('sheets: add-item wizard stages with a quantity + commits the batch to the pack', () => {
+  mapLocalStorage({});
+  try {
+    const { host, rec } = createMockHost(META, PHB());
+    let stored = {};
+    host.store.patchAddonData = (_c, itemId, fn) => { stored = fn(stored) || stored; return { id: itemId, addonData: { 'dnd55e-sheets': stored } }; };
+    register(host);
+    const act = (name, ...args) => rec.actions.find((a) => a.name === name).fn(...args);
+    // Stage a weapon, bump its quantity, then commit the whole tray at once.
+    act('addItemStage', 'cX', 'weapon', 'longsword');
+    act('addItemQty', 'cX', 'weapon:longsword', 3);
+    assert.doesNotThrow(() => act('addItemNav', 'cX', 'weapon/martial'));
+    assert.doesNotThrow(() => act('addItemSearch', 'cX'));    // no document → harmless no-op
+    act('addItemCommit', 'cX');
+    assert.equal(stored.inventory.length, 1, 'one line committed');
+    assert.equal(stored.inventory[0].name, 'Longsword', 'the ref resolved to a name');
+    assert.equal(stored.inventory[0].qty, 3, 'the typed quantity carried through');
+    assert.equal(stored.inventory[0].kind, 'weapon', 'the kind rides along');
+    assert.equal(stored.inventory[0].ref, 'longsword');
+    assert.equal(stored.inventory[0].location, 'ready', 'a weapon lands in Ready');
+    // The cart cleared on commit.
+    assert.equal(globalThis.localStorage.getItem('dse-additem-cart:cX'), null, 'the tray is emptied after commit');
+  } finally { clearLocalStorage(); }
 });
 
 test('sheets: invAddRef stores the item KIND; free-text armor resolves by name (ROADMAP 7)', () => {
