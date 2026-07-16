@@ -93,8 +93,10 @@ export function makeUI(ctx) {
     .addon-dnd55e-sheets .dse-bp-lbl { font-size:var(--text-xs); text-transform:uppercase; letter-spacing:.05em; color:var(--text-muted); margin-bottom:var(--space-1) }
     .addon-dnd55e-sheets .dse-bp-cnt { opacity:.65 }
     /* Currency: ONE inline line pinned under the whole split (label · coin
-       pairs). flex-wrap is the narrow-screen overflow fallback only. */
-    .addon-dnd55e-sheets .dse-bp-coins { display:flex; align-items:center; gap:var(--space-3); flex-wrap:wrap; border-top:1px solid var(--border-subtle); padding-top:var(--space-2) }
+       pairs, cp→pp ascending). margin-top:auto sinks it to the column's
+       bottom — level with the rail's last ability card when the backpack
+       stretches (panel.overview.js). flex-wrap is the overflow fallback. */
+    .addon-dnd55e-sheets .dse-bp-coins { display:flex; align-items:center; gap:var(--space-3); flex-wrap:wrap; border-top:1px solid var(--border-subtle); padding-top:var(--space-2); margin-top:auto }
     .addon-dnd55e-sheets .dse-coin { display:inline-flex; align-items:center; gap:var(--space-1) }
     .addon-dnd55e-sheets .dse-coin-lbl { font-size:var(--text-xs); color:var(--accent-gold); font-weight:600 }
     /* Add-item wizard: a wide panel with a browse column + a batch-tray rail. */

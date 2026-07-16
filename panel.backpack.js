@@ -49,7 +49,7 @@ export function makeBackpackPanel(ctx) {
     const left = ['equipped', 'ready'].map(group).join('');
     const right = group('pack');
 
-    return `<div style="display:flex;flex-direction:column;gap:var(--space-3)">
+    return `<div style="flex:1;display:flex;flex-direction:column;gap:var(--space-3)">
       ${head}
       <div class="dse-bp-split">
         <div class="dse-bp-col">${left}</div>

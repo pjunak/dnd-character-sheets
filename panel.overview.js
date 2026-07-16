@@ -47,16 +47,21 @@ export function makeOverviewPanel(ctx) {
   function panelOverview(c, s, edit, comp, engine) {
     const standaloneEdit = edit && !engine;
     const identity = standaloneEdit ? identitySection(c, s) : '';
-    // The Backpack panel renders its own header (title + Add-item button), so we
-    // just frame it with the divider. ctx.panels is assembled after the panel
+    // The Backpack panel renders its own header (title + Add-item button) — no
+    // divider above it, the column gap alone separates it from the vitals. It
+    // stretches to fill the column's leftover height so its coin line lands
+    // level with the rail's last ability card (the margin-top:auto on
+    // .dse-bp-coins takes the slack). ctx.panels is assembled after the panel
     // factories run (entry.js), so resolve it lazily at render time.
-    const backpack = `<div style="border-top:1px solid var(--border-subtle);padding-top:var(--space-4)">
+    const backpack = `<div style="flex:1;display:flex;flex-direction:column">
       ${ctx.panels.panelBackpack(c, s, edit, comp, engine)}</div>`;
-    const right = `<div style="display:flex;flex-direction:column;gap:var(--space-5)">
+    const right = `<div style="flex:1;display:flex;flex-direction:column;gap:var(--space-5)">
       ${vitalsBar(c, s, comp, edit, engine)}${identity}${backpack}</div>`;
+    // align-self:stretch overrides the .dse-cols flex-start so this column
+    // matches the rail's height (Combat keeps the default — nothing to pin).
     return `<div class="dse-cols">
       <div class="dse-cards">${abilityRail(c, s, comp, edit)}</div>
-      <div class="dse-cols-main">${right}</div>
+      <div class="dse-cols-main" style="align-self:stretch;display:flex;flex-direction:column">${right}</div>
     </div>`;
   }
 

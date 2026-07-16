@@ -15,7 +15,7 @@ import { ABILITIES, SKILL_ABILITY, num, abilityMod, POINT_BUY, pointCost, points
 export { ABILITIES, num, abilityMod, POINT_BUY, pointCost, pointsSpent, clampHp, hitDieAvg, scrollCopyCost, ASI_RULES, featAsiFrom, featAbilityCap };
 
 // ── Domain constants (UI-side) ───────────────────────────────────
-export const COINS = ['pp', 'gp', 'ep', 'sp', 'cp'];
+export const COINS = ['cp', 'sp', 'ep', 'gp', 'pp'];   // ascending value — cp leftmost in the coin line
 export const LOCATIONS = ['equipped', 'ready', 'pack']; // carry state (EQ-1)
 // Display-friendly skill list, derived from the engine's skill→ability map so
 // the two encodings can never drift (D&D 2024).
