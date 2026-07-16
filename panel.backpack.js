@@ -5,16 +5,18 @@
 //
 //  Two columns: LEFT holds the ACTIVE items (Equipped + Ready — the gear that
 //  carries attacks/uses in the Combat tab; here it's names + a hover legend);
-//  RIGHT holds STORED items (Pack) + currency. A "＋ Add item" button in the
-//  header opens the add-item wizard (panel.additem.js). Per-row qty / attune /
-//  move / remove controls show in modification mode; read view is control-free.
-//  The attunement tally lives in the band's Attunement group now, not here.
+//  RIGHT holds STORED items (Pack). Currency is ONE inline line pinned under
+//  the whole split — always the bottom of the backpack, whichever column runs
+//  longer. A "＋ Add item" button in the header opens the add-item wizard
+//  (panel.additem.js). Per-row qty / attune / move / remove controls show in
+//  modification mode; read view is control-free. The attunement tally lives
+//  in the band's Attunement group now, not here.
 // ═══════════════════════════════════════════════════════════════
 
 export function makeBackpackPanel(ctx) {
   const { host, t, COINS, num, titleize, ui } = ctx;
   const { esc, dataAction, dataOn } = host.h;
-  const { section, numField, entityRef, equipmentModel } = ui;
+  const { numField, entityRef, equipmentModel, bagIcon } = ui;
 
   function panelBackpack(c, s, edit, comp, engine) {
     // Header: title + the "＋ Add item" button (editor only) that opens the
@@ -24,7 +26,7 @@ export function makeBackpackPanel(ctx) {
     const addBtn = edit
       ? `<button class="inline-create-btn"${dataAction(host.action('addItemOpen'), c.id)}>＋ ${esc(t('backpack.add'))}</button>`
       : '';
-    const head = `<div class="dse-bp-head"><span class="dse-bp-title"><span aria-hidden="true">🎒</span> ${esc(t('tab.backpack'))}</span>${addBtn}</div>`;
+    const head = `<div class="dse-bp-head"><span class="dse-bp-title"><span style="color:var(--accent-gold);line-height:0">${bagIcon(19)}</span> ${esc(t('tab.backpack'))}</span>${addBtn}</div>`;
 
     // De-dup: whatever the band shows in a Worn / Attunement slot (equipped
     // armor+shield, and every attuned item) is NOT repeated here — it lives in
@@ -42,16 +44,18 @@ export function makeBackpackPanel(ctx) {
     };
 
     // Left = the ACTIVE items (Equipped + Ready — they carry attacks/uses in
-    // Combat; here just names + hover). Right = STORED (Pack) + currency.
+    // Combat; here just names + hover). Right = STORED (Pack). The coin line
+    // rides BELOW the split so it's always the backpack's bottom edge.
     const left = ['equipped', 'ready'].map(group).join('');
-    const right = group('pack') + currencySection(c, s, edit);
+    const right = group('pack');
 
     return `<div style="display:flex;flex-direction:column;gap:var(--space-3)">
       ${head}
       <div class="dse-bp-split">
         <div class="dse-bp-col">${left}</div>
         <div class="dse-bp-col dse-bp-right">${right}</div>
-      </div></div>`;
+      </div>
+      ${currencyLine(c, s, edit)}</div>`;
   }
 
   // Resolve an inventory item → its compendium {kind, id, rec}. The stored
@@ -120,16 +124,15 @@ export function makeBackpackPanel(ctx) {
     </div>`;
   }
 
-  function currencySection(c, s, edit) {
+  function currencyLine(c, s, edit) {
     const cells = COINS.map((coin) => {
       const v = num(s.currency[coin], 0);
       const inner = edit
-        ? numField(dataOn('change', host.action('currencySet'), c.id, coin, '$value'), v, { min: 0, ariaLabel: t('coin.' + coin) })
-        : `<div style="color:var(--text-parchment);font-weight:600;font-variant-numeric:tabular-nums">${esc(String(v))}</div>`;
-      return `<div style="text-align:center;min-width:3rem">
-        <div style="font-size:var(--text-xs);color:var(--accent-gold);font-weight:600">${esc(t('coin.' + coin))}</div>${inner}</div>`;
+        ? numField(dataOn('change', host.action('currencySet'), c.id, coin, '$value'), v, { min: 0, ariaLabel: t('coin.' + coin), width: '3.6rem' })
+        : `<span style="color:var(--text-parchment);font-weight:600;font-variant-numeric:tabular-nums">${esc(String(v))}</span>`;
+      return `<span class="dse-coin"><span class="dse-coin-lbl">${esc(t('coin.' + coin))}</span>${inner}</span>`;
     }).join('');
-    return section(t('backpack.currency'), `<div style="display:flex;gap:var(--space-3);flex-wrap:wrap;align-items:center">${cells}</div>`, { icon: '🪙' });
+    return `<div class="dse-bp-coins"><span class="dse-bp-lbl" style="margin:0">🪙 ${esc(t('backpack.currency'))}</span>${cells}</div>`;
   }
 
   return { panelBackpack };

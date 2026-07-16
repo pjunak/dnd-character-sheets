@@ -37,7 +37,7 @@ export const ADDITEM_TREE = [
 const ITEM_CAP = 80;   // max item rows shown at once (search / a tree leaf)
 
 export function makeAddItemPanel(ctx) {
-  const { host, t, num, titleize } = ctx;
+  const { host, t, num, titleize, ui } = ctx;
   const { esc, dataAction, dataOn } = host.h;
 
   const norm = (x) => String(x == null ? '' : x).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
@@ -150,7 +150,7 @@ export function makeAddItemPanel(ctx) {
     const rows = cart.length
       ? cart.map((it) => `<div class="dse-aiw-ci">
           <span class="dse-aiw-cn">${esc(it.name || t('misc.unnamed'))}</span>
-          ${ctx.ui.numField(dataOn('change', host.action('addItemQty'), cid, it.key, '$value'), num(it.qty, 1), { min: 1, width: '2.4rem', ariaLabel: t('additem.qty') })}
+          ${ui.numField(dataOn('change', host.action('addItemQty'), cid, it.key, '$value'), num(it.qty, 1), { min: 1, width: '2.4rem', ariaLabel: t('additem.qty') })}
           <button class="inline-create-btn dse-aiw-cx" title="${esc(t('action.remove'))}"${dataAction(host.action('addItemUnstage'), cid, it.key)}>✕</button>
         </div>`).join('')
       : `<div class="dse-aiw-empty">${esc(t('additem.cartEmpty'))}</div>`;
@@ -194,7 +194,7 @@ export function makeAddItemPanel(ctx) {
       <div style="position:absolute;inset:0" title="${esc(t('action.cancel'))}"${dataAction(host.action('addItemClose'), cid)}></div>
       <div class="addon-wizard dse-aiw-panel" role="dialog" aria-modal="true" aria-label="${esc(t('additem.title'))}" style="position:relative;z-index:1">
         <div class="addon-wizard-head">
-          <h3>🎒 ${esc(t('additem.title'))}</h3>
+          <h3><span style="color:var(--accent-gold)">${ui.bagIcon(17)}</span> ${esc(t('additem.title'))}</h3>
           <button class="inline-create-btn" title="${esc(t('action.cancel'))}"${dataAction(host.action('addItemClose'), cid)}>✕</button>
         </div>
         <div class="addon-wizard-body">${body}</div>

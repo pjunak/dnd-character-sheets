@@ -47,7 +47,7 @@ function renderBody(rec, char, lore) {
 
 const META = {
   id: 'dnd55e-sheets',
-  permissions: ['ui:override', 'ui:action', 'ui:settings-tab', 'data:read:characters', 'data:write:characters.addonData'],
+  permissions: ['ui:override', 'ui:action', 'data:read:characters', 'data:write:characters.addonData'],
   optionalDependencies: { 'dnd55e-compendium': { range: '>=0.1.0' } },
 };
 
@@ -70,7 +70,7 @@ test('sheets: register is clean + wires the expected surface', () => {
   assert.ok(rec.fragmentOps.some(f => f.target === 'characters:body' && f.spec.op === 'replace'), 'replaces the character body fragment');
   assert.ok(rec.actions.some(a => a.name === 'hp'), 'the hp action');
   assert.ok(rec.actions.some(a => a.name === 'tab'), 'the tab action');
-  assert.ok(rec.settingsTabs.length >= 1, 'a settings tab');
+  assert.equal(rec.settingsTabs.length, 0, 'no host settings tab — sheet options live on the sheet\'s own ⚙ tab');
   assert.ok(rec.provided && rec.provided.apiVersion === 1, 'provides the rules api for other addons');
   assert.ok(!rec.articleSections.length, 'no standalone article section (we own the body instead)');
   assert.ok(!rec.editorFields.length, 'no editor fields (the host edit form stays host-only)');
@@ -1064,6 +1064,8 @@ test('sheets: equipment — free-form Worn slots + strict Attunement, de-duped f
 });
 
 test('sheets: COMPACT layout docks Init / passive / DC / Atk onto the ability cards', () => {
+  // Deliberately the LEGACY global key (no per-sheet 'dse-ui:layout:cc') — a
+  // pre-per-sheet 'compact' choice must carry over via uiLayout's fallback.
   mapLocalStorage({ 'dse-tab:cc': 'stats', 'dse-ui:layout': 'compact' });
   try {
     const { rec } = dryRunRegister(register, META, PHB());
@@ -1089,19 +1091,46 @@ test('sheets: COMPACT layout docks Init / passive / DC / Atk onto the ability ca
   } finally { clearLocalStorage(); }
 });
 
-test('sheets: settings tab offers the classic/compact switch + uiLayoutSet persists it', () => {
-  const ls = mapLocalStorage({});
+test('sheets: ⚙ Settings tab — per-sheet layout switch + the print/export/import tools', () => {
+  const ls = mapLocalStorage({ 'dse-tab:cs': 'settings' });
   try {
     const { rec } = dryRunRegister(register, META, PHB());
-    const html = rec.settingsTabs[0].render();
-    assert.match(html, /name="dse-layout"/, 'layout radios render');
-    assert.match(html, /value="classic"[^>]*checked/, 'classic is the default');
-    assert.match(html, /uiLayoutSet/, 'radios wire to the uiLayoutSet action');
+    const out = renderBody(rec, { id: 'cs', name: 'Mage', addonData: { 'dnd55e-sheets': { className: 'Wizard' } } });
+    assert.match(out, /name="dse-layout-cs"/, 'layout radios render on the sheet\'s own tab');
+    assert.match(out, /value="classic"[^>]*checked/, 'classic is the default');
+    assert.match(out, /uiLayoutSet/, 'radios wire to the uiLayoutSet action');
+    // The old toolbar row is gone; Print / Export / Import moved onto this tab.
+    assert.match(out, /printSheet/, 'Print lives on the tab');
+    assert.match(out, /exportSheet/, 'Export lives on the tab');
+    assert.match(out, /importOpen/, 'Import lives on the tab (editor)');
     const act = (name, ...args) => rec.actions.find((a) => a.name === name).fn(...args);
-    act('uiLayoutSet', 'compact');
-    assert.equal(ls.get('dse-ui:layout'), 'compact', 'compact persists to localStorage');
-    act('uiLayoutSet', 'classic');
-    assert.equal(ls.has('dse-ui:layout'), false, 'classic clears the key (default)');
+    act('uiLayoutSet', 'cs', 'compact');
+    assert.equal(ls.get('dse-ui:layout:cs'), 'compact', 'compact persists PER SHEET');
+    act('uiLayoutSet', 'cs', 'classic');
+    assert.equal(ls.get('dse-ui:layout:cs'), 'classic', 'classic is stored explicitly (beats the legacy global fallback)');
+  } finally { clearLocalStorage(); }
+});
+
+test('sheets: toolbar gone from the sheet body — Print/Export ride the ⚙ tab only', () => {
+  mockLocalStorage('stats');
+  try {
+    const { rec } = dryRunRegister(register, META);
+    const out = renderBody(rec, FIGHTER);
+    assert.doesNotMatch(out, /printSheet/, 'no Print button above the tab strip');
+    assert.match(out, /⚙️/, 'the Settings tab is offered (standalone + anonymous too)');
+  } finally { clearLocalStorage(); }
+});
+
+test('sheets: currency renders as ONE line pinned under the whole Backpack split', () => {
+  mockLocalStorage('stats');
+  try {
+    const { rec } = dryRunRegister(register, META);
+    const out = renderBody(rec, { ...FIGHTER, addonData: { 'dnd55e-sheets': { ...FIGHTER.addonData['dnd55e-sheets'], currency: { gp: 10 } } } });
+    const body = out.slice(out.indexOf('</style>'));   // skip the CSS (class names appear there too)
+    const split = body.indexOf('dse-bp-split');
+    const coins = body.indexOf('dse-bp-coins');
+    assert.ok(split >= 0 && coins > split, 'the coin line sits below the two-column split');
+    assert.match(body, /dse-coin-lbl">GP<\/span>/, 'coins are inline label+value pairs');
   } finally { clearLocalStorage(); }
 });
 

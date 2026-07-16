@@ -8,7 +8,6 @@
   "permissions": [
     "ui:override",
     "ui:action",
-    "ui:settings-tab",
     "data:read:characters",
     "data:write:characters.addonData"
   ],

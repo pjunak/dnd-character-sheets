@@ -16,12 +16,14 @@ export default {
   'tab.spellbook':    'Spellbook',
   'tab.backpack':     'Backpack',
   'tab.builder':      'Builder',
+  'tab.settings':     'Settings',
   'tab.overviewHint': 'Lore & background',
   'tab.statsHint':    'Abilities, saving throws & skills',
   'tab.combatHint':   'Attacks & resource trackers',
   'tab.spellbookHint':'Prepared spells & slots',
   'tab.backpackHint': 'Inventory & currency',
   'tab.builderHint':  'Class, levels & choices',
+  'tab.settingsHint': 'Sheet layout, print & data tools',
 
   // ── Section headers ──────────────────────────────────────────────
   'sheet.title':      'Character Sheet',
@@ -71,7 +73,11 @@ export default {
   'stat.shieldOff':   'No shield equipped',
   // ── Sheet layout switch (Settings → Doplňky → Character Sheets) ──
   'settings.layoutTitle':       'Sheet layout',
-  'settings.layoutHint':        'How the Character Sheet arranges its stats. Saved in this browser — each player picks their own.',
+  'settings.layoutHint':        'How the Character Sheet arranges its stats. Saved per character in this browser — every player picks their own favorite look for each sheet.',
+  'settings.dataTitle':         'Print & data',
+  'settings.printDesc':         'Open a printable copy of the sheet — send it to paper or Save as PDF.',
+  'settings.exportDesc':        'Download this character’s sheet data as a JSON file (backup or transfer).',
+  'settings.importDesc':        'Paste a previously exported JSON to overwrite this sheet.',
   'settings.layoutClassic':     'Classic',
   'settings.layoutClassicDesc': 'Every stat as a tile in the vitals band: Passive Perception, Save DC and Spell Attack beside HP and AC.',
   'settings.layoutCompact':     'Compact',
@@ -427,10 +433,7 @@ export default {
   'statDesc.spellDC':    'The number a target must beat to resist your {a}-based spells.',
   'statDesc.spellAtk':   'Added to your spell attack rolls to hit a target.',
 
-  // ── Settings / help ──────────────────────────────────────────────
-  'settings.label':   'Character Sheets',
-  'help.title':       'D&D 5.5e Character Sheets',
-  'help.body':        'Adds a fully hand-fillable D&D 5.5e character sheet (with a built-in rules engine) to every character page, stored per character. Works standalone; when a rulebook addon (Player’s Handbook) is installed it auto-fills stats from class/species/background choices. Characters in the database: {count}.',
+  // ── Rules status (the ⚙ Settings tab) ────────────────────────────
   'rules.connected':    'Rulebook data connected — {count} classes available. The Builder and auto-computed stats are active.',
   'rules.disconnected': 'No rulebook addon installed — the sheet is fully hand-fillable. Install the D&D 5.5e Player’s Handbook addon to unlock the Builder and auto-computed stats.',
 };

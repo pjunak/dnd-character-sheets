@@ -189,10 +189,11 @@ export function makeHeaderPanel(ctx) {
     const line = t('sheet.summary', { level: TOKEN_L, cls: TOKEN_C }).trim();
     const idHtml = `<div style="color:var(--text-light);font-size:var(--text-sm);font-weight:600;letter-spacing:.02em">${esc(line).replace(TOKEN_L, lvlHtml).replace(TOKEN_C, (clsHtml + subHtml).trim())}</div>`;
 
-    // COMPACT layout (Settings → Character Sheets): Passive, Save DC, Spell
-    // Attack and Initiative are docked onto the ability cards (panel.rail.js),
-    // so the band keeps only Speed beside HP/AC. CLASSIC keeps every tile here.
-    const compact = uiLayout() === 'compact';
+    // COMPACT layout (the sheet's ⚙ Settings tab, per sheet): Passive, Save DC,
+    // Spell Attack and Initiative are docked onto the ability cards
+    // (panel.rail.js), so the band keeps only Speed beside HP/AC. CLASSIC
+    // keeps every tile here.
+    const compact = uiLayout(cid) === 'compact';
 
     // Spell save DC + spell attack per casting class (engine mode; SP-4 — each
     // class keeps its own numbers). Multiclass tiles carry the class name.

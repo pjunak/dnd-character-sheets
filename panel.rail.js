@@ -22,7 +22,7 @@ export function makeRail(ctx) {
   // carrying the same hover legend as the band tile it replaces. Compact mode
   // moves Initiative onto DEX, passive Perception onto the Perception row, and
   // Save DC / Spell Attack onto the casting ability's card — proximity over a
-  // longer vitals band (the Settings → Character Sheets switch).
+  // longer vitals band (the sheet's ⚙ Settings tab, per sheet).
   function dock(label, valueText, legend) {
     const inner = `<span class="dse-dock">${esc(label)} <strong>${esc(valueText)}</strong></span>`;
     return legend ? statTip(inner, legend) : inner;
@@ -132,7 +132,7 @@ export function makeRail(ctx) {
   function abilityRail(c, s, comp, editable) {
     const vm = viewModel(s, comp);
     const L = legends(s, comp, vm);
-    const compact = uiLayout() === 'compact';
+    const compact = uiLayout(c.id) === 'compact';
     // ability → the casting classes keyed on it (each carries saveDC/spellAttack).
     const casters = {};
     if (compact && comp && comp.spellcasting) {

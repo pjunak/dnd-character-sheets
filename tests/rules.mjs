@@ -131,7 +131,7 @@ test('rules: provides a versioned rules API', () => {
   assert.equal(typeof rec.provided.hydrate, 'function', 'hydrate()');
   assert.equal(typeof rec.provided.derive.proficiencyBonus, 'function', 'derive.proficiencyBonus()');
   assert.equal(typeof rec.provided.derive.maxHp, 'function', 'derive.maxHp()');
-  assert.ok(rec.settingsTabs.length >= 1, 'a settings tab');
+  assert.equal(rec.settingsTabs.length, 0, 'no host settings tab — sheet options live on the sheet\'s own ⚙ tab');
 });
 
 test('rules: universal math is correct, with or without compendium', () => {

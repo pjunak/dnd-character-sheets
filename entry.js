@@ -20,7 +20,8 @@
 //                        (inventory & currency) under the vitals in its main column.
 //    • Combat          — attacks from equipped/ready weapons + resource trackers.
 //    • Spellbook       — prepared/cantrip slots, granted/choose-grant (UI-4).
-//    • Builder         — guided progression; engine mode + editors only, rightmost.
+//    • Builder         — guided progression; engine mode + editors only.
+//    • Settings        — per-sheet layout switch + print/export/import, rightmost.
 //  A slim vitals bar (HP ± / AC / Init / Speed / PB / Passive + spell DC/attack
 //  + class-level line) sits under the tabs on the mechanical tabs (panel.header.js).
 //
@@ -68,6 +69,7 @@ import { makeSpellbookPanel } from './panel.spellbook.js';
 import { makeBackpackPanel } from './panel.backpack.js';
 import { makeAddItemPanel } from './panel.additem.js';
 import { makeBuilderPanel } from './panel.builder.js';
+import { makeSettingsPanel } from './panel.settings.js';
 import { makePrintPanel } from './panel.print.js';
 
 export default function register(host) {
@@ -87,12 +89,19 @@ export default function register(host) {
   // NOT persisted: the Builder is only opened to create/level a character, so it defaults to the
   // Character tab each load, and this saves any localStorage plumbing (B4.5b).
   ctx.builderState = {};
-  // Per-browser UI layout preference (Settings → Doplňky → Character Sheets):
-  // 'classic' keeps every stat tile in the vitals band; 'compact' docks the
-  // derived stats onto their ability cards (Init→DEX, passive→Perception row,
-  // Save DC / Spell Attack→the casting ability). localStorage so each player
-  // picks their own; absent key = classic.
-  ctx.uiLayout = () => { try { return localStorage.getItem('dse-ui:layout') === 'compact' ? 'compact' : 'classic'; } catch (_) { return 'classic'; } };
+  // UI layout preference (the sheet's own ⚙ Settings tab), PER SHEET + per
+  // browser: 'classic' keeps every stat tile in the vitals band; 'compact'
+  // docks the derived stats onto their ability cards (Init→DEX,
+  // passive→Perception row, Save DC / Spell Attack→the casting ability).
+  // Keyed by character id so every player picks their own favorite look for
+  // each character; the pre-per-sheet global key survives as a read fallback
+  // (a written per-sheet value always beats it); absent ⇒ classic.
+  ctx.uiLayout = (cid) => {
+    try {
+      const v = localStorage.getItem('dse-ui:layout:' + cid) || localStorage.getItem('dse-ui:layout');
+      return v === 'compact' ? 'compact' : 'classic';
+    } catch (_) { return 'classic'; }
+  };
   ctx.engine = makeEngine(ctx);
   ctx.viewModel = ctx.engine.viewModel;     // hot path — promote for panel destructuring
   ctx.ui = makeUI(ctx);
@@ -107,15 +116,17 @@ export default function register(host) {
     ...makeBackpackPanel(ctx),
     ...makeAddItemPanel(ctx),
     ...makeBuilderPanel(ctx),
+    ...makeSettingsPanel(ctx),
     ...makePrintPanel(ctx),
   };
 
   const { getRules, safeHydrate, decisionsOf, mutate, effectiveMaxHp } = ctx.engine;
-  const { vitalsBar, panelOverview, panelSheet, panelSpellbook, panelBuilder, restModal, spellSwapModal, spellbookMgrModal, buildPrintHtml, importModal, addItemModal } = ctx.panels;
+  const { vitalsBar, panelOverview, panelSheet, panelSpellbook, panelBuilder, panelSettings, restModal, spellSwapModal, spellbookMgrModal, buildPrintHtml, importModal, addItemModal } = ctx.panels;
 
   // ── Tab model ────────────────────────────────────────────────────
-  //  Overview (lore) + the mechanical tabs. Spellbook only when the character has
-  //  spells (UI-4); Builder only in engine mode and for editors (rightmost).
+  //  Overview (lore) + the mechanical tabs. Spellbook only when the character
+  //  has spells (UI-4); Builder only in engine mode and for editors; Settings
+  //  (per-sheet layout + print/export/import) for everyone, rightmost.
   const visibleTabs = (engine, hasSpells, editable) => {
     const tabs = [
       { id: 'overview', icon: '🪪', label: t('tab.overview'), hint: t('tab.overviewHint') },
@@ -125,6 +136,7 @@ export default function register(host) {
     // Backpack (inventory + currency) folded into the Character Sheet tab — no own tab.
     if (hasSpells) tabs.push({ id: 'spellbook', icon: '📖', label: t('tab.spellbook'), hint: t('tab.spellbookHint') });
     if (engine && editable) tabs.push({ id: 'builder', icon: '🛠️', label: t('tab.builder'), hint: t('tab.builderHint'), tool: true });
+    tabs.push({ id: 'settings', icon: '⚙️', label: t('tab.settings'), hint: t('tab.settingsHint'), tool: true });
     return tabs;
   };
   const tabKey = (id) => 'dse-tab:' + id;
@@ -182,6 +194,7 @@ export default function register(host) {
       else if (active === 'combat') panel = panelSheet(c, s, editable, comp, engine);
       else if (active === 'spellbook') panel = panelSpellbook(c, s, editable, comp, engine);
       else if (active === 'builder') panel = panelBuilder(c, s, editable, comp, warnings, engine);
+      else if (active === 'settings') panel = panelSettings(c, s, editable, engine);
       // Spellbook keeps the vital strip as a full-width band on top. Character Sheet
       // & Combat place it themselves (in their right column), so entry doesn't add it.
       const vitals = (active === 'spellbook') ? vitalsBar(c, s, comp, editable, engine) : '';
@@ -203,12 +216,8 @@ export default function register(host) {
       try { if (engine && editable && spellbookMgrModal) spellMgrMode = localStorage.getItem('dse-spellmgr:' + c.id) || null; } catch (_) {}
       const spellMgrOverlay = (spellMgrMode === 'copy' || spellMgrMode === 'other') ? spellbookMgrModal(c, s, comp, engine, spellMgrMode) : '';
 
-      // Sheet-wide toolbar (right-aligned): Print / Export always; Import is an
-      // editor-only overwrite (B4.6).
-      const toolbar = `<div style="display:flex;justify-content:flex-end;gap:var(--space-1);margin-bottom:var(--space-1)">
-        <button class="inline-create-btn"${host.h.dataAction(host.action('printSheet'), c.id)}>🖨 ${esc(t('action.print'))}</button>
-        <button class="inline-create-btn"${host.h.dataAction(host.action('exportSheet'), c.id)}>⬇ ${esc(t('action.export'))}</button>
-        ${editable ? `<button class="inline-create-btn"${host.h.dataAction(host.action('importOpen'), c.id)}>⬆ ${esc(t('action.import'))}</button>` : ''}</div>`;
+      // Print / Export / Import live on the ⚙ Settings tab (panel.settings.js)
+      // — the old toolbar row above the tab strip is gone (vertical space).
 
       // Import modal — floating overlay at the fragment root when its flag is set (editor only).
       let importOpen = false;
@@ -220,7 +229,7 @@ export default function register(host) {
       try { addItemOpen = !!(editable && addItemModal && localStorage.getItem('dse-additem:' + c.id) === 'open'); } catch (_) {}
       const addItemOverlay = addItemOpen ? addItemModal(c, s, engine) : '';
 
-      return `<div class="addon-dnd55e-sheets" style="display:flex;flex-direction:column">${ctx.ui.styleTag}${toolbar}${tabBar}
+      return `<div class="addon-dnd55e-sheets" style="display:flex;flex-direction:column">${ctx.ui.styleTag}${tabBar}
         <div role="tabpanel" id="${esc(pid)}" aria-labelledby="${esc(tabBtnId(c.id, active))}" tabindex="0">${vitals}${panel}</div>${restOverlay}${swapOverlay}${spellMgrOverlay}${importOverlay}${addItemOverlay}</div>`;
     },
   });
@@ -1000,48 +1009,14 @@ export default function register(host) {
     });
   });
 
-  // ── Settings tab (Settings → Doplňky → 🎲 Character Sheets) ───────
-  // UI options for the sheet (per-browser, each player picks their own) plus
-  // the rules status: the engine is built in; the CONTENT comes from installed
-  // book addons (Player's Handbook), so show whether one is connected.
-  // The layout switch drives ctx.uiLayout() — see panel.rail.js /
-  // panel.header.js for what 'compact' rearranges.
-  host.registerAction('uiLayoutSet', (mode) => {
-    try {
-      if (String(mode) === 'compact') localStorage.setItem('dse-ui:layout', 'compact');
-      else localStorage.removeItem('dse-ui:layout');
-    } catch (_) {}
+  // ── Sheet layout switch (the ⚙ Settings tab, panel.settings.js) — PER
+  //    SHEET + per browser. Always writes an explicit per-sheet value so it
+  //    beats the legacy global key (kept only as ctx.uiLayout's read fallback,
+  //    carrying a pre-per-sheet 'compact' choice over). The old host
+  //    Settings → Doplňky tab is gone — sheet options live ON the sheet. ──
+  host.registerAction('uiLayoutSet', (cid, mode) => {
+    try { localStorage.setItem('dse-ui:layout:' + cid, String(mode) === 'compact' ? 'compact' : 'classic'); } catch (_) {}
     host.ui.rerender();
-  });
-  host.registerSettingsTab({
-    id: 'info', label: t('settings.label'), icon: '🎲',
-    render: () => {
-      const engine = getRules();
-      const status = engine
-        ? t('rules.connected', { count: engine.listClasses().length })
-        : t('rules.disconnected');
-      const layout = ctx.uiLayout();
-      const opt = (mode, label, desc) => `
-        <label style="display:flex;align-items:flex-start;gap:var(--space-2);padding:var(--space-2);border:1px solid ${layout === mode ? 'rgba(var(--accent-gold-rgb),.45)' : 'var(--border-subtle)'};border-radius:var(--radius);cursor:pointer">
-          <input type="radio" name="dse-layout" value="${esc(mode)}" ${layout === mode ? 'checked' : ''} ${host.h.dataOn('change', host.action('uiLayoutSet'), mode)}>
-          <span><strong style="color:var(--text-parchment)">${esc(label)}</strong>
-            <span style="display:block;color:var(--text-muted);font-size:var(--text-sm)">${esc(desc)}</span></span>
-        </label>`;
-      return `
-      <div class="settings-editor-head"><h2>🎲 ${esc(t('help.title'))}</h2></div>
-      <div class="settings-panel">
-        <h3 style="margin:0 0 var(--space-1)">${esc(t('settings.layoutTitle'))}</h3>
-        <p class="settings-hint">${esc(t('settings.layoutHint'))}</p>
-        <div style="display:flex;flex-direction:column;gap:var(--space-2);max-width:34rem">
-          ${opt('classic', t('settings.layoutClassic'), t('settings.layoutClassicDesc'))}
-          ${opt('compact', t('settings.layoutCompact'), t('settings.layoutCompactDesc'))}
-        </div>
-      </div>
-      <div class="settings-panel">
-        <p class="settings-hint">${esc(t('help.body', { count: host.store.getCharacters().length }))}</p>
-        <p class="settings-hint" style="color:${engine ? 'var(--color-success)' : 'var(--text-muted)'}">${esc(status)}</p>
-      </div>`;
-    },
   });
 
   // ── Rules API for other addons ────────────────────────────────────

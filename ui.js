@@ -92,6 +92,11 @@ export function makeUI(ctx) {
     }
     .addon-dnd55e-sheets .dse-bp-lbl { font-size:var(--text-xs); text-transform:uppercase; letter-spacing:.05em; color:var(--text-muted); margin-bottom:var(--space-1) }
     .addon-dnd55e-sheets .dse-bp-cnt { opacity:.65 }
+    /* Currency: ONE inline line pinned under the whole split (label · coin
+       pairs). flex-wrap is the narrow-screen overflow fallback only. */
+    .addon-dnd55e-sheets .dse-bp-coins { display:flex; align-items:center; gap:var(--space-3); flex-wrap:wrap; border-top:1px solid var(--border-subtle); padding-top:var(--space-2) }
+    .addon-dnd55e-sheets .dse-coin { display:inline-flex; align-items:center; gap:var(--space-1) }
+    .addon-dnd55e-sheets .dse-coin-lbl { font-size:var(--text-xs); color:var(--accent-gold); font-weight:600 }
     /* Add-item wizard: a wide panel with a browse column + a batch-tray rail. */
     .addon-dnd55e-sheets .dse-aiw-panel { width:min(94vw,640px); max-width:none }
     .addon-dnd55e-sheets .dse-aiw { display:grid; grid-template-columns:1fr 200px; gap:var(--space-3) }
@@ -188,6 +193,15 @@ export function makeUI(ctx) {
 
   function sectionLabel(text) { return `<div style="${S.sectionLabel}">${esc(text)}</div>`; }
   function subLabel(text) { return `<div style="${S.subLabel}">${esc(text)}</div>`; }
+
+  // ── The backpack/satchel icon — stroke-drawn like the host stat glyphs
+  //    (the 🎒 emoji renders as a garish school backpack on most platforms).
+  //    Inherits currentColor, so it takes the surrounding text/gold tone; the
+  //    vertical-align keeps it seated in plain-text headings, flex ignores it. ──
+  function bagIcon(size) {
+    const px = Number(size) > 0 ? Number(size) : 18;
+    return `<svg viewBox="0 0 24 24" width="${px}" height="${px}" aria-hidden="true" style="flex:none;vertical-align:-0.15em;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round"><path d="M7 9.8C7 6.9 9.2 4.7 12 4.7s5 2.2 5 5.1V19a1.9 1.9 0 0 1-1.9 1.9H8.9A1.9 1.9 0 0 1 7 19Z"/><path d="M9.6 5V3.4h4.8V5"/><path d="M7 13.4h10"/><path d="M9.7 13.4v3h4.6v-3"/></svg>`;
+  }
 
   // ── Vital stat tile (HP / AC / Init / Speed / Proficiency / Passive). ──
   // Host component classes (.codex-tile — widgets.css): `valueHtml` is
@@ -481,7 +495,7 @@ export function makeUI(ctx) {
   }
 
   return {
-    S, styleTag, section, card, sectionLabel, subLabel, equipmentModel,
+    S, styleTag, section, card, sectionLabel, subLabel, bagIcon, equipmentModel,
     heroTile, abilityTile, profDot, profRow, rowLine, overrideControls,
     numField, statTip, entityRef, statBox, miniStat,
     selectBox, fieldRow, choiceBlock, spellChip, spellInfo, spellLegend, warningsBlock, attacksBlock,
