@@ -1,10 +1,10 @@
-# dnd55e-sheets
+# dnd-sheets
 
-A **fully hand-fillable D&D 5.5e (2024) character sheet** addon for
+A **fully hand-fillable D&D character sheet** addon for
 [ttrpg-codex](https://github.com/pjunak/ttrpg-codex) (the *O Barvách Draků* CodexHost
-framework). Addon id: `dnd55e-sheets`.
+framework). Addon id: `dnd-sheets`.
 
-The sheet stores its D&D data per character in `character.addonData['dnd55e-sheets']`
+The sheet stores its D&D data per character in `character.addonData['dnd-sheets']`
 — it does **not** own a collection, and it does **not** duplicate anything the host
 already owns (name, portrait, species, lore, relationships). It integrates by claiming
 the host's character `body` fragment (`registerFragmentOp` · replace), which makes the
@@ -48,9 +48,9 @@ anonymous viewers get a clean read-only sheet. Live-play controls (HP ±, tracke
 spell prep, proficiency toggles) follow the same gate.
 
 Everything can be entered by hand. The **rules engine is built in** (`rules/engine.js`, a
-pure host-free module merged from the retired `dnd55e-core-rules` addon) — but without
-book data it only does universal D&D arithmetic (ability modifiers `⌊(score−10)/2⌋`,
-proficiency totals). The addon has **no hard dependencies** and works entirely standalone.
+pure host-free module) — but without book data it only does universal D&D arithmetic
+(ability modifiers `⌊(score−10)/2⌋`, proficiency totals). The addon has **no hard
+dependencies** and works entirely standalone.
 
 ## Designed to grow
 
@@ -59,11 +59,13 @@ proficiency totals). The addon has **no hard dependencies** and works entirely s
   installed, the built-in engine auto-fills stats from class/species/background choices,
   free-text fields become dropdowns, and the Builder tab appears. If the book addon is
   absent, the sheet falls back to manual entry — installing/uninstalling it never breaks
-  a sheet. Future books (Monster Manual, DMG) ship as further standalone data addons the
-  DM can toggle per campaign.
+  a sheet. Further books ride the compendium's content groups (DM-toggleable per
+  campaign), and the engine is **edition-parameterized**: built-in 2024 constants,
+  overridable by a provider's `ruleset` record (`dnd5e-compendium` is the reserved
+  2014 provider).
 - **Rules API for other addons:** the addon `provide()`s the same rules api the panels
   consume (`hydrate` / `derive.*` / `list*` passthroughs), so a future combat or NPC
-  addon can declare a dependency on `dnd55e-sheets` and reuse the engine.
+  addon can declare a dependency on `dnd-sheets` and reuse the engine.
 - **Localization:** all UI strings flow through a vendored `i18n.js` that mirrors the host's
   localization design (English source of truth, per-locale catalogs layered on top, browser
   default, per-key English fallback). v1 ships English only; adding a language is dropping a
@@ -74,7 +76,7 @@ proficiency totals). The addon has **no hard dependencies** and works entirely s
 No build step (browser ES modules). From a sibling checkout of the host:
 
 ```sh
-node scripts/dev-install-addon.cjs ../dnd55e-character-sheets   # from the ttrpg-codex repo
+node scripts/dev-install-addon.cjs ../dnd-character-sheets   # from the ttrpg-codex repo
 ```
 
 Run the test suites (assume the host repo is a sibling directory) — the sheet

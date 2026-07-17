@@ -25,10 +25,10 @@ export const SKILLS = Object.entries(SKILL_ABILITY).map(([id, ability]) => ({ id
 export const signed = (n) => (n >= 0 ? '+' + n : String(n));
 export const titleize = (id) => String(id || '').replace(/[-_:]/g, ' ').replace(/\b\w/g, (ch) => ch.toUpperCase());
 
-// Href into the Player's Handbook compendium (the handbook addon owns the
-// `/compendium` route; addon routes are global hash routes, so a plain anchor
-// reaches it). Callers gate on a resolved record id — without the book the name
-// stays plain text (no dead link).
+// Href into the compendium addon (it owns the `/compendium` route; addon
+// routes are global hash routes, so a plain anchor reaches it). Callers gate
+// on a resolved record id — without the book the name stays plain text (no
+// dead link).
 export const compendiumHref = (kind, id) => `#/compendium/${kind}:${id}`;
 
 // First paragraph of a markdown body, flattened for a hover legend's `desc`

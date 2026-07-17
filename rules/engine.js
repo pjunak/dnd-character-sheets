@@ -1,5 +1,6 @@
 // ═══════════════════════════════════════════════════════════════
-//  rules/engine.js — the pure D&D 5.5e (2024) derivation engine.
+//  rules/engine.js — the pure D&D derivation engine (edition-parameterized:
+//  built-in 2024 defaults, a provider's ruleset record overrides per constant).
 //
 //  No host, no DOM: every function takes plain decisions + a book-data accessor
 //  `api` (the object dnd55e-compendium provides), so it's unit-testable

@@ -1,4 +1,4 @@
-// English UI strings for dnd55e-sheets — the source of truth.
+// English UI strings for dnd-sheets — the source of truth.
 //
 // Flat key → string catalog, mirroring the host's /i18n/en.json shape. English
 // is always present and is the universal fallback; other locales layer on top
@@ -211,7 +211,7 @@ export default {
   'additem.custom':      'Custom item',
   'additem.customAdd':   'Add custom',
   'additem.customPlaceholder': 'Custom item name…',
-  'additem.noBook':      'Install the Player’s Handbook addon to browse the compendium. You can still add a custom item below.',
+  'additem.noBook':      'Install a rulebook data addon (e.g. the D&D 5.5e Compendium) to browse items. You can still add a custom item below.',
   'additem.noResults':   'No items match “{q}”.',
   'additem.moreN':       '+{n} more — narrow with search',
   'additem.moreNarrow':  'More results — narrow with search',
@@ -435,5 +435,5 @@ export default {
 
   // ── Rules status (the ⚙ Settings tab) ────────────────────────────
   'rules.connected':    'Rulebook data connected — {count} classes available. The Builder and auto-computed stats are active.',
-  'rules.disconnected': 'No rulebook addon installed — the sheet is fully hand-fillable. Install the D&D 5.5e Player’s Handbook addon to unlock the Builder and auto-computed stats.',
+  'rules.disconnected': 'No rulebook addon installed — the sheet is fully hand-fillable. Install a rulebook data addon (e.g. the D&D 5.5e Compendium) to unlock the Builder and auto-computed stats.',
 };

@@ -1,8 +1,8 @@
 // ═══════════════════════════════════════════════════════════════
-//  dnd55e-sheets — a fully hand-fillable D&D 5.5e (2024) character sheet.
+//  dnd-sheets — a fully hand-fillable D&D character sheet.
 //
 //  Rides on the host's CORE `characters` entity (the sheet is NOT an addon
-//  collection): all D&D data lives in `character.addonData['dnd55e-sheets']`,
+//  collection): all D&D data lives in `character.addonData['dnd-sheets']`,
 //  written via host.store.patchAddonData. The host owns identity/lore (name,
 //  portrait, species, description, relationships…); this addon reads those and
 //  adds ONLY the D&D mechanics — it never duplicates them.
@@ -74,7 +74,7 @@ import { makePrintPanel } from './panel.print.js';
 
 export default function register(host) {
   const { esc } = host.h;
-  const NS = host.id; // 'dnd55e-sheets'
+  const NS = host.id; // 'dnd-sheets'
   const { uid, sheetOf } = makeHelpers(host);
 
   // ── Shared context handed to every module. ──
@@ -229,7 +229,7 @@ export default function register(host) {
       try { addItemOpen = !!(editable && addItemModal && localStorage.getItem('dse-additem:' + c.id) === 'open'); } catch (_) {}
       const addItemOverlay = addItemOpen ? addItemModal(c, s, engine) : '';
 
-      return `<div class="addon-dnd55e-sheets" style="display:flex;flex-direction:column">${ctx.ui.styleTag}${tabBar}
+      return `<div class="addon-dnd-sheets" style="display:flex;flex-direction:column">${ctx.ui.styleTag}${tabBar}
         <div role="tabpanel" id="${esc(pid)}" aria-labelledby="${esc(tabBtnId(c.id, active))}" tabindex="0">${vitals}${panel}</div>${restOverlay}${swapOverlay}${spellMgrOverlay}${importOverlay}${addItemOverlay}</div>`;
     },
   });
@@ -1022,7 +1022,7 @@ export default function register(host) {
   // ── Rules API for other addons ────────────────────────────────────
   // The same api the panels consume (rules/api.js over live book data). A
   // future addon (combat tools, NPC generators) declares this addon as a
-  // dependency and host.use('dnd55e-sheets') to reach hydrate/derive/list*.
+  // dependency and host.use('dnd-sheets') to reach hydrate/derive/list*.
   // Provided unconditionally: without a book addon the passthroughs return
   // empty lists and hydrate degrades to universal math + warnings.
   host.provide(ctx.engine.rulesApi);

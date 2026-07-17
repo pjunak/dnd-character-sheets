@@ -11,7 +11,7 @@ import { makeFake } from './fake-phb.mjs';
 import { makeEngine } from '../model.js';
 
 const META = {
-  id: 'dnd55e-sheets',
+  id: 'dnd-sheets',
   permissions: ['ui:override', 'ui:action', 'ui:settings-tab', 'data:read:characters', 'data:write:characters.addonData'],
   optionalDependencies: { 'dnd55e-compendium': { range: '>=0.1.0' } },
 };
@@ -711,7 +711,7 @@ test('ruleset: DEFAULT_RULESET matches the compendium dnd-2024 record (drift gua
 
 test('ruleset: provided rules api surface is the documented contract (shape lock)', () => {
   // rules/README.md documents this surface for other addons (a future combat
-  // tracker consumes it via host.use('dnd55e-sheets')). Removing/renaming a
+  // tracker consumes it via host.use('dnd-sheets')). Removing/renaming a
   // method is a BREAKING change: bump apiVersion and update the doc.
   const { rec } = withFake();
   const api = rec.provided;

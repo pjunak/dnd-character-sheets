@@ -1,4 +1,4 @@
-# ROADMAP — dnd55e-character-sheets (engine + character sheet)
+# ROADMAP — dnd-character-sheets (engine + character sheet)
 
 **Remaining work only** — one self-contained point per possible future implementation.
 Current state, architecture and workflow: [`AGENTS.md`](AGENTS.md) · shipped history: git log ·
@@ -53,7 +53,7 @@ edge-case ledger: [`docs/RULES_EDGE_CASES.md`](docs/RULES_EDGE_CASES.md).
    `abilityIncreases` (+ subraces), the spells-known / prepared-formula casting model, half-feat
    ASIs. Each lands with a rules.mjs case proving 2024 fixtures are byte-identical.
 10. **Combat addon consumption (stage 6).** A future combat tracker consumes this addon's provided
-   rules api (`host.use('dnd55e-sheets')` — surface documented in `rules/README.md`, shape-locked
+   rules api (`host.use('dnd-sheets')` — surface documented in `rules/README.md`, shape-locked
    by tests). Extract a dedicated rules addon only if that proves painful in practice; a host
    `discover()` capability registry only if a third provider family ever appears.
 

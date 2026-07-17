@@ -1,9 +1,7 @@
 # rules/ — the built-in D&D rules engine
 
-The generic **D&D rules engine**, a module of the character-sheets addon.
-It began life as the standalone `dnd55e-core-rules` addon and was **merged into this
-repo** (full git history preserved) once it was clear the sheet was its only consumer —
-the engine now always ships with the sheet, and what is optional is the *content*.
+The generic **D&D rules engine**, a module of the character-sheets addon — it
+always ships with the sheet, and what is optional is the *content*.
 
 It is a **data-driven handler**: it encodes the *system* rules (how proficiency bonus,
 ability modifiers, AC, HP, saves, spell slots are computed, and how declarative
@@ -50,7 +48,7 @@ installing/uninstalling the book addon never breaks a sheet.
 ## The provided api is a CONTRACT
 
 `entry.js` `provide()`s this api for other addons — a future combat tracker consumes
-it via `host.use('dnd55e-sheets')` with one manifest `optionalDependencies` line. The
+it via `host.use('dnd-sheets')` with one manifest `optionalDependencies` line. The
 surface is **shape-locked** by a test in `../tests/rules.mjs` ("shape lock"): the
 exact method list is
 

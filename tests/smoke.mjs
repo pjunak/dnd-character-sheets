@@ -1,4 +1,4 @@
-// Client self-test for dnd55e-sheets, run against the host's published test
+// Client self-test for dnd-sheets, run against the host's published test
 // harness (the same one the host uses for its pre-activation smoke). Declared
 // in addon.json as `tests.client`. Run standalone:
 //   node --test tests/smoke.mjs
@@ -46,7 +46,7 @@ function renderBody(rec, char, lore) {
 }
 
 const META = {
-  id: 'dnd55e-sheets',
+  id: 'dnd-sheets',
   permissions: ['ui:override', 'ui:action', 'data:read:characters', 'data:write:characters.addonData'],
   optionalDependencies: { 'dnd55e-compendium': { range: '>=0.1.0' } },
 };
@@ -56,7 +56,7 @@ const PHB = () => ({ deps: { 'dnd55e-compendium': makeFake() } });
 
 const FIGHTER = {
   id: 'c1', name: 'Thorin',
-  addonData: { 'dnd55e-sheets': {
+  addonData: { 'dnd-sheets': {
     className: 'Fighter', level: 5, profBonus: 3,
     abilities: { STR: 16, DEX: 12, CON: 15, INT: 10, WIS: 13, CHA: 8 },
     maxHp: 44, hp: 40, ac: 18, saveProf: { STR: true, CON: true },
@@ -109,7 +109,7 @@ test('sheets: engine-computed vitals + Builder tab (editor, book data present)',
   try {
     const { rec } = dryRunRegister(register, META, PHB());
     // Real engine over fake book data: L1 Wizard (d6) with CON 14 → max HP 6+2=8.
-    const out = renderBody(rec, { id: 'c9', name: 'Mage', addonData: { 'dnd55e-sheets': { className: 'Wizard', hp: 4, abilities: { CON: 14 } } } });
+    const out = renderBody(rec, { id: 'c9', name: 'Mage', addonData: { 'dnd-sheets': { className: 'Wizard', hp: 4, abilities: { CON: 14 } } } });
     assert.match(out, /Builder/, 'Builder tab appears (book data + editor)');
     assert.match(out, / \/ 8</, 'vitals bar shows the engine-computed max HP (8)');
   } finally { clearLocalStorage(); }
@@ -119,7 +119,7 @@ test('sheets: HP is a directly-editable stepper — no heal/damage-by-amount fie
   mockLocalStorage('stats');
   try {
     const { rec } = dryRunRegister(register, META, PHB());
-    const out = renderBody(rec, { id: 'chp', name: 'Mage', addonData: { 'dnd55e-sheets': { className: 'Wizard', hp: 4, abilities: { CON: 14 } } } });
+    const out = renderBody(rec, { id: 'chp', name: 'Mage', addonData: { 'dnd-sheets': { className: 'Wizard', hp: 4, abilities: { CON: 14 } } } });
     assert.match(out, /codex-stepper/, 'current HP uses the host .codex-stepper');
     assert.match(out, /"hp","\$value"/, 'the HP stepper writes the hp field (setField)');
     assert.doesNotMatch(out, /dse-hp-amt/, 'the manual heal/damage amount field is gone');
@@ -131,7 +131,7 @@ test('sheets: vital tiles carry text labels + the compact strip adds spell DC/at
   mockLocalStorage('stats');
   try {
     const { rec } = dryRunRegister(register, META, PHB());
-    const out = renderBody(rec, { id: 'cvi', name: 'Mage', addonData: { 'dnd55e-sheets': { className: 'Wizard', abilities: { DEX: 14 } } } });
+    const out = renderBody(rec, { id: 'cvi', name: 'Mage', addonData: { 'dnd-sheets': { className: 'Wizard', abilities: { DEX: 14 } } } });
     // Stat names are spelled-out text labels again (the icon-glyph vitals were
     // reverted — icons read too cryptic for the width they saved).
     assert.match(out, /class="codex-tile-label">Hit Points</, 'the HP tile is plainly text-labelled');
@@ -155,7 +155,7 @@ test('sheets: 3-state SVG proficiency dots + AC shield-equipped indicator (UI po
   try {
     const { rec } = dryRunRegister(register, META, PHB());
     // Sage background grants Arcana + History proficiency → a proficient dot to assert.
-    const out = renderBody(rec, { id: 'cui', name: 'Mage', addonData: { 'dnd55e-sheets': { className: 'Wizard', background: 'Sage', abilities: { DEX: 14 } } } });
+    const out = renderBody(rec, { id: 'cui', name: 'Mage', addonData: { 'dnd-sheets': { className: 'Wizard', background: 'Sage', abilities: { DEX: 14 } } } });
     // Dots are inline SVG: none = small outline circle, proficient = small filled circle
     // (mastery = a larger ring + filled centre, same helper).
     assert.match(out, /<circle cx="8" cy="8" r="3\.6" fill="none"/, 'unproficient skills → small outline dot');
@@ -173,7 +173,7 @@ test('sheets: anonymous viewer gets a read-only sheet (no Builder, no inputs)', 
   mockLocalStorage('stats');
   try {
     const { rec } = dryRunRegister(register, META, { ...PHB(), isAnonymous: true });
-    const out = renderBody(rec, { id: 'ca', name: 'Mage', addonData: { 'dnd55e-sheets': { className: 'Wizard' } } });
+    const out = renderBody(rec, { id: 'ca', name: 'Mage', addonData: { 'dnd-sheets': { className: 'Wizard' } } });
     assert.doesNotMatch(out, /Builder/, 'no Builder tab for an anonymous viewer');
     assert.doesNotMatch(out, /<input/, 'no edit inputs for an anonymous viewer');
     assert.doesNotMatch(out, /toggleSkill/, 'no prof toggles for an anonymous viewer');
@@ -184,7 +184,7 @@ test('sheets: Builder tab renders the guided form when book data is present', ()
   mockLocalStorage('builder');
   try {
     const { rec } = dryRunRegister(register, META, PHB());
-    const out = renderBody(rec, { id: 'cb', name: 'Hero', addonData: { 'dnd55e-sheets': { className: 'Wizard', abilities: { INT: 15 } } } });
+    const out = renderBody(rec, { id: 'cb', name: 'Hero', addonData: { 'dnd-sheets': { className: 'Wizard', abilities: { INT: 15 } } } });
     assert.match(out, /Ability Scores|Class & Levels|Progression/, 'shows Builder sections');
     assert.match(out, /Wizard/, 'class dropdown / resolved class');
     assert.match(out, /<select/, 'renders dropdowns');
@@ -195,7 +195,7 @@ test('sheets: the Builder is tabbed — Character + one tab per class (B4.5b)', 
   mockLocalStorage('builder');
   try {
     const { rec } = dryRunRegister(register, META, PHB());
-    const out = renderBody(rec, { id: 'cbt', name: 'Multi', addonData: { 'dnd55e-sheets': {
+    const out = renderBody(rec, { id: 'cbt', name: 'Multi', addonData: { 'dnd-sheets': {
       classes: [{ classId: 'fighter', level: 2, subclass: '' }, { classId: 'wizard', level: 3, subclass: '' }], abilities: { STR: 14, INT: 14 } } } });
     assert.match(out, /builderTab/, 'the sub-tab strip is present');
     assert.match(out, /Fighter 2/, 'a tab per class, with its level');
@@ -211,7 +211,7 @@ test('sheets: a class tab spine shows SUBCLASS features (A4/B4.5b)', () => {
     rec.actions.find((a) => a.name === 'builderTab').fn('cbs', 'fighter');   // open the Fighter class tab
     // Eldritch Knight grants "War Bond" at level 3; the spine filters subclass features
     // by cl.subclass — not cl.classId — so it appears in the Fighter tab's spine.
-    const out = renderBody(rec, { id: 'cbs', name: 'EK', addonData: { 'dnd55e-sheets': {
+    const out = renderBody(rec, { id: 'cbs', name: 'EK', addonData: { 'dnd-sheets': {
       classes: [{ classId: 'fighter', level: 3, subclass: 'eldritch-knight' }], abilities: { STR: 15 } } } });
     assert.match(out, /War Bond/, 'subclass feature appears in the class spine');
   } finally { clearLocalStorage(); }
@@ -224,7 +224,7 @@ test('sheets: the class spine links resolved feature names to the compendium (B1
     rec.actions.find((a) => a.name === 'builderTab').fn('cbl', 'sorcerer');   // open the Sorcerer class tab
     // Sorcerer L2's "Metamagic" resolves to the sorcerer-metamagic feature record → its
     // name links to the compendium detail page (in the class spine now, not a flat log).
-    const out = renderBody(rec, { id: 'cbl', name: 'Sorc', addonData: { 'dnd55e-sheets': {
+    const out = renderBody(rec, { id: 'cbl', name: 'Sorc', addonData: { 'dnd-sheets': {
       classes: [{ classId: 'sorcerer', level: 2, subclass: '' }], abilities: { CHA: 15 } } } });
     assert.match(out, /href="#\/compendium\/feature:sorcerer-metamagic"/, 'resolved feature name links to its compendium page');
   } finally { clearLocalStorage(); }
@@ -246,8 +246,8 @@ test('sheets: featureChoices resolve into engine inputs (skill prof + expertise)
   }));
   const { host } = createMockHost(META, {});
   const { sheetOf } = makeHelpers(host);
-  const E = makeEngine({ host, NS: 'dnd55e-sheets', ABILITIES, SKILLS, num, abilityMod, sheetOf });
-  const s = sheetOf({ addonData: { 'dnd55e-sheets': {
+  const E = makeEngine({ host, NS: 'dnd-sheets', ABILITIES, SKILLS, num, abilityMod, sheetOf });
+  const s = sheetOf({ addonData: { 'dnd-sheets': {
     className: 'Wizard',
     featureChoices: { 'skills:wizard#0': 'arcana', 'skills:wizard#1': 'stealth', 'wiz-exp': 'stealth' },
   } } });
@@ -264,8 +264,8 @@ test('sheets: duplicate multi-pick values dedupe in resolved inputs (FE-7)', () 
     getItemByName: (kind, name) => ((kind === 'class' && /wizard/i.test(String(name))) ? WIZ : null) }));
   const { host } = createMockHost(META, {});
   const { sheetOf } = makeHelpers(host);
-  const E = makeEngine({ host, NS: 'dnd55e-sheets', ABILITIES, SKILLS, num, abilityMod, sheetOf });
-  const s = sheetOf({ addonData: { 'dnd55e-sheets': { className: 'Wizard',
+  const E = makeEngine({ host, NS: 'dnd-sheets', ABILITIES, SKILLS, num, abilityMod, sheetOf });
+  const s = sheetOf({ addonData: { 'dnd-sheets': { className: 'Wizard',
     featureChoices: { 'skills:wizard#0': 'arcana', 'skills:wizard#1': 'arcana' } } } });   // same skill in both boxes (legacy dup)
   const cd = E.decisionsOf(s, api);
   assert.deepEqual(cd.skillProficiencies, ['arcana'], 'a value picked in two boxes collapses to one proficiency');
@@ -289,7 +289,7 @@ test('sheets: duplicate L1 skills descriptor dedupes to one picker — no "conte
     getItemByName: (kind, name) => ((kind === 'class' && /cleric/i.test(String(name))) ? CLERIC : null) }));
   const { host } = createMockHost(META, {});
   const { sheetOf } = makeHelpers(host);
-  const E = makeEngine({ host, NS: 'dnd55e-sheets', ABILITIES, SKILLS, num, abilityMod, sheetOf });
+  const E = makeEngine({ host, NS: 'dnd-sheets', ABILITIES, SKILLS, num, abilityMod, sheetOf });
   const choices = E.collectChoices([{ classId: 'cleric', level: 1, subclass: '' }], api);
   const skills = choices.filter((c) => c.id === 'skills:cleric');
   assert.equal(skills.length, 1, 'exactly one descriptor for skills:cleric (the bare dup is dropped)');
@@ -314,7 +314,7 @@ test('sheets: a half-feat chosen at an ASI level applies its ability bump (AB-2)
   // INT/WIS/CHA) both live in the shared fake book data.
   const { host, rec } = createMockHost(META, PHB());
   let stored = {};
-  host.store.patchAddonData = (_c, itemId, fn) => { stored = fn(stored) || stored; return { id: itemId, addonData: { 'dnd55e-sheets': stored } }; };
+  host.store.patchAddonData = (_c, itemId, fn) => { stored = fn(stored) || stored; return { id: itemId, addonData: { 'dnd-sheets': stored } }; };
   register(host);
   const act = (name, ...args) => rec.actions.find((a) => a.name === name).fn(...args);
   const grantFor = (base) => (stored.abilityGrants || []).find((g) => g.id === base + ':featability');
@@ -334,7 +334,7 @@ test('sheets: a half-feat chosen at an ASI level applies its ability bump (AB-2)
 test('sheets: ASI number picker distributes a 2-point budget (+2 or +1/+1), capped (B5)', () => {
   const { host, rec } = createMockHost(META, PHB());
   let stored = {};
-  host.store.patchAddonData = (_c, itemId, fn) => { stored = fn(stored) || stored; return { id: itemId, addonData: { 'dnd55e-sheets': stored } }; };
+  host.store.patchAddonData = (_c, itemId, fn) => { stored = fn(stored) || stored; return { id: itemId, addonData: { 'dnd-sheets': stored } }; };
   register(host);
   const act = (name, ...args) => rec.actions.find((a) => a.name === name).fn(...args);
   const asi = () => (stored.abilityGrants || []).find((g) => g.id === 'asi:wizard:4:ability');
@@ -358,7 +358,7 @@ test('sheets: ASI number picker distributes a 2-point budget (+2 or +1/+1), capp
 test('sheets: background ASI number picker distributes 3 points, +2 max per ability (B5)', () => {
   const { host, rec } = createMockHost(META, PHB());
   let stored = {};
-  host.store.patchAddonData = (_c, itemId, fn) => { stored = fn(stored) || stored; return { id: itemId, addonData: { 'dnd55e-sheets': stored } }; };
+  host.store.patchAddonData = (_c, itemId, fn) => { stored = fn(stored) || stored; return { id: itemId, addonData: { 'dnd-sheets': stored } }; };
   register(host);
   const act = (name, ...args) => rec.actions.find((a) => a.name === name).fn(...args);
   const bg = () => (stored.abilityGrants || []).find((g) => g.id === 'bgasi');
@@ -378,7 +378,7 @@ test('sheets: ASI level renders ability number-pickers, not a single-ability sel
     const act = (n, ...a) => rec.actions.find((x) => x.name === n).fn(...a);
     act('builderTab', 'casi', 'fighter');
     act('builderToggleLevel', 'casi', 'fighter:4');   // expand the L4 ASI row
-    const out = renderBody(rec, { id: 'casi', name: 'Ftr', addonData: { 'dnd55e-sheets': {
+    const out = renderBody(rec, { id: 'casi', name: 'Ftr', addonData: { 'dnd-sheets': {
       classes: [{ classId: 'fighter', level: 4, subclass: '' }],
       featureChoices: { 'asi:fighter:4': 'asi' } } } });   // ASI mode (not Feat)
     assert.match(out, /codex-stepper/, 'the ASI ability pick uses the host .codex-stepper component');
@@ -392,7 +392,7 @@ test('sheets: the L19 slot offers Epic Boon feats (grouped); earlier ASI levels 
   try {
     const { rec } = dryRunRegister(register, META, PHB());
     const act = (n, ...a) => rec.actions.find((x) => x.name === n).fn(...a);
-    const charOf = (id, extra) => ({ id, name: 'Ftr', addonData: { 'dnd55e-sheets': {
+    const charOf = (id, extra) => ({ id, name: 'Ftr', addonData: { 'dnd-sheets': {
       classes: [{ classId: 'fighter', level: 19, subclass: '' }], abilities: {},
       featureChoices: { 'asi:fighter:19': 'feat', 'asi:fighter:4': 'feat', ...(extra || {}) } } } });
     act('builderTab', 'ceb', 'fighter');
@@ -424,7 +424,7 @@ test('sheets: a picked Epic Boon applies its +1 through the grant machinery with
     abilities: { INT: 20 },
     featureChoices: { 'asi:fighter:19': 'feat', 'asi:fighter:19:feat': 'boon-of-fate' },
   };
-  host.store.patchAddonData = (_c, itemId, fn) => { stored = fn(stored) || stored; return { id: itemId, addonData: { 'dnd55e-sheets': stored } }; };
+  host.store.patchAddonData = (_c, itemId, fn) => { stored = fn(stored) || stored; return { id: itemId, addonData: { 'dnd-sheets': stored } }; };
   register(host);
   const act = (name, ...args) => rec.actions.find((a) => a.name === name).fn(...args);
   act('builderAsiSet', 'c1', 'asi:fighter:19:featability', 'INT', 1, 1, 1);
@@ -448,7 +448,7 @@ test('sheets: a multi-pick pool excludes an option already taken in another box 
     act('builderToggleLevel', 'cfe7', 'sorcerer:2');  // expand L2 (Metamagic) to reveal the pickers
     // Sorcerer L2 → 2 Metamagic boxes. Twinned is taken in box 0, so box 1 must not
     // offer it again (no picking it twice), while an untaken option stays in both.
-    const out = renderBody(rec, { id: 'cfe7', name: 'Sorc', addonData: { 'dnd55e-sheets': {
+    const out = renderBody(rec, { id: 'cfe7', name: 'Sorc', addonData: { 'dnd-sheets': {
       classes: [{ classId: 'sorcerer', level: 2, subclass: '' }], abilities: { CHA: 15 },
       featureChoices: { 'metamagic#0': 'metamagic-twinned-spell' } } } });
     assert.equal((out.match(/value="metamagic-twinned-spell"/g) || []).length, 1, 'the taken option appears once (only its own box)');
@@ -462,7 +462,7 @@ test('sheets: builder spine rows are whole-row click targets, inner links stay l
     const { rec } = dryRunRegister(register, META, PHB());
     const act = (n, ...a) => rec.actions.find((x) => x.name === n).fn(...a);
     act('builderTab', 'cct', 'sorcerer');   // Sorcerer L2 has Metamagic → an expandable spine row
-    const out = renderBody(rec, { id: 'cct', name: 'Sorc', addonData: { 'dnd55e-sheets': {
+    const out = renderBody(rec, { id: 'cct', name: 'Sorc', addonData: { 'dnd-sheets': {
       classes: [{ classId: 'sorcerer', level: 2, subclass: '' }], abilities: { CHA: 15 } } } });
     // The toggle is a full-row overlay <button> (not just the "L2" label), keyboard-
     // focusable, aria-expanded — so a click anywhere on the row expands it.
@@ -483,7 +483,7 @@ test('sheets: builder spine rows are whole-row click targets, inner links stay l
 test('sheets: builder sub-tabs support roving-tabindex arrow-key nav (a11y)', () => {
   mockLocalStorage('builder');
   try {
-    const char = { id: 'ctk', name: 'Mage', addonData: { 'dnd55e-sheets': { classes: [{ classId: 'wizard', level: 1, subclass: '' }], abilities: { INT: 15 } } } };
+    const char = { id: 'ctk', name: 'Mage', addonData: { 'dnd-sheets': { classes: [{ classId: 'wizard', level: 1, subclass: '' }], abilities: { INT: 15 } } } };
     const { rec } = dryRunRegister(register, META, { ...PHB(), fixtures: { characters: [char] } });
     const act = (n, ...a) => rec.actions.find((x) => x.name === n).fn(...a);
     const out = renderBody(rec, char);
@@ -504,7 +504,7 @@ test('sheets: Spellbook separates granted from picks + shows the available pool'
     const { rec } = dryRunRegister(register, META, PHB());
     // Life Domain (subclass grant, level 3) → Bless always-prepared via the
     // real engine (mirrors tests/rules.mjs "grants always-prepared spells").
-    const out = renderBody(rec, { id: 'csp', name: 'Mage', addonData: { 'dnd55e-sheets': {
+    const out = renderBody(rec, { id: 'csp', name: 'Mage', addonData: { 'dnd-sheets': {
       classes: [{ classId: 'wizard', level: 5, subclass: 'life-domain' }],
       cantrips: { wizard: ['fire-bolt'] },
       preparedSpells: { wizard: ['fireball'] },
@@ -533,7 +533,7 @@ test('sheets: a prepared ritual spell is marked when the class can ritual-cast (
   try {
     const { rec } = dryRunRegister(register, META, PHB());
     // Wizard can ritual-cast; Detect Magic (prepared) has the Ritual tag → ⟳ marker.
-    const out = renderBody(rec, { id: 'crit', name: 'Mage', addonData: { 'dnd55e-sheets': {
+    const out = renderBody(rec, { id: 'crit', name: 'Mage', addonData: { 'dnd-sheets': {
       classes: [{ classId: 'wizard', level: 5, subclass: '' }],
       preparedSpells: { wizard: ['detect-magic', 'fireball'] } } } });
     assert.match(out, /Detect Magic/, 'the ritual spell is shown among prepared');
@@ -546,7 +546,7 @@ test('sheets: a Wizard prepares from the learned spellbook, not the full class l
   try {
     const { rec } = dryRunRegister(register, META, PHB());
     // Wizard L5: only Mage Armor learned into the book; nothing prepared yet.
-    const out = renderBody(rec, { id: 'cbk', name: 'Mage', addonData: { 'dnd55e-sheets': {
+    const out = renderBody(rec, { id: 'cbk', name: 'Mage', addonData: { 'dnd-sheets': {
       classes: [{ classId: 'wizard', level: 5, subclass: '' }], abilities: { INT: 16 },
       spellbook: { wizard: ['mage-armor'] } } } });
     assert.match(out, /Spellbook — 1 in book/, 'the spellbook group shows the learned-count');   // SP-5
@@ -559,7 +559,7 @@ test('sheets: a Wizard prepares from the learned spellbook, not the full class l
     assert.match(prepPool, /Mage Armor/, 'a learned spell is preparable');
     assert.doesNotMatch(prepPool, /Fireball/, 'a spell not in the book cannot be prepared');
     // A list-caster (Paladin) never gets a spellbook group.
-    const pal = renderBody(rec, { id: 'cpal', name: 'Pal', addonData: { 'dnd55e-sheets': {
+    const pal = renderBody(rec, { id: 'cpal', name: 'Pal', addonData: { 'dnd-sheets': {
       classes: [{ classId: 'paladin', level: 5, subclass: '' }], abilities: { CHA: 16 } } } });
     assert.doesNotMatch(pal, /in book/, 'a list-caster prepares from the class list — no spellbook');
   } finally { clearLocalStorage(); }
@@ -567,14 +567,14 @@ test('sheets: a Wizard prepares from the learned spellbook, not the full class l
 
 test('sheets: Spellbook management — two buttons, copy mode + other-source mode (B4.2c)', () => {
   const modeLS = (mode) => ({ getItem: (k) => { k = String(k); if (k.startsWith('dse-tab:')) return 'spellbook'; if (k.startsWith('dse-spellmgr:')) return mode; return null; }, setItem() {}, removeItem() {} });
-  const char = { id: 'cmgr', name: 'Mage', addonData: { 'dnd55e-sheets': {
+  const char = { id: 'cmgr', name: 'Mage', addonData: { 'dnd-sheets': {
     classes: [{ classId: 'wizard', level: 5, subclass: '' }], abilities: { INT: 16 },
     currency: { gp: 500 },
     spellbook: { wizard: ['mage-armor'] },
     inventory: [{ id: 'sc1', name: 'Spell Scroll of Fireball', qty: 1, location: 'pack' }],
     spells: [{ id: 'x1', name: 'My Homebrew Bolt', level: 2, origin: 'other', sourceNote: 'from the DM', castWithSlots: true }],
   } } };
-  const sorc = { id: 'cmgr2', name: 'Sorc', addonData: { 'dnd55e-sheets': {
+  const sorc = { id: 'cmgr2', name: 'Sorc', addonData: { 'dnd-sheets': {
     classes: [{ classId: 'sorcerer', level: 2, subclass: '' }], abilities: { CHA: 15 } } } };
 
   // Button gating (no modal open): Wizard shows BOTH add buttons; a list-caster only "another source".
@@ -624,7 +624,7 @@ test('sheets: scroll-copy offers only scrolls of the picked spell + never consum
       { id: 'sc2', name: 'Scroll of Healing Word', qty: 1, location: 'pack' },
     ],
   });
-  const char = { id: 'cscr', name: 'Mage', addonData: { 'dnd55e-sheets': blob() } };
+  const char = { id: 'cscr', name: 'Mage', addonData: { 'dnd-sheets': blob() } };
   // Scope assertions to the copy modal's scroll-consume SELECT — the band's
   // generic equip picker legitimately lists every unplaced item (scrolls incl.),
   // so whole-page matching would false-positive on it.
@@ -649,7 +649,7 @@ test('sheets: scroll-copy offers only scrolls of the picked spell + never consum
   // Apply-time guard: a mismatched scroll id is NOT consumed (the copy still lands).
   const { host, rec } = createMockHost(META, PHB());
   let stored = blob();
-  host.store.patchAddonData = (_c, itemId, fn) => { stored = fn(stored) || stored; return { id: itemId, addonData: { 'dnd55e-sheets': stored } }; };
+  host.store.patchAddonData = (_c, itemId, fn) => { stored = fn(stored) || stored; return { id: itemId, addonData: { 'dnd-sheets': stored } }; };
   register(host);
   const act = (name, ...args) => rec.actions.find((a) => a.name === name).fn(...args);
   const withForm = (spell, scroll, fn) => {
@@ -668,7 +668,7 @@ test('sheets: a Warlock shows Pact Magic in the Spellbook summary (B4.3)', () =>
   mockLocalStorage('spellbook');
   try {
     const { rec } = dryRunRegister(register, META, PHB());
-    const out = renderBody(rec, { id: 'cwl', name: 'Lock', addonData: { 'dnd55e-sheets': {
+    const out = renderBody(rec, { id: 'cwl', name: 'Lock', addonData: { 'dnd-sheets': {
       classes: [{ classId: 'warlock', level: 5, subclass: '' }], abilities: { CHA: 16 } } } });
     assert.match(out, /Pact/, 'the Spellbook summary shows a Pact indicator');
   } finally { clearLocalStorage(); }
@@ -678,7 +678,7 @@ test('sheets: pact slots are a short-rest tracker resource (B4.3)', () => {
   mockLocalStorage('combat');
   try {
     const { rec } = dryRunRegister(register, META, PHB());
-    const out = renderBody(rec, { id: 'cwlt', name: 'Lock', addonData: { 'dnd55e-sheets': {
+    const out = renderBody(rec, { id: 'cwlt', name: 'Lock', addonData: { 'dnd-sheets': {
       classes: [{ classId: 'warlock', level: 5, subclass: '' }], abilities: { CHA: 16 } } } });
     assert.match(out, /Pact Slots/, 'pact slots listed as a tracker');
     assert.match(out, /short rest/, 'with a short-rest recharge label');
@@ -689,7 +689,7 @@ test('sheets: Combat tab shows a read-only Features summary linking to the compe
   mockLocalStorage('combat');
   try {
     const { rec } = dryRunRegister(register, META, PHB());
-    const out = renderBody(rec, { id: 'cfs', name: 'Sorc', addonData: { 'dnd55e-sheets': {
+    const out = renderBody(rec, { id: 'cfs', name: 'Sorc', addonData: { 'dnd-sheets': {
       classes: [{ classId: 'sorcerer', level: 2, subclass: '' }], abilities: { CHA: 15 } } } });
     assert.match(out, /Features/, 'a Features summary section is present');
     assert.match(out, /href="#\/compendium\/feature:sorcerer-metamagic"/, 'a feature links to its compendium page');
@@ -703,7 +703,7 @@ test('sheets: a chosen ASI feat shows a ↗ compendium link in the Builder (B4.4
     const act = (n, ...a) => rec.actions.find((x) => x.name === n).fn(...a);
     act('builderTab', 'cfl', 'fighter');           // open the Fighter class tab
     act('builderToggleLevel', 'cfl', 'fighter:4');  // expand L4 (ASI) to reveal the feat picker
-    const out = renderBody(rec, { id: 'cfl', name: 'Ftr', addonData: { 'dnd55e-sheets': {
+    const out = renderBody(rec, { id: 'cfl', name: 'Ftr', addonData: { 'dnd-sheets': {
       classes: [{ classId: 'fighter', level: 4, subclass: '' }], abilities: { STR: 15 },
       featureChoices: { 'asi:fighter:4': 'feat', 'asi:fighter:4:feat': 'great-weapon-master' } } } });
     assert.match(out, /href="#\/compendium\/feat:great-weapon-master"/, 'the chosen feat links to its compendium page');
@@ -716,12 +716,12 @@ test('sheets: the class spine flags unresolved levels + summarizes made choices 
     const { rec } = dryRunRegister(register, META, PHB());
     rec.actions.find((a) => a.name === 'builderTab').fn('cch', 'fighter');   // Fighter tab, nothing expanded
     // L4 is an ASI level. Unresolved → a soft "needs choices" flag; editor stays hidden (collapsed).
-    const unset = renderBody(rec, { id: 'cch', name: 'Ftr', addonData: { 'dnd55e-sheets': {
+    const unset = renderBody(rec, { id: 'cch', name: 'Ftr', addonData: { 'dnd-sheets': {
       classes: [{ classId: 'fighter', level: 4, subclass: '' }], abilities: { STR: 15 } } } });
     assert.match(unset, /needs choices/, 'an unresolved ASI level is flagged');
     assert.doesNotMatch(unset, /asi:fighter:4:feat/, 'the editor is hidden while the row is collapsed');
     // Resolve it → the collapsed row summarizes the pick as a chip.
-    const done = renderBody(rec, { id: 'cch', name: 'Ftr', addonData: { 'dnd55e-sheets': {
+    const done = renderBody(rec, { id: 'cch', name: 'Ftr', addonData: { 'dnd-sheets': {
       classes: [{ classId: 'fighter', level: 4, subclass: 'eldritch-knight' }], abilities: { STR: 15 },
       featureChoices: { 'asi:fighter:4': 'feat', 'asi:fighter:4:feat': 'great-weapon-master' } } } });
     assert.match(done, /Great Weapon Master/, 'the made choice shows as a chip in the collapsed row');
@@ -734,7 +734,7 @@ test('sheets: a class tab levels via +/- and picks its subclass in the spine (B4
     const { rec } = dryRunRegister(register, META, PHB());
     const act = (n, ...a) => rec.actions.find((x) => x.name === n).fn(...a);
     act('builderTab', 'clv', 'fighter');
-    const char = { id: 'clv', name: 'Ftr', addonData: { 'dnd55e-sheets': {
+    const char = { id: 'clv', name: 'Ftr', addonData: { 'dnd-sheets': {
       classes: [{ classId: 'fighter', level: 3, subclass: '' }], abilities: { STR: 15 } } } };
     const out = renderBody(rec, char);
     assert.match(out, /codex-stepper/, 'the class tab shows a level stepper (host .codex-stepper)');
@@ -753,7 +753,7 @@ test('sheets: the Character tab manages extra feats (compendium + free-text) (B4
   mockLocalStorage('builder');
   try {
     const { rec } = dryRunRegister(register, META, PHB());
-    const out = renderBody(rec, { id: 'cxf', name: 'Hero', addonData: { 'dnd55e-sheets': {
+    const out = renderBody(rec, { id: 'cxf', name: 'Hero', addonData: { 'dnd-sheets': {
       classes: [{ classId: 'fighter', level: 1, subclass: '' }], abilities: { STR: 15 },
       extraFeats: [{ id: 'x1', featId: 'tough', sourceNote: 'from a boon' }, { id: 'x2', name: 'Homebrew Luck', sourceNote: 'DM gift' }] } } });
     assert.match(out, /Extra feats/, 'the Extra feats section renders on the Character tab');
@@ -769,8 +769,8 @@ test('sheets: an extra feat with a featId feeds the engine feats list (B4.5b)', 
   const api = makeRulesApi(() => ({ apiVersion: 1, getItem: () => null, getItemByName: () => null }));
   const { host } = createMockHost(META, {});
   const { sheetOf } = makeHelpers(host);
-  const E = makeEngine({ host, NS: 'dnd55e-sheets', ABILITIES, SKILLS, num, abilityMod, sheetOf });
-  const s = sheetOf({ addonData: { 'dnd55e-sheets': {
+  const E = makeEngine({ host, NS: 'dnd-sheets', ABILITIES, SKILLS, num, abilityMod, sheetOf });
+  const s = sheetOf({ addonData: { 'dnd-sheets': {
     extraFeats: [{ id: 'x1', featId: 'tough' }, { id: 'x2', name: 'Homebrew Luck' }] } } });
   const cd = E.decisionsOf(s, api);
   assert.ok(cd.feats.some((f) => f.featId === 'tough'), 'a compendium extra feat is fed to the engine');
@@ -782,7 +782,7 @@ test('sheets: a recorded spell swap shows in the class spine at its level (B4.5b
   try {
     const { rec } = dryRunRegister(register, META, PHB());
     rec.actions.find((a) => a.name === 'builderTab').fn('csw', 'wizard');   // open the Wizard class tab
-    const out = renderBody(rec, { id: 'csw', name: 'Mage', addonData: { 'dnd55e-sheets': {
+    const out = renderBody(rec, { id: 'csw', name: 'Mage', addonData: { 'dnd-sheets': {
       classes: [{ classId: 'wizard', level: 5, subclass: '' }], abilities: { INT: 15 },
       spellSwaps: [{ level: 3, classLevel: 3, classId: 'wizard', out: 'fireball', in: 'misty-step' }] } } });
     assert.match(out, /href="#\/compendium\/spell:fireball"/, 'the swapped-out spell links out (at its level)');
@@ -791,7 +791,7 @@ test('sheets: a recorded spell swap shows in the class spine at its level (B4.5b
 });
 
 test('sheets: printSheet builds a self-contained print sheet (B4.6)', () => {
-  const char = { id: 'cp', name: 'Gandalf', addonData: { 'dnd55e-sheets': {
+  const char = { id: 'cp', name: 'Gandalf', addonData: { 'dnd-sheets': {
     classes: [{ classId: 'wizard', level: 5, subclass: '' }], abilities: { INT: 16, DEX: 14, CON: 14 },
     preparedSpells: { wizard: ['fireball'] }, cantrips: { wizard: ['fire-bolt'] },
     inventory: [{ id: 'i1', name: 'Spellbook', qty: 1, location: 'pack' }], currency: { gp: 25 } } } };
@@ -808,7 +808,7 @@ test('sheets: printSheet builds a self-contained print sheet (B4.6)', () => {
 });
 
 test('sheets: exportSheet serializes the character to JSON (B4.6)', () => {
-  const char = { id: 'ce', name: 'Frodo', addonData: { 'dnd55e-sheets': { className: 'Rogue', level: 3, abilities: { DEX: 16 } } } };
+  const char = { id: 'ce', name: 'Frodo', addonData: { 'dnd-sheets': { className: 'Rogue', level: 3, abilities: { DEX: 16 } } } };
   const { rec } = dryRunRegister(register, META, { ...PHB(), fixtures: { characters: [char] } });
   let captured = '';
   const oB = globalThis.Blob, oU = globalThis.URL, oD = globalThis.document;
@@ -826,7 +826,7 @@ test('sheets: the import modal renders a paste area (B4.6)', () => {
   globalThis.localStorage = { getItem: (k) => (String(k).startsWith('dse-import:') ? 'open' : null), setItem() {}, removeItem() {} };
   try {
     const { rec } = dryRunRegister(register, META, PHB());
-    const out = renderBody(rec, { id: 'cim', name: 'Sam', addonData: { 'dnd55e-sheets': { className: 'Fighter' } } });
+    const out = renderBody(rec, { id: 'cim', name: 'Sam', addonData: { 'dnd-sheets': { className: 'Fighter' } } });
     assert.match(out, /Import character/, 'the import modal title');
     assert.match(out, /dse-import-cim/, 'the paste textarea');
     assert.match(out, /importApply/, 'the import action');
@@ -848,7 +848,7 @@ test('sheets: recorded spell swaps show as a linked history in the Spellbook (B4
   mockLocalStorage('spellbook');
   try {
     const { rec } = dryRunRegister(register, META, PHB());
-    const out = renderBody(rec, { id: 'csw', name: 'Mage', addonData: { 'dnd55e-sheets': {
+    const out = renderBody(rec, { id: 'csw', name: 'Mage', addonData: { 'dnd-sheets': {
       classes: [{ classId: 'wizard', level: 5, subclass: '' }],
       spellSwaps: [{ level: 3, classId: 'wizard', out: 'fireball', in: 'misty-step' }] } } });
     assert.match(out, /Swaps/, 'a swaps history section');
@@ -873,7 +873,7 @@ test('sheets: choose-grant picker renders a filtered pool + pick/unpick actions'
     const { rec } = dryRunRegister(register, META, PHB());
     // Acolyte's origin feat is Magic Initiate (choose 2 wizard cantrips + 1
     // level-1 spell) → pending choices surface pickers.
-    const out = renderBody(rec, { id: 'cmi', name: 'Mage', addonData: { 'dnd55e-sheets': { className: 'Wizard', background: 'Acolyte' } } });
+    const out = renderBody(rec, { id: 'cmi', name: 'Mage', addonData: { 'dnd-sheets': { className: 'Wizard', background: 'Acolyte' } } });
     assert.match(out, /Granted spell choices/, 'choices section header');
     assert.match(out, /Magic Initiate/, 'shows the grant source + count');
     assert.match(out, /<option value="fire-bolt">/, 'picker offers the matching level-0 wizard cantrip');
@@ -919,7 +919,7 @@ test('sheets: prepared picks over the limit stay visible + removable (never hidd
     const { rec } = dryRunRegister(register, META, PHB());
     // L1 Wizard (preparedLimit 4) holding 5 picks — e.g. after a level-down.
     // Every chip must render; the one past the cap gets the warning treatment.
-    const out = renderBody(rec, { id: 'cov', name: 'Mage', addonData: { 'dnd55e-sheets': {
+    const out = renderBody(rec, { id: 'cov', name: 'Mage', addonData: { 'dnd-sheets': {
       className: 'Wizard', level: 1, abilities: {},
       spellbook: { wizard: ['mage-armor', 'detect-magic', 'fireball', 'bless', 'misty-step'] },
       preparedSpells: { wizard: ['mage-armor', 'detect-magic', 'fireball', 'bless', 'misty-step'] } } } });
@@ -933,7 +933,7 @@ test('sheets: prepared picks over the limit stay visible + removable (never hidd
 test('sheets: spellDrop validates class list / level / capacity / book membership (no silent overfill)', () => {
   const { host, rec } = createMockHost(META, PHB());
   let stored = { className: 'Wizard', level: 1, abilities: {} };
-  host.store.patchAddonData = (_c, itemId, fn) => { stored = fn(stored) || stored; return { id: itemId, addonData: { 'dnd55e-sheets': stored } }; };
+  host.store.patchAddonData = (_c, itemId, fn) => { stored = fn(stored) || stored; return { id: itemId, addonData: { 'dnd-sheets': stored } }; };
   register(host);
   const act = (name, ...args) => rec.actions.find((a) => a.name === name).fn(...args);
   const drop = (ref, kind) => { act('spellDragStart', { dataTransfer: { setData() {} } }, ref); act('spellDrop', 'c1', 'wizard', kind); };
@@ -961,7 +961,7 @@ test('sheets: Combat tab shows engine-computed attacks from equipped weapons', (
     const { rec } = dryRunRegister(register, META, PHB());
     // Real engine: Fighter STR 16 L1, proficient martial → +3 STR +2 PB = +5
     // (mirrors tests/rules.mjs EQ-3/4/5).
-    const out = renderBody(rec, { id: 'ck', name: 'Knight', addonData: { 'dnd55e-sheets': {
+    const out = renderBody(rec, { id: 'ck', name: 'Knight', addonData: { 'dnd-sheets': {
       className: 'Fighter', abilities: { STR: 16 },
       inventory: [{ id: 'w1', ref: 'longsword', name: 'Longsword', location: 'equipped' }],
     } } });
@@ -976,7 +976,7 @@ test('sheets: Combat tab renders trackers; ± is a live-play control', () => {
   mockLocalStorage('combat');
   try {
     const { rec } = dryRunRegister(register, META);
-    const out = renderBody(rec, { id: 'ct', name: 'Brn', addonData: { 'dnd55e-sheets': { className: 'Barbarian', resources: [{ id: 'r1', name: 'Rage', current: 2, max: 3 }] } } });
+    const out = renderBody(rec, { id: 'ct', name: 'Brn', addonData: { 'dnd-sheets': { className: 'Barbarian', resources: [{ id: 'r1', name: 'Rage', current: 2, max: 3 }] } } });
     assert.match(out, /Trackers/, 'trackers section on the Combat tab');
     assert.match(out, /Rage/, 'the tracker is shown');
     assert.match(out, /resourceAdjust/, '± live-play control present');
@@ -989,7 +989,7 @@ test('sheets: Combat tab auto-generates trackers + Rest button, with structured 
     const { rec } = dryRunRegister(register, META, PHB());
     // Real engine: Barbarian L5 → Rage (pool, max 3), Insp (+1 on short rest /
     // full on long rest), d12 hit dice (mirrors tests/rules.mjs FE-2/FE-3).
-    const out = renderBody(rec, { id: 'cr', name: 'Brn', addonData: { 'dnd55e-sheets': { className: 'Barbarian', level: 5 } } });
+    const out = renderBody(rec, { id: 'cr', name: 'Brn', addonData: { 'dnd-sheets': { className: 'Barbarian', level: 5 } } });
     assert.match(out, /Trackers/, 'trackers section on the Combat tab');
     assert.match(out, /Rage/, 'engine-built tracker name (from the build)');
     assert.match(out, /\+1 on short rest/, 'structured recharge label (amount + trigger)');
@@ -1015,7 +1015,7 @@ test('sheets: overrides.maxHp governs every HP clamp + the rest heal (ARCH-3)', 
   // Engine-built L5 Wizard (computed max 32, mirrors tests/rules.mjs) with a DM
   // override of 50 — the override must be the clamp everywhere the tile shows it.
   let stored = { className: 'Wizard', level: 5, abilities: { CON: 14 }, hp: 10, maxHp: 32, overrides: { maxHp: 50 } };
-  host.store.patchAddonData = (_c, itemId, fn) => { stored = fn(stored) || stored; return { id: itemId, addonData: { 'dnd55e-sheets': stored } }; };
+  host.store.patchAddonData = (_c, itemId, fn) => { stored = fn(stored) || stored; return { id: itemId, addonData: { 'dnd-sheets': stored } }; };
   register(host);
   const act = (name, ...args) => rec.actions.find((a) => a.name === name).fn(...args);
   act('setField', 'c1', 'hp', '40');
@@ -1034,7 +1034,7 @@ test('sheets: equipment — free-form Worn slots + strict Attunement, de-duped f
   mockLocalStorage('stats');
   try {
     const { rec } = dryRunRegister(register, META, PHB());
-    const out = renderBody(rec, { id: 'cb2', name: 'Knight', addonData: { 'dnd55e-sheets': { className: 'Fighter', inventory: [
+    const out = renderBody(rec, { id: 'cb2', name: 'Knight', addonData: { 'dnd-sheets': { className: 'Fighter', inventory: [
       { id: 'i1', ref: 'leather', name: 'Leather Armor', kind: 'armor', location: 'equipped' },
       { id: 'i2', name: 'Ring of Protection', kind: 'magic-item', location: 'pack', attuned: true },
       { id: 'i3', name: 'Rope', qty: 1, location: 'pack' },
@@ -1069,7 +1069,7 @@ test('sheets: COMPACT layout docks Init / passive / DC / Atk onto the ability ca
   mapLocalStorage({ 'dse-tab:cc': 'stats', 'dse-ui:layout': 'compact' });
   try {
     const { rec } = dryRunRegister(register, META, PHB());
-    const out = renderBody(rec, { id: 'cc', name: 'Mage', addonData: { 'dnd55e-sheets': { className: 'Wizard', abilities: { DEX: 14 } } } });
+    const out = renderBody(rec, { id: 'cc', name: 'Mage', addonData: { 'dnd-sheets': { className: 'Wizard', abilities: { DEX: 14 } } } });
     // Docked chips: Initiative on DEX, passive on WIS, Save DC / Spell Atk on
     // the caster card (accent ring only — no "caster" text).
     assert.match(out, /dse-dock">⚡ Init <strong>\+2</, 'Initiative docks onto the DEX card');
@@ -1095,7 +1095,7 @@ test('sheets: ⚙ Settings tab — per-sheet layout switch + the print/export/im
   const ls = mapLocalStorage({ 'dse-tab:cs': 'settings' });
   try {
     const { rec } = dryRunRegister(register, META, PHB());
-    const out = renderBody(rec, { id: 'cs', name: 'Mage', addonData: { 'dnd55e-sheets': { className: 'Wizard' } } });
+    const out = renderBody(rec, { id: 'cs', name: 'Mage', addonData: { 'dnd-sheets': { className: 'Wizard' } } });
     assert.match(out, /name="dse-layout-cs"/, 'layout radios render on the sheet\'s own tab');
     assert.match(out, /value="classic"[^>]*checked/, 'classic is the default');
     assert.match(out, /uiLayoutSet/, 'radios wire to the uiLayoutSet action');
@@ -1125,7 +1125,7 @@ test('sheets: currency renders as ONE line pinned under the whole Backpack split
   mockLocalStorage('stats');
   try {
     const { rec } = dryRunRegister(register, META);
-    const out = renderBody(rec, { ...FIGHTER, addonData: { 'dnd55e-sheets': { ...FIGHTER.addonData['dnd55e-sheets'], currency: { gp: 10 } } } });
+    const out = renderBody(rec, { ...FIGHTER, addonData: { 'dnd-sheets': { ...FIGHTER.addonData['dnd-sheets'], currency: { gp: 10 } } } });
     const body = out.slice(out.indexOf('</style>'));   // skip the CSS (class names appear there too)
     const split = body.indexOf('dse-bp-split');
     const coins = body.indexOf('dse-bp-coins');
@@ -1138,7 +1138,7 @@ test('sheets: empty equipment slots render click-to-fill pickers (editor)', () =
   mockLocalStorage('stats');
   try {
     const { rec } = dryRunRegister(register, META, PHB());
-    const out = renderBody(rec, { id: 'ce', name: 'Mage', addonData: { 'dnd55e-sheets': { className: 'Wizard', inventory: [
+    const out = renderBody(rec, { id: 'ce', name: 'Mage', addonData: { 'dnd-sheets': { className: 'Wizard', inventory: [
       { id: 'p1', ref: 'leather', name: 'Leather Armor', kind: 'armor', location: 'pack' },   // owned, not worn
       { id: 'p2', name: 'Cloak of Protection', kind: 'magic-item', location: 'pack' },          // owned, not attuned
     ] } } });
@@ -1152,7 +1152,7 @@ test('sheets: empty equipment slots render click-to-fill pickers (editor)', () =
 test('sheets: equipment slot actions (equip / attune / clear) mutate without throwing', () => {
   const { host, rec } = createMockHost(META, PHB());
   let stored = { inventory: [{ id: 'x1', ref: 'leather', name: 'Leather Armor', kind: 'armor', location: 'pack' }, { id: 'x2', name: 'Amulet', kind: 'magic-item', location: 'pack' }] };
-  host.store.patchAddonData = (_c, itemId, fn) => { stored = fn(stored) || stored; return { id: itemId, addonData: { 'dnd55e-sheets': stored } }; };
+  host.store.patchAddonData = (_c, itemId, fn) => { stored = fn(stored) || stored; return { id: itemId, addonData: { 'dnd-sheets': stored } }; };
   register(host);
   const act = (name, ...args) => rec.actions.find((a) => a.name === name).fn(...args);
   act('slotEquip', 'cX', 'armor', 'x1');
@@ -1174,7 +1174,7 @@ test('sheets: Backpack tab retired — no backpack tab button, content in Charac
   mockLocalStorage('stats');
   try {
     const { rec } = dryRunRegister(register, META, PHB());
-    const out = renderBody(rec, { id: 'cbp', name: 'Knight', addonData: { 'dnd55e-sheets': { className: 'Fighter', inventory: [{ id: 'i1', name: 'Rope', qty: 1, location: 'pack' }] } } });
+    const out = renderBody(rec, { id: 'cbp', name: 'Knight', addonData: { 'dnd-sheets': { className: 'Fighter', inventory: [{ id: 'i1', name: 'Rope', qty: 1, location: 'pack' }] } } });
     assert.doesNotMatch(out, /:tab" data-args='\["[^"]*","backpack"\]/, 'no standalone Backpack tab button');
     assert.match(out, /Rope/, 'inventory renders inside the Character Sheet tab');
   } finally { clearLocalStorage(); }
@@ -1184,7 +1184,7 @@ test('sheets: Combat attacks link the weapon to the compendium (B2.3)', () => {
   mockLocalStorage('combat');
   try {
     const { rec } = dryRunRegister(register, META, PHB());
-    const out = renderBody(rec, { id: 'catk', name: 'Knight', addonData: { 'dnd55e-sheets': {
+    const out = renderBody(rec, { id: 'catk', name: 'Knight', addonData: { 'dnd-sheets': {
       classes: [{ classId: 'fighter', level: 1, subclass: '' }], abilities: { STR: 16 },
       inventory: [{ id: 'i1', ref: 'longsword', name: 'Longsword', location: 'equipped' }] } } });
     assert.match(out, /href="#\/compendium\/weapon:longsword"/, 'equipped weapon links to its compendium page');
@@ -1198,7 +1198,7 @@ test('sheets: header class + subclass link to the compendium (B2.4)', () => {
     // The flat `subclass` deliberately carries the ID here — that's what every
     // blob materialized BEFORE the name fix contains. The header must resolve
     // it (id-first lookup) and display the record's NAME, never the slug.
-    const out = renderBody(rec, { id: 'chd', name: 'Knight', addonData: { 'dnd55e-sheets': {
+    const out = renderBody(rec, { id: 'chd', name: 'Knight', addonData: { 'dnd-sheets': {
       className: 'Fighter', subclass: 'eldritch-knight', level: 3,
       classes: [{ classId: 'fighter', level: 3, subclass: 'eldritch-knight' }], abilities: { STR: 15 } } } });
     assert.match(out, /href="#\/compendium\/class:fighter"/, 'header class name links to its compendium page');
@@ -1210,7 +1210,7 @@ test('sheets: header class + subclass link to the compendium (B2.4)', () => {
 test('sheets: materialize stores the subclass NAME in the flat fallback, id stays in classes[] (DEG-1)', () => {
   const { host, rec } = createMockHost(META, PHB());
   let stored = { classes: [{ classId: 'fighter', level: 3, subclass: '' }], abilities: {} };
-  host.store.patchAddonData = (_c, itemId, fn) => { stored = fn(stored) || stored; return { id: itemId, addonData: { 'dnd55e-sheets': stored } }; };
+  host.store.patchAddonData = (_c, itemId, fn) => { stored = fn(stored) || stored; return { id: itemId, addonData: { 'dnd-sheets': stored } }; };
   register(host);
   const act = (name, ...args) => rec.actions.find((a) => a.name === name).fn(...args);
   act('builderSubclassSet', 'c1', 0, 'eldritch-knight');
@@ -1226,7 +1226,7 @@ test('sheets: materialize writes the DEG-1 spell snapshot + the joined multiclas
     abilities: {}, cantrips: { wizard: ['fire-bolt'] }, preparedSpells: { wizard: ['mage-armor'] },
     spells: [{ id: 'x1', name: 'My Homebrew Bolt', level: 2, origin: 'other' }],
   };
-  host.store.patchAddonData = (_c, itemId, fn) => { stored = fn(stored) || stored; return { id: itemId, addonData: { 'dnd55e-sheets': stored } }; };
+  host.store.patchAddonData = (_c, itemId, fn) => { stored = fn(stored) || stored; return { id: itemId, addonData: { 'dnd-sheets': stored } }; };
   register(host);
   const act = (name, ...args) => rec.actions.find((a) => a.name === name).fn(...args);
   act('builderAbility', 'c1', 'STR', '15');   // any Builder edit re-materializes
@@ -1247,7 +1247,7 @@ test('sheets: materialize writes skill EXPERTISE; standalone totals keep the dou
     abilities: { DEX: 14 },
     featureChoices: { 'skills:rogue#0': 'stealth', 'rogue-expertise-1#0': 'stealth' },
   };
-  host.store.patchAddonData = (_c, itemId, fn) => { stored = fn(stored) || stored; return { id: itemId, addonData: { 'dnd55e-sheets': stored } }; };
+  host.store.patchAddonData = (_c, itemId, fn) => { stored = fn(stored) || stored; return { id: itemId, addonData: { 'dnd-sheets': stored } }; };
   register(host);
   const act = (name, ...args) => rec.actions.find((a) => a.name === name).fn(...args);
   act('builderAbility', 'c1', 'STR', '10');   // any Builder edit re-materializes
@@ -1269,12 +1269,12 @@ test('sheets: the spell snapshot renders standalone (book removed) and hides in 
   try {
     // Standalone (engine off): the snapshot IS the visible spellbook — DEG-1.
     const { rec } = dryRunRegister(register, META);
-    const out = renderBody(rec, { id: 'cs1', name: 'Mage', addonData: { 'dnd55e-sheets': blob } });
+    const out = renderBody(rec, { id: 'cs1', name: 'Mage', addonData: { 'dnd-sheets': blob } });
     assert.match(out, /Mage Armor/, 'the snapshot spell stays visible after engine/book removal');
     assert.match(out, /📌/, 'marked as the engine-loadout snapshot');
     // Engine mode: the live prep UI owns the loadout — the Extra group hides snapshots.
     const { rec: rec2 } = dryRunRegister(register, META, PHB());
-    const out2 = renderBody(rec2, { id: 'cs2', name: 'Mage', addonData: { 'dnd55e-sheets': blob } });
+    const out2 = renderBody(rec2, { id: 'cs2', name: 'Mage', addonData: { 'dnd-sheets': blob } });
     assert.doesNotMatch(out2, /📌/, 'engine mode never shows snapshot entries as Extra spells');
   } finally { clearLocalStorage(); }
 });
@@ -1303,7 +1303,7 @@ test('sheets: add-item wizard — search box, category tree, batch tray with typ
   const ls = mapLocalStorage({ 'dse-tab:cw': 'stats', 'dse-additem:cw': 'open' });
   try {
     const { rec } = dryRunRegister(register, META, PHB());
-    const char = { id: 'cw', name: 'Mage', addonData: { 'dnd55e-sheets': { className: 'Wizard' } } };
+    const char = { id: 'cw', name: 'Mage', addonData: { 'dnd-sheets': { className: 'Wizard' } } };
     const out = renderBody(rec, char);
     assert.match(out, /Add to Backpack/, 'the wizard overlay is open');
     assert.match(out, /Search all items/, 'a search box');
@@ -1326,7 +1326,7 @@ test('sheets: add-item wizard stages with a quantity + commits the batch to the 
   try {
     const { host, rec } = createMockHost(META, PHB());
     let stored = {};
-    host.store.patchAddonData = (_c, itemId, fn) => { stored = fn(stored) || stored; return { id: itemId, addonData: { 'dnd55e-sheets': stored } }; };
+    host.store.patchAddonData = (_c, itemId, fn) => { stored = fn(stored) || stored; return { id: itemId, addonData: { 'dnd-sheets': stored } }; };
     register(host);
     const act = (name, ...args) => rec.actions.find((a) => a.name === name).fn(...args);
     // Stage a weapon, bump its quantity, then commit the whole tray at once.
@@ -1349,7 +1349,7 @@ test('sheets: add-item wizard stages with a quantity + commits the batch to the 
 test('sheets: invAddRef stores the item KIND; free-text armor resolves by name (ROADMAP 7)', () => {
   const { host, rec } = createMockHost(META, PHB());
   let stored = {};
-  host.store.patchAddonData = (_c, itemId, fn) => { stored = fn(stored) || stored; return { id: itemId, addonData: { 'dnd55e-sheets': stored } }; };
+  host.store.patchAddonData = (_c, itemId, fn) => { stored = fn(stored) || stored; return { id: itemId, addonData: { 'dnd-sheets': stored } }; };
   register(host);
   const act = (name, ...args) => rec.actions.find((a) => a.name === name).fn(...args);
   act('invAddRef', 'c1', 'armor', 'leather');
@@ -1360,7 +1360,7 @@ test('sheets: invAddRef stores the item KIND; free-text armor resolves by name (
   mockLocalStorage('stats');
   try {
     const { rec: rec2 } = dryRunRegister(register, META, { ...PHB(), isAnonymous: true });
-    const out = renderBody(rec2, { id: 'cit', name: 'Knight', addonData: { 'dnd55e-sheets': {
+    const out = renderBody(rec2, { id: 'cit', name: 'Knight', addonData: { 'dnd-sheets': {
       className: 'Fighter', inventory: [{ id: 'i1', name: 'Leather Armor', qty: 1, location: 'pack' }] } } });
     assert.match(out, /href="#\/compendium\/armor:leather"/, 'free-text armor resolves to its compendium page');
   } finally { clearLocalStorage(); }
@@ -1380,7 +1380,7 @@ test('sheets: proficiency dots are direct toggles for editors (standalone)', () 
   mockLocalStorage('stats');
   try {
     const { rec } = dryRunRegister(register, META);
-    const out = renderBody(rec, { id: 'pv', name: 'Rgr', addonData: { 'dnd55e-sheets': { className: 'Ranger' } } });
+    const out = renderBody(rec, { id: 'pv', name: 'Rgr', addonData: { 'dnd-sheets': { className: 'Ranger' } } });
     assert.match(out, /toggleSkill/, 'skill dots toggle directly (editor)');
     assert.match(out, /toggleSave/, 'save dots toggle directly (editor)');
   } finally { clearLocalStorage(); }
@@ -1388,6 +1388,6 @@ test('sheets: proficiency dots are direct toggles for editors (standalone)', () 
 
 test('sheets: no Spellbook tab for a non-caster with no spells (engine mode)', () => {
   const { rec } = dryRunRegister(register, META, PHB());
-  const out = renderBody(rec, { id: 'cf', name: 'Brute', addonData: { 'dnd55e-sheets': { className: 'Fighter' } } });
+  const out = renderBody(rec, { id: 'cf', name: 'Brute', addonData: { 'dnd-sheets': { className: 'Fighter' } } });
   assert.doesNotMatch(out, /Spellbook/, 'spellbook tab hidden for a non-caster');
 });

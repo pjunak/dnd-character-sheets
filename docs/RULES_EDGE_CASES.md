@@ -1,4 +1,4 @@
-# D&D 5.5e (2024) Character Sheet — Rules Edge-Case Catalog
+# D&D Character Sheet — Rules Edge-Case Catalog
 
 > **Purpose.** Before reworking the character display into tabs (Overview / Sheet /
 > Spellbook / Backpack / Leveling-or-Editor) we enumerate every tricky rule interaction
@@ -8,12 +8,11 @@
 >
 > **Ownership tags** — which LAYER implements the fix:
 > `[S]` the sheet UI / per-character storage (this repo's panels + model.js) ·
-> `[R]` the rules engine (this repo's `rules/` module — merged in from the
-> retired standalone `dnd55e-core-rules` addon) ·
-> `[C]` the book data addon (`dnd55e-compendium`, formerly
-> `dnd55e-compendium`; content record shape / declared grants).
-> Older entries below still say "core-rules"/"compendium" — read those as the
-> rules module / the Player's Handbook addon respectively.
+> `[R]` the rules engine (this repo's `rules/` module) ·
+> `[C]` the book data addon (`dnd55e-compendium`; content record shape /
+> declared grants).
+> Entries below may say "core-rules"/"compendium" — read those as the rules
+> module / the book data addon respectively.
 >
 > **Severity** — `★★★` must get right now (reworking it later is expensive) ·
 > `★★` important, design the seam now even if implemented later ·
@@ -373,7 +372,7 @@ of lossless degradation. **Recommendation: adopt this; drop the discard/plain-te
 
 **HOST-1** ★★★ — **`host.use()` originally only worked for a *declared hard dependency*** (the host
 threw otherwise), but declaring one makes it **hard** (the host blocks the addon when the dep is
-missing) — which would break the requirement that `dnd55e-sheets` installs and runs **standalone**.
+missing) — which would break the requirement that `dnd-sheets` installs and runs **standalone**.
 
 **Fixed (2026-06-28):** added an **`optionalDependencies`** manifest field to the host (its own
 codebase). Semantics: **ordering-only** — when the optional provider is present + compatible it's
@@ -383,7 +382,7 @@ blocked). `host.use()` now accepts a dep declared as hard **or** optional. Wired
 `addon-deps.js planLoadOrder` (ordering edges), `addons.js use()`, `server/addons.cjs
 validateManifest`, the registry + `_publicAddonList` + `versions[]` snapshot + rollback restore +
 preview echo, and `scripts/dev-install-addon.cjs`. Covered by new tests in `test/addon-deps.test.mjs`
-+ `test/addons.test.cjs` (full host suite green). `dnd55e-sheets/addon.json` now declares
++ `test/addons.test.cjs` (full host suite green). `dnd-sheets/addon.json` now declares
 `optionalDependencies: { "dnd55e-core-rules": ">=0.1.0" }`, so its lazy `getRules()` probe lights up
 (and the Builder tab appears) automatically once `core-rules` ships.
 ```

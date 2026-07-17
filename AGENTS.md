@@ -1,22 +1,23 @@
-# AGENTS.md — dnd55e-character-sheets (repo guide for AI agents)
+# AGENTS.md — dnd-character-sheets (repo guide for AI agents)
 
-**What this repo is.** The D&D 5.5e (2024) character-sheet addon for the
+**What this repo is.** The D&D character-sheet addon for the
 [ttrpg-codex](https://github.com/pjunak/ttrpg-codex) host app. **Addon id is
-`dnd55e-sheets`** — deliberately ≠ the repo dir name, so
-`character.addonData['dnd55e-sheets']` never needed a migration; the host keys
-on the manifest id. Tabbed sheet UI (Overview / Character Sheet [incl. inventory] /
-Combat / Spellbook / Builder) **plus the built-in pure rules engine**
-(`rules/engine.js` + `rules/api.js`, merged in from the retired
-`dnd55e-core-rules` addon). Standalone hand-fillable; declares
-`optionalDependencies: dnd55e-compendium` — engine mode lights up when
-that book addon's data is present. `provide()`s the rules API for future
-consumers (e.g. a combat addon).
+`dnd-sheets`** — the host keys on the manifest id, and the id (not the repo
+dir name) namespaces `character.addonData['dnd-sheets']`. Tabbed sheet UI
+(Overview / Character Sheet [incl. inventory] / Combat / Spellbook / Builder)
+**plus the built-in pure rules engine** (`rules/engine.js` + `rules/api.js`).
+The engine is **edition-parameterized** (ARCH-7): built-in 2024 constants, a
+data provider's `ruleset` record overrides per constant. Standalone
+hand-fillable; declares `optionalDependencies: dnd55e-compendium` (2024) and
+`dnd5e-compendium` (2014, future) — engine mode lights up when a book
+addon's data is present. `provide()`s the rules API for future consumers
+(e.g. a combat addon).
 
 ## Read these first
 
 1. [`README.md`](README.md) — tabs, editing model, dev + test commands.
-2. [`rules/README.md`](rules/README.md) — the engine: merge history, layout,
-   hydration pipeline, slot/multiclass semantics.
+2. [`rules/README.md`](rules/README.md) — the engine: layout, hydration
+   pipeline, slot/multiclass semantics.
 3. [`docs/RULES_EDGE_CASES.md`](docs/RULES_EDGE_CASES.md) — the design spine
    (stable IDs ARCH-*/SP-*/…, locked decisions §13). Historical names inside
    entries ("core-rules", "compendium") are retired — the header explains how
@@ -31,7 +32,7 @@ consumers (e.g. a combat addon).
 ## Layout + the naming trap
 
 ```
-addon.json          manifest — id dnd55e-sheets, optionalDependencies, tests.client
+addon.json          manifest — id dnd-sheets, optionalDependencies, tests.client
 entry.js            register(host), tab strip + routing, vitals-bar placement —
                     its header comment is the de-facto architecture doc
 model.js            THE data layer: stored-blob read/migration, viewModel,
@@ -96,7 +97,7 @@ components; standalone (no book) degrades to a hand-filled sheet (DEG-1).
   is the record-shape contract behind `rules/api.js`), `../Living-scroll`
   (Python port source-of-truth for rule edge cases).
 - **Dev loop**: from `../ttrpg-codex` run
-  `node scripts/dev-install-addon.cjs ../dnd55e-character-sheets`, restart the
+  `node scripts/dev-install-addon.cjs ../dnd-character-sheets`, restart the
   app. **Repo edits are invisible until re-dev-installed.**
 - **Tests**: `node --test tests/smoke.mjs tests/rules.mjs` from THIS repo's
   root — on Windows only relative file paths work (`node --test tests/` and
@@ -135,7 +136,7 @@ components; standalone (no book) degrades to a hand-filled sheet (DEG-1).
 - **What deliberately stays addon-local** (boundary, not debt): composition
   helpers (`ui.js` `heroTile`/`abilityTile` — layout arrangements OF host
   components), the sheet's page-layout CSS (`ctx.ui.styleTag`, scoped under
-  `.addon-dnd55e-sheets`), and domain indicators (save-shield fill, 3-state
+  `.addon-dnd-sheets`), and domain indicators (save-shield fill, 3-state
   proficiency dots, AC shield dot — game semantics, not reusable chrome).
   All token-built, so themes still apply.
 - `register(host)` side-effect-free except `register*`; renderers must survive
@@ -145,7 +146,10 @@ components; standalone (no book) degrades to a hand-filled sheet (DEG-1).
 
 ## Settled decisions (don't relitigate)
 
-- **2024 rules only** (2014 = separate future addons).
+- **One edition per campaign; the data addon dictates the rules.** The engine
+  is edition-parameterized (ARCH-7) with built-in 2024 defaults; 2014 lands as
+  structural shapes gated on record-field presence, shipped by a
+  `dnd5e-compendium` data addon (ROADMAP item 9).
 - **Combat automation out of scope** — the sheet stores/computes; a combat
   resolver would be a separate addon consuming this one's `provide()`.
 - Engine mode == book data present (the 4-state matrix collapsed when the
