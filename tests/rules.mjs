@@ -12,7 +12,7 @@ import { makeEngine } from '../model.js';
 
 const META = {
   id: 'dnd-sheets',
-  permissions: ['ui:override', 'ui:action', 'ui:settings-tab', 'data:read:characters', 'data:write:characters.addonData'],
+  permissions: ['ui:override', 'ui:action', 'data:read:characters', 'data:write:characters.addonData'],
   optionalDependencies: { 'dnd55e-compendium': { range: '>=0.1.0' } },
 };
 

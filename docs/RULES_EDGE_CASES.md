@@ -1,7 +1,9 @@
 # D&D Character Sheet — Rules Edge-Case Catalog
 
 > **Purpose.** Before reworking the character display into tabs (Overview / Sheet /
-> Spellbook / Backpack / Leveling-or-Editor) we enumerate every tricky rule interaction
+> Spellbook / Backpack / Leveling-or-Editor — planned names; shipped as Overview /
+> Character Sheet [incl. inventory] / Combat / Spellbook / Builder / Settings) we
+> enumerate every tricky rule interaction
 > the data model + engine + UI must survive, so we design the **data shape once** instead
 > of reworking it three times. Each item has a stable ID (reference it in commits/issues),
 > a description of *why it bites*, and a recommended solution split across the three addons.

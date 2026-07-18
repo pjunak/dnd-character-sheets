@@ -7,7 +7,7 @@ It is a **data-driven handler**: it encodes the *system* rules (how proficiency 
 ability modifiers, AC, HP, saves, spell slots are computed, and how declarative
 grants/modifiers/formulas are interpreted) but contains **no content**. All content
 comes from a per-book data addon —
-[`dnd55e-compendium`](https://github.com/pjunak/dnd55e-compendium) — soft-used
+`dnd55e-compendium` (a private sibling repo) — soft-used
 via `host.use` (a manifest `optionalDependencies` entry). Adding a new
 class/subclass/item/spell is a book-addon data change and never touches this engine.
 

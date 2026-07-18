@@ -4,7 +4,8 @@
 [ttrpg-codex](https://github.com/pjunak/ttrpg-codex) host app. **Addon id is
 `dnd-sheets`** — the host keys on the manifest id, and the id (not the repo
 dir name) namespaces `character.addonData['dnd-sheets']`. Tabbed sheet UI
-(Overview / Character Sheet [incl. inventory] / Combat / Spellbook / Builder)
+(Overview / Character Sheet [incl. inventory] / Combat / Spellbook / Builder /
+Settings)
 **plus the built-in pure rules engine** (`rules/engine.js` + `rules/api.js`).
 The engine is **edition-parameterized** (ARCH-7): built-in 2024 constants, a
 data provider's `ruleset` record overrides per constant. Standalone

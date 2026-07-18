@@ -30,15 +30,16 @@ above it). The D&D tabs follow:
   slot-castable for casters); level-up spell **swaps** are recorded with history.
 - **Builder** — guided per-level progression; internally **tabbed** (a **Character** tab + **one tab per class**), each
   class tab a per-level spine whose rows **expand in place** to resolve that level's choices; level via **+/-**.
-  Rightmost, only with the rules engine and only for editors.
+  Only with the rules engine and only for editors.
+- **Settings** — per-sheet tools, rightmost: the vitals-layout switch (compact /
+  classic), plus **🖨 Print / PDF** (a self-contained printable sheet), **⬇ Export**
+  (download the character as JSON), and **⬆ Import** (paste an exported JSON to
+  overwrite — editors only).
 
-A sheet-wide toolbar offers **🖨 Print / PDF** (a self-contained printable sheet), **⬇ Export** (download the character
-as JSON), and **⬆ Import** (paste an exported JSON to overwrite — editors only).
-
-A slim **vitals bar** (a directly-editable **HP** stepper, plus icon-labelled AC,
-Initiative, Speed, Proficiency, Passive Perception and a class-level line) renders
-full-width under the tabs on Spellbook; Character Sheet and Combat place it inside
-their own right column.
+A slim **vitals bar** (a directly-editable **HP** stepper, plus text-labelled AC,
+Initiative, Speed, Passive Perception and a class-level line — Proficiency has no
+tile, it's already folded into every formula) renders full-width under the tabs on
+Spellbook; Character Sheet and Combat place it inside their own right column.
 
 **Editing is direct and role-gated — there is no separate "edit mode" and no second edit
 button.** The host's own **✏ Upravit** owns identity/lore/portrait (it rides the host
