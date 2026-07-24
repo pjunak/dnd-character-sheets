@@ -21,12 +21,19 @@
 // below therefore mirror the engine-pinned values in tests/rules.mjs.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { dryRunRegister, smokeRegistrations, createMockHost } from '../../ttrpg-codex/web/js/addon-test-harness.mjs';
 import register from '../entry.js';
 import { makeFake } from './fake-phb.mjs';
 import { makeEngine } from '../model.js';
 import { makeRulesApi } from '../rules/api.js';
-import { makeHelpers, ABILITIES, SKILLS, num, abilityMod } from '../helpers.js';
+import { makeHelpers, ABILITIES, SKILLS, num, abilityMod, clampHp } from '../helpers.js';
+import { BASE_ACTIONS } from '../actions.base.js';
+import { RESOURCE_ACTIONS, applyHpChange } from '../actions.resources.js';
+import { SPELL_ACTIONS } from '../actions.spells.js';
+import { INVENTORY_ACTIONS, addInventoryItems } from '../actions.inventory.js';
+import { BUILDER_ACTIONS } from '../actions.builder.js';
+import { TRANSFER_ACTIONS } from '../actions.transfer.js';
 
 function mockLocalStorage(tab) {
   globalThis.localStorage = {
@@ -53,6 +60,11 @@ const META = {
 
 // Book data present → the built-in engine computes (fresh fake per test).
 const PHB = () => ({ deps: { 'dnd55e-compendium': makeFake() } });
+const RETAINED_ACTIONS = [
+  ...BASE_ACTIONS, ...SPELL_ACTIONS, ...INVENTORY_ACTIONS,
+  ...RESOURCE_ACTIONS, ...BUILDER_ACTIONS, ...TRANSFER_ACTIONS,
+].sort();
+const REMOVED_ACTIONS = ['hp', 'copySpell', 'invAdd', 'invAddRef', 'builderBgAsi'];
 
 const FIGHTER = {
   id: 'c1', name: 'Thorin',
@@ -68,8 +80,10 @@ test('sheets: register is clean + wires the expected surface', () => {
   const { ok, rec, error } = dryRunRegister(register, META);
   assert.ok(ok, error);
   assert.ok(rec.fragmentOps.some(f => f.target === 'characters:body' && f.spec.op === 'replace'), 'replaces the character body fragment');
-  assert.ok(rec.actions.some(a => a.name === 'hp'), 'the hp action');
-  assert.ok(rec.actions.some(a => a.name === 'tab'), 'the tab action');
+  const names = rec.actions.map((action) => action.name);
+  assert.deepEqual(names.slice().sort(), RETAINED_ACTIONS, 'the six domain controllers own the exact retained action surface');
+  assert.equal(new Set(names).size, names.length, 'every retained action is registered exactly once');
+  for (const name of REMOVED_ACTIONS) assert.ok(!names.includes(name), `${name} stays removed`);
   assert.equal(rec.settingsTabs.length, 0, 'no host settings tab — sheet options live on the sheet\'s own ⚙ tab');
   assert.ok(rec.provided && rec.provided.apiVersion === 1, 'provides the rules api for other addons');
   assert.ok(!rec.articleSections.length, 'no standalone article section (we own the body instead)');
@@ -80,6 +94,37 @@ test('sheets: renderers survive the smoke pass (sparse entity)', () => {
   const { rec } = dryRunRegister(register, META);
   const smoke = smokeRegistrations(rec);
   assert.ok(smoke.ok, JSON.stringify(smoke.failures));
+});
+
+test('sheets: removed action seams are absent from every representative render path', () => {
+  const character = {
+    id: 'render-actions',
+    name: 'Mage',
+    addonData: { 'dnd-sheets': { className: 'Wizard', level: 5, spells: [{ id: 's1', name: 'Shield', level: 1 }] } },
+  };
+  try {
+    for (const tab of ['overview', 'stats', 'combat', 'spellbook', 'builder', 'settings']) {
+      mockLocalStorage(tab);
+      const { rec } = dryRunRegister(register, META, PHB());
+      const out = renderBody(rec, character);
+      const registered = new Set(rec.actions.map((action) => action.name));
+      const referenced = [...out.matchAll(/data-(?:action|on-[a-z]+)="dnd-sheets:([^"]+)"/g)].map((match) => match[1]);
+      for (const name of referenced) assert.ok(registered.has(name), `${tab} renders only registered actions (${name})`);
+      for (const name of REMOVED_ACTIONS) {
+        assert.doesNotMatch(out, new RegExp(`="dnd-sheets:${name}"`), `${tab} does not generate ${name}`);
+      }
+    }
+  } finally { clearLocalStorage(); }
+});
+
+test('sheets: scoped styles use host tokens and canonical breakpoints', () => {
+  const source = readFileSync(new URL('../ui.js', import.meta.url), 'utf8');
+  const breakpoints = [...source.matchAll(/@media\s*\(max-width:(\d+)px\)/g)].map((match) => Number(match[1]));
+  assert.ok(breakpoints.length > 0, 'the scoped styles include responsive rules');
+  assert.ok(breakpoints.every((width) => [768, 1100, 1200].includes(width)), 'all responsive rules use host breakpoints');
+  assert.doesNotMatch(source, /#[0-9a-f]{3,8}\b/i, 'scoped styles contain no hardcoded hex colours');
+  assert.doesNotMatch(source, /rgba?\((?!var\()/, 'alpha colours use host channel tokens');
+  assert.doesNotMatch(source, /\b(?:gap|padding|margin(?:-(?:top|right|bottom|left))?):[^;\n]*(?:^|[\s:])(2|4)px\b/m, 'layout spacing uses host tokens');
 });
 
 test('sheets: Overview tab is the host lore (reused, not duplicated)', () => {
@@ -305,7 +350,7 @@ test('sheets: Builder actions mutate the model + materialize without throwing', 
   assert.doesNotThrow(() => act('builderClassSet', 'c1', 0, 'wizard'));
   assert.doesNotThrow(() => act('builderLevelSet', 'c1', 0, '5'));
   assert.doesNotThrow(() => act('builderAddClass', 'c1'));
-  assert.doesNotThrow(() => act('builderBgAsi', 'c1', 'STR:2,DEX:1'));
+  assert.doesNotThrow(() => act('builderAsiSet', 'c1', 'bgasi', 'STR', 2, 3, 2));
   assert.doesNotThrow(() => act('builderChoose', 'c1', 'asi:wizard:4:ability', 'CON'));
 });
 
@@ -885,13 +930,12 @@ test('sheets: choose-grant picker renders a filtered pool + pick/unpick actions'
   assert.doesNotThrow(() => act('grantUnpick', 'c1', 'feat:magic-initiate:mi-cantrips', 'fire-bolt'));
 });
 
-test('sheets: spellbook prepare/cantrip/copy + drag-drop actions do not throw', () => {
+test('sheets: spellbook prepare/cantrip/manager + drag-drop actions do not throw', () => {
   const { rec } = dryRunRegister(register, META, PHB());
   const act = (name, ...args) => rec.actions.find(a => a.name === name).fn(...args);
   assert.doesNotThrow(() => act('prepSpell', 'c1', 'wizard', 'fireball'));
   assert.doesNotThrow(() => act('learnCantrip', 'c1', 'wizard', 'fire-bolt'));
   assert.doesNotThrow(() => act('unprepSpell', 'c1', 'wizard', 'fireball'));
-  assert.doesNotThrow(() => act('copySpell', 'c1'));
   // Wizard spellbook (SP-5): learn / forget into the book + drop-into-book.
   assert.doesNotThrow(() => act('spellbookLearn', 'c1', 'wizard', 'mage-armor'));
   assert.doesNotThrow(() => act('spellbookForget', 'c1', 'wizard', 'mage-armor'));
@@ -1020,14 +1064,23 @@ test('sheets: overrides.maxHp governs every HP clamp + the rest heal (ARCH-3)', 
   const act = (name, ...args) => rec.actions.find((a) => a.name === name).fn(...args);
   act('setField', 'c1', 'hp', '40');
   assert.equal(stored.hp, 40, 'typed HP above the computed max (32) survives — the override (50) is the clamp');
-  act('hp', 'c1', 20);
-  assert.equal(stored.hp, 50, '± heal clamps at the overridden max, not the computed one');
+  act('setField', 'c1', 'hp', '99');
+  assert.equal(stored.hp, 50, 'the direct HP stepper clamps at the overridden max, not the computed one');
   act('restApply', 'c1', 'long');
   assert.equal(stored.hp, 50, 'long rest heals to the overridden max');
-  act('hp', 'c1', -30);
+  act('setField', 'c1', 'hp', '20');
   act('clearOverride', 'c1', 'maxHp');
-  act('hp', 'c1', 99);
+  act('setField', 'c1', 'hp', '99');
   assert.equal(stored.hp, 32, 'override cleared → the computed/materialized max clamps again');
+});
+
+test('sheets: pure HP changes absorb temporary HP and clamp damage/healing', () => {
+  const original = { hp: 10, tempHp: 5 };
+  const damaged = applyHpChange(original, -8, 20, num, clampHp);
+  assert.deepEqual(original, { hp: 10, tempHp: 5 }, 'the helper does not mutate its input');
+  assert.deepEqual(damaged, { hp: 7, tempHp: 0 }, 'temporary HP absorbs damage before regular HP');
+  assert.deepEqual(applyHpChange(damaged, -99, 20, num, clampHp), { hp: 0, tempHp: 0 }, 'damage bottoms out at zero');
+  assert.deepEqual(applyHpChange({ hp: 18, tempHp: 3 }, 99, 20, num, clampHp), { hp: 20, tempHp: 3 }, 'healing clamps at max and preserves temporary HP');
 });
 
 test('sheets: equipment — free-form Worn slots + strict Attunement, de-duped from the pack', () => {
@@ -1280,11 +1333,15 @@ test('sheets: the spell snapshot renders standalone (book removed) and hides in 
 });
 
 test('sheets: Backpack add-item + attune actions do not throw', () => {
+  mapLocalStorage({});
+  try {
   const { rec } = dryRunRegister(register, META, PHB());
   const act = (name, ...args) => rec.actions.find(a => a.name === name).fn(...args);
-  assert.doesNotThrow(() => act('invAddRef', 'c1', 'weapon', 'longsword'));
-  assert.doesNotThrow(() => act('invAddRef', 'c1', 'armor', 'leather'));
+  assert.doesNotThrow(() => act('addItemStage', 'c1', 'weapon', 'longsword'));
+  assert.doesNotThrow(() => act('addItemStage', 'c1', 'armor', 'leather'));
+  assert.doesNotThrow(() => act('addItemCommit', 'c1'));
   assert.doesNotThrow(() => act('invAttune', 'c1', 'someid'));
+  } finally { clearLocalStorage(); }
 });
 
 // A Map-backed localStorage (the top stub is a no-op setItem, so the wizard's
@@ -1346,13 +1403,12 @@ test('sheets: add-item wizard stages with a quantity + commits the batch to the 
   } finally { clearLocalStorage(); }
 });
 
-test('sheets: invAddRef stores the item KIND; free-text armor resolves by name (ROADMAP 7)', () => {
-  const { host, rec } = createMockHost(META, PHB());
-  let stored = {};
-  host.store.patchAddonData = (_c, itemId, fn) => { stored = fn(stored) || stored; return { id: itemId, addonData: { 'dnd-sheets': stored } }; };
-  register(host);
-  const act = (name, ...args) => rec.actions.find((a) => a.name === name).fn(...args);
-  act('invAddRef', 'c1', 'armor', 'leather');
+test('sheets: internal inventory helper stores item kind; free-text armor resolves by name (ROADMAP 7)', () => {
+  const stored = addInventoryItems({}, [{ kind: 'armor', ref: 'leather', name: 'Leather Armor', qty: 1 }], {
+    uid: () => 'item-1',
+    num,
+    location: () => 'equipped',
+  });
   assert.equal(stored.inventory[0].kind, 'armor', 'the kind rides beside the ref — no cross-kind probing needed');
   assert.equal(stored.inventory[0].ref, 'leather');
   // A hand-typed armor NAME now links too (the by-name fallback probes both
@@ -1390,4 +1446,52 @@ test('sheets: no Spellbook tab for a non-caster with no spells (engine mode)', (
   const { rec } = dryRunRegister(register, META, PHB());
   const out = renderBody(rec, { id: 'cf', name: 'Brute', addonData: { 'dnd-sheets': { className: 'Fighter' } } });
   assert.doesNotMatch(out, /Spellbook/, 'spellbook tab hidden for a non-caster');
+});
+
+test('sheets: unload clears domain timers and a reload registers one clean action set', async () => {
+  const originalTimeout = globalThis.setTimeout;
+  const originalClearTimeout = globalThis.clearTimeout;
+  const originalDocument = globalThis.document;
+  const originalUrl = globalThis.URL;
+  let nextTimer = 1;
+  const scheduled = [];
+  const cleared = [];
+  globalThis.setTimeout = (_fn, delay) => {
+    const id = nextTimer++;
+    scheduled.push({ id, delay });
+    return id;
+  };
+  globalThis.clearTimeout = (id) => { cleared.push(id); };
+  globalThis.document = {
+    getElementById: () => ({ focus() {} }),
+    createElement: () => ({ click() {}, remove() {} }),
+    body: { appendChild() {} },
+  };
+  globalThis.URL = {
+    createObjectURL: () => 'blob:p8-test',
+    revokeObjectURL() {},
+  };
+  mockLocalStorage('overview');
+  try {
+    const run = dryRunRegister(register, META, { ...PHB(), fixtures: { characters: [FIGHTER] } });
+    const act = (name, ...args) => run.rec.actions.find((action) => action.name === name).fn(...args);
+    act('tabKey', { key: 'ArrowRight', preventDefault() {} }, 'c1', 'overview');
+    act('builderTabKey', { key: 'ArrowRight', preventDefault() {} }, 'c1', 'character');
+    act('exportSheet', 'c1');
+    assert.ok(scheduled.length >= 2, 'multiple domain-owned timers were scheduled');
+
+    await run.dispose();
+    assert.equal(run.rec.actions.length, 0, 'the host removes every action registration on unload');
+    assert.deepEqual(cleared.slice().sort(), scheduled.map((timer) => timer.id).sort(), 'domain disposers clear every pending timer');
+
+    const reload = dryRunRegister(register, META, PHB());
+    assert.deepEqual(reload.rec.actions.map((action) => action.name).sort(), RETAINED_ACTIONS, 'reload registers one fresh retained action set');
+    await reload.dispose();
+  } finally {
+    clearLocalStorage();
+    globalThis.setTimeout = originalTimeout;
+    globalThis.clearTimeout = originalClearTimeout;
+    if (originalDocument === undefined) delete globalThis.document; else globalThis.document = originalDocument;
+    globalThis.URL = originalUrl;
+  }
 });

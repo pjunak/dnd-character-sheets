@@ -19,10 +19,10 @@ addon's data is present. `provide()`s the rules API for future consumers
 1. [`README.md`](README.md) — tabs, editing model, dev + test commands.
 2. [`rules/README.md`](rules/README.md) — the engine: layout, hydration
    pipeline, slot/multiclass semantics.
-3. [`docs/RULES_EDGE_CASES.md`](docs/RULES_EDGE_CASES.md) — the design spine
-   (stable IDs ARCH-*/SP-*/…, locked decisions §13). Historical names inside
-   entries ("core-rules", "compendium") are retired — the header explains how
-   to read them; `model.js` is the truth for shipped field names.
+3. [`docs/RULES_EDGE_CASES.md`](docs/RULES_EDGE_CASES.md) — the canonical
+   current runtime contract and edge cases. It intentionally contains no
+   implementation history; `model.js` remains the truth for shipped field
+   names.
 4. The **canonical addon-authoring contract** lives in the host repo:
    `../ttrpg-codex/examples/addons/AGENTS.md` (condensed) and
    `../ttrpg-codex/examples/addons/AUTHORING.md` (full reference,
@@ -34,8 +34,15 @@ addon's data is present. `provide()`s the rules API for future consumers
 
 ```
 addon.json          manifest — id dnd-sheets, optionalDependencies, tests.client
-entry.js            register(host), tab strip + routing, vitals-bar placement —
-                    its header comment is the de-facto architecture doc
+entry.js            composition root: register(host), panels, tab routing,
+                    fragment render, rules API provision, domain disposers
+actions.base.js     tabs, direct fields/proficiencies, overrides, layout
+actions.spells.js   spell prep/book, swaps, grants, drag/drop, manager
+actions.inventory.js inventory/equipment + add-item wizard; addInventoryItems
+actions.resources.js resources/rest; pure applyHpChange helper
+actions.builder.js  guided decision mutations + in-memory Builder UI state
+actions.transfer.js print/export/import; owns download URL timers
+actions.shared.js   small action-map registration helper
 model.js            THE data layer: stored-blob read/migration, viewModel,
                     builderMutate + materializeInto (DEG-1), getRules() probe
 panel.overview.js   ⚠ renders the CHARACTER SHEET tab (id `stats`) — entry.js appends
@@ -61,6 +68,11 @@ not persisted). A sheet-wide toolbar offers Print / Export / Import (B4.6).
 ## Layering rules (where new code goes)
 
 - **Panels render only.** No stored-blob mutation, no rules math in panels.
+- **`entry.js` composes; `actions.*.js` own controller behavior.** Register a
+  new action in exactly one domain module and pass its dependencies explicitly
+  from `entry.js`. Domain-local timers/state must have a disposer returned to
+  the composition root. The host lifecycle removes registrations; domain
+  disposers clear only their owned resources.
 - **`model.js` owns the pipeline + every mutator.** Any new engine-affecting
   mutation MUST route through `builderMutate`/`materializeInto` — that is the
   **DEG-1 obligation**: every Builder edit materializes computed values into
@@ -129,7 +141,7 @@ components; standalone (no book) degrades to a hand-filled sheet (DEG-1).
   / `.codex-link-tile` / `.codex-skel`. Do NOT hand-roll a look-alike (custom −/＋
   buttons, a bespoke tab underline, a local SVG glyph set): budget/live-play logic
   can live addon-side, but the *control* is the host's. Quick-adjust action
-  buttons (HP ±, tracker ±) use `.inline-create-btn`. When something addon-local
+  buttons (tracker ±) use `.inline-create-btn`. When something addon-local
   proves generic (a 2nd consumer appears), promote it INTO `ttrpg-codex`
   rather than copying it between addons — that's how the `.codex-*`
   family grew; domain *semantics* (save shields, prof dots) stay addon-side,
@@ -143,6 +155,10 @@ components; standalone (no book) degrades to a hand-filled sheet (DEG-1).
 - `register(host)` side-effect-free except `register*`; renderers must survive
   sparse/empty input (blobs from older schema versions included — `model.js`
   forward-migrates on read).
+- Action names are internal UI wiring, not a consumer API. The public
+  programmatic contract is the versioned object passed to `host.provide()`.
+  `tests/smoke.mjs` locks the retained action inventory, render paths, and
+  unload/reload cleanup.
 - Everything in **English**.
 
 ## Settled decisions (don't relitigate)

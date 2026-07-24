@@ -6,8 +6,7 @@
 //  data is present (the tab is gated on `getRules()`), and the rules api is
 //  built in-addon (rules/api.js) with a guaranteed shape — its list* members
 //  return [] while data is missing, so sections degrade to empty pickers
-//  rather than throwing. (The old cross-addon `callEngine` feature-detection
-//  died with the dnd55e-core-rules merge.)
+//  rather than throwing.
 // ═══════════════════════════════════════════════════════════════
 
 export function makeBuilderPanel(ctx) {

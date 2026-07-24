@@ -45,13 +45,32 @@ Spellbook; Character Sheet and Combat place it inside their own right column.
 button.** The host's own **✏ Upravit** owns identity/lore/portrait (it rides the host
 side-card, which lands inside the Overview tab); editors
 (`!isAnonymous()`) change D&D stats directly in the tabs (and the Builder), while
-anonymous viewers get a clean read-only sheet. Live-play controls (HP ±, trackers,
+anonymous viewers get a clean read-only sheet. Live-play controls (HP, trackers,
 spell prep, proficiency toggles) follow the same gate.
 
 Everything can be entered by hand. The **rules engine is built in** (`rules/engine.js`, a
 pure host-free module) — but without book data it only does universal D&D arithmetic
 (ability modifiers `⌊(score−10)/2⌋`, proficiency totals). The addon has **no hard
 dependencies** and works entirely standalone.
+
+## Architecture
+
+`entry.js` is the composition root: it builds the model/UI context, composes the
+panels, registers the character-body fragment, provides the versioned rules API,
+and collects domain disposers. Controller actions live in focused modules:
+
+- `actions.base.js` — tabs, direct fields/proficiencies, overrides, layout.
+- `actions.spells.js` — preparation, spellbooks, grants, swaps, drag/drop,
+  and spell management.
+- `actions.inventory.js` — inventory/equipment and the add-item wizard.
+- `actions.resources.js` — resources and rests.
+- `actions.builder.js` — guided Builder decisions and its transient UI state.
+- `actions.transfer.js` — print, JSON export, and import.
+
+Panels remain render-only, `model.js` owns stored-sheet mutation and
+materialization, and `rules/` remains pure and host-free. Action names are
+internal UI wiring; the supported consumer contract is the rules object exposed
+through `host.provide()`.
 
 ## Designed to grow
 
@@ -65,8 +84,8 @@ dependencies** and works entirely standalone.
   overridable by a provider's `ruleset` record (`dnd5e-compendium` is the reserved
   2014 provider).
 - **Rules API for other addons:** the addon `provide()`s the same rules api the panels
-  consume (`hydrate` / `derive.*` / `list*` passthroughs), so a future combat or NPC
-  addon can declare a dependency on `dnd-sheets` and reuse the engine.
+  consume (`hydrate` / `derive.*` / `list*` passthroughs), so another addon can
+  declare a dependency on `dnd-sheets` and reuse the engine.
 - **Localization:** all UI strings flow through a vendored `i18n.js` that mirrors the host's
   localization design (English source of truth, per-locale catalogs layered on top, browser
   default, per-key English fallback). v1 ships English only; adding a language is dropping a
@@ -88,4 +107,6 @@ node --test tests/smoke.mjs
 node --test tests/rules.mjs
 ```
 
-See [`AGENTS.md`](AGENTS.md) for the full addon authoring contract.
+See [`rules/README.md`](rules/README.md) for the provided API and
+[`docs/RULES_EDGE_CASES.md`](docs/RULES_EDGE_CASES.md) for the canonical
+runtime semantics. [`AGENTS.md`](AGENTS.md) contains the repository contract.

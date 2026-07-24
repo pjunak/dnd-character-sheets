@@ -59,7 +59,7 @@ export function makeBackpackPanel(ctx) {
   }
 
   // Resolve an inventory item → its compendium {kind, id, rec}. The stored
-  // `it.kind` (written by invAddRef) is authoritative; the weapon→armor id
+  // `it.kind` (written by the add-item flow) is authoritative; the weapon→armor id
   // probe survives only for LEGACY rows that predate the kind field, and the
   // by-name fallback (free-text items) now tries both kinds. null for
   // unresolvable items or when the book is absent (→ plain text, no link).

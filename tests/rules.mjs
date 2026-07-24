@@ -1,5 +1,5 @@
-// Self-test for the BUILT-IN rules engine (rules/engine.js + rules/api.js —
-// merged from the retired dnd55e-core-rules addon), driven through the sheets
+// Self-test for the BUILT-IN rules engine (rules/engine.js + rules/api.js),
+// driven through the sheets
 // addon's real register(): `rec.provided` is the rules api this addon
 // provide()s for other addons, identical to the one the panels consume.
 // Run: node --test tests/rules.mjs  (assumes ttrpg-codex is a sibling checkout).
@@ -462,8 +462,8 @@ test('rules: martial-finesse-or-light proficiency covers only finesse/light mart
 });
 
 test('rules: a non-origin class grants only its multiclassProficiencies weapons when declared (PR-5)', () => {
-  // The compendium doesn't ship the field yet — records WITHOUT it must keep
-  // the full starting set (the guard is inert), records WITH it reduce.
+  // Records without the field keep the compatibility fallback; populated
+  // payloads reduce the non-origin class's weapon grants.
   const inv = [{ id: 'w1', ref: 'longsword', location: 'equipped' }];
   const abilities = { STR: 14, INT: 16 };
   const plain = makeFake();
@@ -710,8 +710,8 @@ test('ruleset: DEFAULT_RULESET matches the compendium dnd-2024 record (drift gua
 });
 
 test('ruleset: provided rules api surface is the documented contract (shape lock)', () => {
-  // rules/README.md documents this surface for other addons (a future combat
-  // tracker consumes it via host.use('dnd-sheets')). Removing/renaming a
+  // rules/README.md documents this surface for host.use('dnd-sheets')
+  // consumers. Removing/renaming a
   // method is a BREAKING change: bump apiVersion and update the doc.
   const { rec } = withFake();
   const api = rec.provided;

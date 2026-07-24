@@ -40,7 +40,7 @@ export function makeUI(ctx) {
     .addon-dnd-sheets .dse-cols { display:flex; gap:var(--space-4); align-items:flex-start; flex-wrap:wrap }
     .addon-dnd-sheets .dse-cards { display:flex; flex-direction:column; gap:var(--space-3); flex:0 1 17rem; min-width:14rem }
     .addon-dnd-sheets .dse-cols-main { flex:1 1 20rem; min-width:0 }
-    @media (max-width:720px){ .addon-dnd-sheets .dse-cards { flex-basis:100% } }
+    @media (max-width:768px){ .addon-dnd-sheets .dse-cards { flex-basis:100% } }
     /* Compact vitals strip: two tall anchor tiles (the HP counter + the AC/shield
        tile) with the small stats stacked two-high in a column-flow grid, so the
        whole strip reads as ONE uniform-height band. Tiles hug their label/value
@@ -57,7 +57,7 @@ export function makeUI(ctx) {
     /* Equipment: a Worn group + a dynamic Attunement group, each a header row over
        a 3-up slot grid. Slots hug the band height beside the stat grid. */
     .addon-dnd-sheets .dse-eqwrap { display:flex; flex-direction:column; gap:var(--space-2); flex:1 1 15rem; min-width:13rem }
-    .addon-dnd-sheets .dse-eqgrp { display:flex; flex-direction:column; gap:4px }
+    .addon-dnd-sheets .dse-eqgrp { display:flex; flex-direction:column; gap:var(--space-1) }
     .addon-dnd-sheets .dse-eqh { display:flex; align-items:center; gap:var(--space-1); font-size:var(--text-xs); text-transform:uppercase; letter-spacing:.05em; color:var(--text-muted) }
     .addon-dnd-sheets .dse-eqh-cnt { margin-left:auto; color:var(--accent-gold); font-weight:600; font-variant-numeric:tabular-nums }
     .addon-dnd-sheets .dse-eqh-over { color:var(--color-danger) }
@@ -67,11 +67,11 @@ export function makeUI(ctx) {
     .addon-dnd-sheets .dse-slot-tag { font-size:var(--text-xs); text-transform:uppercase; letter-spacing:.04em; color:var(--text-muted); flex:none }
     .addon-dnd-sheets .dse-slot-name { flex:1; min-width:0; font-size:var(--text-sm); color:var(--text-parchment); line-height:1.15; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
     .addon-dnd-sheets .dse-slot-name-empty { flex:1; color:var(--text-muted); font-style:italic; font-size:var(--text-xs) }
-    .addon-dnd-sheets .dse-slot-x { margin-left:auto; flex:none; padding:0 4px; line-height:1 }
-    .addon-dnd-sheets .dse-slot-pick { flex:1; min-width:0; width:auto; font-size:var(--text-xs); padding:2px 4px }
+    .addon-dnd-sheets .dse-slot-x { margin-left:auto; flex:none; padding:0 var(--space-1); line-height:1 }
+    .addon-dnd-sheets .dse-slot-pick { flex:1; min-width:0; width:auto; font-size:var(--text-xs); padding:var(--space-1) }
     /* Docked-stat chip (COMPACT layout): a tiny labelled number riding an
        ability card — Init on DEX, Save DC / Spell Atk on the casting ability. */
-    .addon-dnd-sheets .dse-dock { display:inline-flex; align-items:center; gap:4px; background:var(--bg-raised); border:1px solid rgba(var(--accent-gold-rgb),.35); border-radius:var(--radius-sm); padding:1px var(--space-1); font-size:var(--text-xs); color:var(--text-muted); text-transform:uppercase; letter-spacing:.03em; white-space:nowrap }
+    .addon-dnd-sheets .dse-dock { display:inline-flex; align-items:center; gap:var(--space-1); background:var(--bg-raised); border:1px solid rgba(var(--accent-gold-rgb),.35); border-radius:var(--radius-sm); padding:1px var(--space-1); font-size:var(--text-xs); color:var(--text-muted); text-transform:uppercase; letter-spacing:.03em; white-space:nowrap }
     .addon-dnd-sheets .dse-dock strong { color:var(--text-parchment); font-variant-numeric:tabular-nums }
     /* The title-row slot between the ability name and the save shield: takes
        all the leftover width and centres its docked chip (equal space each
@@ -86,7 +86,7 @@ export function makeUI(ctx) {
     .addon-dnd-sheets .dse-bp-split { display:grid; grid-template-columns:1fr 1fr; gap:var(--space-4) }
     .addon-dnd-sheets .dse-bp-col { display:flex; flex-direction:column; gap:var(--space-3); min-width:0 }
     .addon-dnd-sheets .dse-bp-right { border-left:1px solid var(--border-subtle); padding-left:var(--space-4) }
-    @media (max-width:640px){
+    @media (max-width:768px){
       .addon-dnd-sheets .dse-bp-split { grid-template-columns:1fr }
       .addon-dnd-sheets .dse-bp-right { border-left:0; padding-left:0 }
     }
@@ -105,20 +105,20 @@ export function makeUI(ctx) {
     .addon-dnd-sheets .dse-aiw-browse { min-width:0; display:flex; flex-direction:column; gap:var(--space-2) }
     .addon-dnd-sheets .dse-aiw-search { display:flex; align-items:center; gap:var(--space-2); background:var(--bg-surface); border:1px solid rgba(var(--accent-gold-rgb),.4); border-radius:var(--radius); padding:var(--space-1) var(--space-2) }
     .addon-dnd-sheets .dse-aiw-search input { border:none; background:transparent; flex:1; min-width:0 }
-    .addon-dnd-sheets .dse-aiw-crumbs { display:flex; align-items:center; gap:4px; flex-wrap:wrap; font-size:var(--text-sm) }
-    .addon-dnd-sheets .dse-aiw-cr { background:none; border:none; color:var(--accent-gold); cursor:pointer; padding:2px 6px; border-radius:var(--radius-sm); font:inherit }
+    .addon-dnd-sheets .dse-aiw-crumbs { display:flex; align-items:center; gap:var(--space-1); flex-wrap:wrap; font-size:var(--text-sm) }
+    .addon-dnd-sheets .dse-aiw-cr { background:none; border:none; color:var(--accent-gold); cursor:pointer; padding:var(--space-1) var(--space-2); border-radius:var(--radius-sm); font:inherit }
     .addon-dnd-sheets .dse-aiw-cr:hover { background:rgba(var(--accent-gold-rgb),.1) }
     .addon-dnd-sheets .dse-aiw-cr.here { color:var(--text-parchment); font-weight:600; cursor:default }
     .addon-dnd-sheets .dse-aiw-sep { color:var(--text-muted) }
-    .addon-dnd-sheets .dse-aiw-up { margin-left:auto; background:none; border:1px solid var(--border-subtle); border-radius:var(--radius-sm); color:var(--text-muted); cursor:pointer; padding:2px 8px; font:inherit; font-size:var(--text-xs) }
-    .addon-dnd-sheets .dse-aiw-folders { display:flex; flex-direction:column; gap:2px }
+    .addon-dnd-sheets .dse-aiw-up { margin-left:auto; background:none; border:1px solid var(--border-subtle); border-radius:var(--radius-sm); color:var(--text-muted); cursor:pointer; padding:var(--space-1) var(--space-2); font:inherit; font-size:var(--text-xs) }
+    .addon-dnd-sheets .dse-aiw-folders { display:flex; flex-direction:column; gap:var(--space-1) }
     .addon-dnd-sheets .dse-aiw-folder { display:flex; align-items:center; gap:var(--space-2); padding:var(--space-1) var(--space-2); border-radius:var(--radius-sm); cursor:pointer; border:1px solid transparent; background:none; font:inherit; text-align:left; width:100% }
     .addon-dnd-sheets .dse-aiw-folder:hover { background:rgba(var(--accent-gold-rgb),.08); border-color:rgba(var(--accent-gold-rgb),.2) }
     .addon-dnd-sheets .dse-aiw-fi { color:var(--accent-gold) }
     .addon-dnd-sheets .dse-aiw-fn { color:var(--text-parchment); flex:1; font-size:var(--text-sm) }
     .addon-dnd-sheets .dse-aiw-fc { color:var(--text-muted); font-size:var(--text-xs) }
     .addon-dnd-sheets .dse-aiw-divlbl { font-size:var(--text-xs); text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted); margin:var(--space-2) 0 var(--space-1) }
-    .addon-dnd-sheets .dse-aiw-results { display:flex; flex-direction:column; gap:2px; max-height:320px; overflow-y:auto }
+    .addon-dnd-sheets .dse-aiw-results { display:flex; flex-direction:column; gap:var(--space-1); max-height:320px; overflow-y:auto }
     .addon-dnd-sheets .dse-aiw-res { display:flex; align-items:center; gap:var(--space-2); padding:var(--space-1) var(--space-2); border-radius:var(--radius-sm) }
     .addon-dnd-sheets .dse-aiw-res:hover { background:rgba(var(--accent-gold-rgb),.06) }
     .addon-dnd-sheets .dse-aiw-meta { flex:1; min-width:0 }
@@ -130,11 +130,11 @@ export function makeUI(ctx) {
     .addon-dnd-sheets .dse-aiw-cart { border-left:1px solid var(--border-subtle); padding-left:var(--space-3); display:flex; flex-direction:column; min-width:0 }
     .addon-dnd-sheets .dse-aiw-ch { font-size:var(--text-xs); text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted); margin-bottom:var(--space-2) }
     .addon-dnd-sheets .dse-aiw-cc { color:var(--accent-gold); font-weight:600 }
-    .addon-dnd-sheets .dse-aiw-cbody { display:flex; flex-direction:column; gap:2px; flex:1 }
+    .addon-dnd-sheets .dse-aiw-cbody { display:flex; flex-direction:column; gap:var(--space-1); flex:1 }
     .addon-dnd-sheets .dse-aiw-ci { display:flex; align-items:center; gap:var(--space-1); font-size:var(--text-sm); color:var(--text-parchment); padding:var(--space-1) 0; border-bottom:1px solid var(--border-subtle) }
     .addon-dnd-sheets .dse-aiw-cn { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
     .addon-dnd-sheets .dse-aiw-cfoot { margin-top:var(--space-2); display:flex; flex-direction:column; gap:var(--space-1) }
-    @media (max-width:640px){
+    @media (max-width:768px){
       .addon-dnd-sheets .dse-aiw { grid-template-columns:1fr }
       .addon-dnd-sheets .dse-aiw-cart { border-left:0; padding-left:0; border-top:1px solid var(--border-subtle); padding-top:var(--space-2) }
     }
@@ -169,9 +169,7 @@ export function makeUI(ctx) {
     sectionLabel: 'font-size:var(--text-xs);color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:var(--space-2)',
     subLabel: 'color:var(--text-muted);font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.04em;margin-bottom:var(--space-1)',
     // Legacy compact tiles (Builder summary still uses these)
-    statBox: 'background:var(--bg-raised);border-radius:var(--radius);padding:var(--space-2) var(--space-3);min-width:4.5rem;text-align:center',
     statBoxLabel: 'font-size:var(--text-xs);color:var(--text-muted)',
-    statBoxValue: 'font-size:var(--text-lg);color:var(--text-parchment);font-weight:600',
     miniStat: 'background:var(--bg-surface);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);padding:var(--space-1) var(--space-2);text-align:center;min-width:3.5rem',
     miniStatValue: 'color:var(--text-parchment);font-weight:600;font-size:var(--text-sm)',
   };
@@ -348,11 +346,6 @@ export function makeUI(ctx) {
     return `${diverge}<div style="display:flex;gap:var(--space-1);justify-content:center;align-items:center">${input}${clrBtn}</div>`;
   }
 
-  // ── Statboxes the Builder summary still uses. ─────────────────────
-  function statBox(label, value) {
-    return `<div style="${S.statBox}"><div style="${S.statBoxLabel}">${esc(label)}</div>
-      <div style="${S.statBoxValue}">${esc(String(value))}</div></div>`;
-  }
   function miniStat(label, value) {
     return `<div style="${S.miniStat}"><div style="${S.statBoxLabel}">${esc(label)}</div>
       <div style="${S.miniStatValue}">${esc(String(value))}</div></div>`;
@@ -499,7 +492,7 @@ export function makeUI(ctx) {
   return {
     S, styleTag, section, card, sectionLabel, subLabel, bagIcon, equipmentModel,
     heroTile, abilityTile, profDot, profRow, rowLine, overrideControls,
-    numField, statTip, entityRef, statBox, miniStat,
+    numField, statTip, entityRef, miniStat,
     selectBox, fieldRow, choiceBlock, spellChip, spellInfo, spellLegend, warningsBlock, attacksBlock,
   };
 }

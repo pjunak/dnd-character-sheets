@@ -8,8 +8,8 @@
 //  always wins — ARCH-3). Also owns `mutate` / `builderMutate` (persist + re-render
 //  through patchAddonData → this NS only).
 //
-//  The rules ENGINE is built in (rules/engine.js + rules/api.js — merged from
-//  the retired dnd55e-core-rules addon); what's optional is the CONTENT: the
+//  The rules ENGINE is built in (rules/engine.js + rules/api.js); what's
+//  optional is the CONTENT: the
 //  api activates only while a book data addon (dnd55e-compendium) is
 //  installed, and the sheet stays fully hand-fillable without it.
 //

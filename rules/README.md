@@ -18,7 +18,7 @@ mastery, epic boons, background-vs-species ASI) live in **`ruleset.js`** as
 `DEFAULT_RULESET` — the D&D 2024 values — and the data provider may override them by
 shipping a `ruleset` record (see the compendium's `data/SCHEMA.md`). `resolveRuleset`
 merges the record **per constant** over the defaults, so a missing or partial record
-degrades to 2024 behavior, never breakage. Authority order for any rule value:
+degrades to 2024 behavior, never breakage. Spell-slot table authority is:
 
 ```
 printed class progression  >  ruleset record  >  built-in 2024 defaults
@@ -47,9 +47,9 @@ installing/uninstalling the book addon never breaks a sheet.
 
 ## The provided api is a CONTRACT
 
-`entry.js` `provide()`s this api for other addons — a future combat tracker consumes
-it via `host.use('dnd-sheets')` with one manifest `optionalDependencies` line. The
-surface is **shape-locked** by a test in `../tests/rules.mjs` ("shape lock"): the
+`entry.js` `provide()`s this api for other addons through
+`host.use('dnd-sheets')`. The surface is **shape-locked** by a test in
+`../tests/rules.mjs` ("shape lock"): the
 exact method list is
 
 `apiVersion` · `listClasses` · `listSubclasses` · `listFeatures` · `getFeature` ·
@@ -60,16 +60,14 @@ exact method list is
 
 Adding a method is fine (additive). **Removing or renaming one, or changing a return
 shape, is a breaking change**: bump `apiVersion`, update the shape-lock test and this
-doc, and keep the old name delegating for at least one release. This contract — not
-repo separation — is what lets the sheet's panels be edited freely without breaking
-consumers; if a second consumer ever makes the shared repo painful, the whole `rules/`
-dir extracts cleanly (pure module, fake-fixture tests, this documented surface).
+doc, and keep the old name delegating for at least one release. This contract
+lets the sheet's panels and external consumers evolve without moving the
+engine out of this addon.
 
 ## Status
 
-The full hydration pipeline is **implemented** (ported from
-[Living-scroll](https://github.com/pjunak/Living-scroll)'s `rules_engine` +
-`dnd24_mechanics`). `hydrate(decisions)` runs the whole sequence — abilities (with
+The full hydration pipeline is **implemented**. `hydrate(decisions)` runs the
+whole sequence — abilities (with
 ability grants, capped per the ruleset; 2024: 20) → classes + proficiency bonus → species/lineage
 (speed, senses, resistances, per-level HP) → background → HP → AC → initiative →
 saves → skills (proficiency + expertise) → spellcasting (per-class DC/attack,
@@ -80,17 +78,18 @@ throwing, and the sheet is always returned. `derive.*` exposes granular helpers
 (`abilityMod`, `proficiencyBonus`, `multiclassSlots`, `initiative`, `maxHp`,
 `armorClass`, `saveDC`).
 
-**Spell slots:** a single caster class reads its class record's own printed
-per-level slot progression (`progression[].spellSlots`) verbatim; only genuine
-multiclassing (2+ caster classes) uses the combined-caster-level table (fraction
-rounding per the ruleset — 2024: halves round up, thirds down). When a class's
-(abbreviated) content lacks `spellSlots`, the engine falls back to a
-caster-level heuristic so it never reports empty slots.
+**Spell slots:** a single caster class reads an optional printed
+`progression[].spellSlots` row verbatim; genuine multiclassing (2+ caster
+classes) uses the combined-caster-level table, with fraction rounding from the
+ruleset. Current `dnd55e-compendium` class records omit printed slot rows, so
+their real slot pools use the resolved ruleset table. Pact Magic remains a
+separate pool driven by `constants.pactMagic`.
 
-**Multiclassing & HP:** the character's first level gets the maximum of its hit
-die; every other level gets the average. For the common single-class case this is
-simply that class's die; multiclass order beyond the first entry doesn't change
-the total, so no "origin class" is tracked.
+**Multiclassing & HP:** the first entry in `classes[]` is the origin class. Its
+first character level gets the maximum of its hit die and later levels use the
+average. Other class levels also use the average. Reordering entries changes
+origin-class saves and starting proficiency semantics even when the HP total is
+unchanged.
 
 **Collected features:** class features grant from the per-class `feature`
 records (`listFeatures({classId})`, record level ≤ class level) — the

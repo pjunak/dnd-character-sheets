@@ -262,7 +262,6 @@ export default {
   'spell.overLimit':     'Over the prepared limit — unprepare one.',
   'spell.extraSpells':   'Extra spells',
   'spell.addExtra':      'Add spell',
-  'spell.copySpell':     'Add a copied spell (homebrew)',
   'spell.copied':        'Copied from another spellbook',
   'spell.snapshot':      'From the last engine-computed loadout (kept when the rulebook addon is removed)',
   'spell.copyBtn':       'Copy from a spell scroll',
