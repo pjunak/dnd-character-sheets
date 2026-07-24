@@ -24,9 +24,8 @@ in the sheet blob.
 
 ## Print, export, and import
 
-Complete printable-sheet localization, provide a user-facing JSON export, and
-add an explicit file-picker import flow with validation and a recoverable
-preview.
+Provide a user-facing JSON export and add an explicit file-picker import flow
+with validation and a recoverable preview.
 
 ## Multiclass proficiency contract
 
