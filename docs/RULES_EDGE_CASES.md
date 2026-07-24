@@ -18,7 +18,8 @@ gaps live in `dnd55e-compendium/data/SCHEMA.md` and `data/GAPS.md`.
   returned through `host.provide(...)` separately has `apiVersion: 1`.
   Provider API versions and host manifest API versions are different
   namespaces.
-- `collections.dm` is reserved by the host but is not an available capability.
+- `collections.dm` is an available API-v2 host capability for addon-owned
+  DM-only collections. This addon does not require or use it.
   The sheet contract does not require or advertise it.
 
 ## Stored decisions and materialized fields
