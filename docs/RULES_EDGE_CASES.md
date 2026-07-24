@@ -14,7 +14,8 @@ gaps live in `dnd55e-compendium/data/SCHEMA.md` and `data/GAPS.md`.
   future consumers; moving or extracting it is not part of the contract.
 - Book data is optional. The 2024 provider id is `dnd55e-compendium`; the
   reserved 2014 provider id is `dnd5e-compendium`.
-- The sheet addon manifest currently uses host addon API v1. The rules object
+- The sheet addon manifest uses host addon API v2 and requires the
+  `lifecycle.dispose` and `i18n.catalogs` capabilities. The rules object
   returned through `host.provide(...)` separately has `apiVersion: 1`.
   Provider API versions and host manifest API versions are different
   namespaces.

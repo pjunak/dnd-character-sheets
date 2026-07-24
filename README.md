@@ -86,10 +86,10 @@ through `host.provide()`.
 - **Rules API for other addons:** the addon `provide()`s the same rules api the panels
   consume (`hydrate` / `derive.*` / `list*` passthroughs), so another addon can
   declare a dependency on `dnd-sheets` and reuse the engine.
-- **Localization:** all UI strings flow through a vendored `i18n.js` that mirrors the host's
-  localization design (English source of truth, per-locale catalogs layered on top, browser
-  default, per-key English fallback). v1 ships English only; adding a language is dropping a
-  `strings/<locale>.js` and one `registerCatalog` call — no rewrite.
+- **Localization:** all UI strings flow through the scoped `host.i18n` facade.
+  `addon.json` declares packaged JSON catalogs under `locales/`; English is the
+  source of truth and partial translations fall back per key through the host's
+  per-user locale rules. The current package ships English.
 
 ## Develop
 

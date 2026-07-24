@@ -35,6 +35,8 @@ import { INVENTORY_ACTIONS, addInventoryItems } from '../actions.inventory.js';
 import { BUILDER_ACTIONS } from '../actions.builder.js';
 import { TRANSFER_ACTIONS } from '../actions.transfer.js';
 
+const EN_CATALOG = JSON.parse(readFileSync(new URL('../locales/en.json', import.meta.url), 'utf8'));
+
 function mockLocalStorage(tab) {
   globalThis.localStorage = {
     getItem: (k) => (String(k).startsWith('dse-tab:') ? (tab || null) : null),
@@ -54,9 +56,17 @@ function renderBody(rec, char, lore) {
 
 const META = {
   id: 'dnd-sheets',
+  version: '0.6.0',
+  apiVersion: 2,
+  hostVersion: '>=1.0.0',
+  capabilities: { required: ['lifecycle.dispose', 'i18n.catalogs'] },
+  locales: { en: 'locales/en.json' },
   permissions: ['ui:override', 'ui:action', 'data:read:characters', 'data:write:characters.addonData'],
   optionalDependencies: { 'dnd55e-compendium': { range: '>=0.1.0' } },
 };
+const localizedOpts = (opts = {}) => ({ ...opts, catalogs: { en: EN_CATALOG } });
+const dryRun = (opts = {}) => dryRunRegister(register, META, localizedOpts(opts));
+const mockHost = (opts = {}) => createMockHost(META, localizedOpts(opts));
 
 // Book data present → the built-in engine computes (fresh fake per test).
 const PHB = () => ({ deps: { 'dnd55e-compendium': makeFake() } });
@@ -77,7 +87,7 @@ const FIGHTER = {
 };
 
 test('sheets: register is clean + wires the expected surface', () => {
-  const { ok, rec, error } = dryRunRegister(register, META);
+  const { ok, rec, error } = dryRun();
   assert.ok(ok, error);
   assert.ok(rec.fragmentOps.some(f => f.target === 'characters:body' && f.spec.op === 'replace'), 'replaces the character body fragment');
   const names = rec.actions.map((action) => action.name);
@@ -91,9 +101,35 @@ test('sheets: register is clean + wires the expected surface', () => {
 });
 
 test('sheets: renderers survive the smoke pass (sparse entity)', () => {
-  const { rec } = dryRunRegister(register, META);
+  const { rec } = dryRun();
   const smoke = smokeRegistrations(rec);
   assert.ok(smoke.ok, JSON.stringify(smoke.failures));
+  assert.deepEqual(rec.i18nMissing, [], 'render smoke references only declared English source keys');
+});
+
+test('sheets: scoped host locale changes and partial catalogs update rendered UI', () => {
+  mockLocalStorage('stats');
+  try {
+    const catalogs = {
+      en: EN_CATALOG,
+      cs: {
+        'tab.stats': 'Deník postavy',
+        'sheet.title': 'Deník D&D',
+      },
+    };
+    const localizedMeta = {
+      ...META,
+      locales: { ...META.locales, cs: 'locales/cs.json' },
+    };
+    const { ok, rec, error } = dryRunRegister(register, localizedMeta, {
+      locale: 'cs-CZ',
+      catalogs,
+    });
+    assert.ok(ok, error);
+    assert.match(renderBody(rec, FIGHTER), /Deník postavy/);
+  } finally {
+    clearLocalStorage();
+  }
 });
 
 test('sheets: removed action seams are absent from every representative render path', () => {
@@ -105,7 +141,7 @@ test('sheets: removed action seams are absent from every representative render p
   try {
     for (const tab of ['overview', 'stats', 'combat', 'spellbook', 'builder', 'settings']) {
       mockLocalStorage(tab);
-      const { rec } = dryRunRegister(register, META, PHB());
+      const { rec } = dryRun(PHB());
       const out = renderBody(rec, character);
       const registered = new Set(rec.actions.map((action) => action.name));
       const referenced = [...out.matchAll(/data-(?:action|on-[a-z]+)="dnd-sheets:([^"]+)"/g)].map((match) => match[1]);
@@ -130,7 +166,7 @@ test('sheets: scoped styles use host tokens and canonical breakpoints', () => {
 test('sheets: Overview tab is the host lore (reused, not duplicated)', () => {
   mockLocalStorage('overview');
   try {
-    const { rec } = dryRunRegister(register, META);
+    const { rec } = dryRun();
     const out = renderBody(rec, FIGHTER, '<div class="md-view"><p>UNIQUE_LORE_MARKER</p></div>');
     assert.match(out, /UNIQUE_LORE_MARKER/, 'the host lore IS the Overview tab');
     assert.match(out, /Character Sheet/, 'the addon adds D&D tabs');
@@ -141,7 +177,7 @@ test('sheets: Overview tab is the host lore (reused, not duplicated)', () => {
 test('sheets: Character Sheet tab shows class + ability mods (standalone)', () => {
   mockLocalStorage('stats');
   try {
-    const { rec } = dryRunRegister(register, META);
+    const { rec } = dryRun();
     const out = renderBody(rec, FIGHTER);
     assert.match(out, /Fighter/, 'class line in the vitals bar');
     assert.match(out, /\+3/, 'STR modifier (+3)');
@@ -152,7 +188,7 @@ test('sheets: Character Sheet tab shows class + ability mods (standalone)', () =
 test('sheets: engine-computed vitals + Builder tab (editor, book data present)', () => {
   mockLocalStorage('stats');
   try {
-    const { rec } = dryRunRegister(register, META, PHB());
+    const { rec } = dryRun(PHB());
     // Real engine over fake book data: L1 Wizard (d6) with CON 14 → max HP 6+2=8.
     const out = renderBody(rec, { id: 'c9', name: 'Mage', addonData: { 'dnd-sheets': { className: 'Wizard', hp: 4, abilities: { CON: 14 } } } });
     assert.match(out, /Builder/, 'Builder tab appears (book data + editor)');
@@ -163,7 +199,7 @@ test('sheets: engine-computed vitals + Builder tab (editor, book data present)',
 test('sheets: HP is a directly-editable stepper — no heal/damage-by-amount field (B5)', () => {
   mockLocalStorage('stats');
   try {
-    const { rec } = dryRunRegister(register, META, PHB());
+    const { rec } = dryRun(PHB());
     const out = renderBody(rec, { id: 'chp', name: 'Mage', addonData: { 'dnd-sheets': { className: 'Wizard', hp: 4, abilities: { CON: 14 } } } });
     assert.match(out, /codex-stepper/, 'current HP uses the host .codex-stepper');
     assert.match(out, /"hp","\$value"/, 'the HP stepper writes the hp field (setField)');
@@ -175,7 +211,7 @@ test('sheets: HP is a directly-editable stepper — no heal/damage-by-amount fie
 test('sheets: vital tiles carry text labels + the compact strip adds spell DC/attack', () => {
   mockLocalStorage('stats');
   try {
-    const { rec } = dryRunRegister(register, META, PHB());
+    const { rec } = dryRun(PHB());
     const out = renderBody(rec, { id: 'cvi', name: 'Mage', addonData: { 'dnd-sheets': { className: 'Wizard', abilities: { DEX: 14 } } } });
     // Stat names are spelled-out text labels again (the icon-glyph vitals were
     // reverted — icons read too cryptic for the width they saved).
@@ -198,7 +234,7 @@ test('sheets: vital tiles carry text labels + the compact strip adds spell DC/at
 test('sheets: 3-state SVG proficiency dots + AC shield-equipped indicator (UI polish)', () => {
   mockLocalStorage('stats');
   try {
-    const { rec } = dryRunRegister(register, META, PHB());
+    const { rec } = dryRun(PHB());
     // Sage background grants Arcana + History proficiency → a proficient dot to assert.
     const out = renderBody(rec, { id: 'cui', name: 'Mage', addonData: { 'dnd-sheets': { className: 'Wizard', background: 'Sage', abilities: { DEX: 14 } } } });
     // Dots are inline SVG: none = small outline circle, proficient = small filled circle
@@ -217,7 +253,7 @@ test('sheets: 3-state SVG proficiency dots + AC shield-equipped indicator (UI po
 test('sheets: anonymous viewer gets a read-only sheet (no Builder, no inputs)', () => {
   mockLocalStorage('stats');
   try {
-    const { rec } = dryRunRegister(register, META, { ...PHB(), isAnonymous: true });
+    const { rec } = dryRun({ ...PHB(), isAnonymous: true });
     const out = renderBody(rec, { id: 'ca', name: 'Mage', addonData: { 'dnd-sheets': { className: 'Wizard' } } });
     assert.doesNotMatch(out, /Builder/, 'no Builder tab for an anonymous viewer');
     assert.doesNotMatch(out, /<input/, 'no edit inputs for an anonymous viewer');
@@ -228,7 +264,7 @@ test('sheets: anonymous viewer gets a read-only sheet (no Builder, no inputs)', 
 test('sheets: Builder tab renders the guided form when book data is present', () => {
   mockLocalStorage('builder');
   try {
-    const { rec } = dryRunRegister(register, META, PHB());
+    const { rec } = dryRun(PHB());
     const out = renderBody(rec, { id: 'cb', name: 'Hero', addonData: { 'dnd-sheets': { className: 'Wizard', abilities: { INT: 15 } } } });
     assert.match(out, /Ability Scores|Class & Levels|Progression/, 'shows Builder sections');
     assert.match(out, /Wizard/, 'class dropdown / resolved class');
@@ -239,7 +275,7 @@ test('sheets: Builder tab renders the guided form when book data is present', ()
 test('sheets: the Builder is tabbed — Character + one tab per class (B4.5b)', () => {
   mockLocalStorage('builder');
   try {
-    const { rec } = dryRunRegister(register, META, PHB());
+    const { rec } = dryRun(PHB());
     const out = renderBody(rec, { id: 'cbt', name: 'Multi', addonData: { 'dnd-sheets': {
       classes: [{ classId: 'fighter', level: 2, subclass: '' }, { classId: 'wizard', level: 3, subclass: '' }], abilities: { STR: 14, INT: 14 } } } });
     assert.match(out, /builderTab/, 'the sub-tab strip is present');
@@ -252,7 +288,7 @@ test('sheets: the Builder is tabbed — Character + one tab per class (B4.5b)', 
 test('sheets: a class tab spine shows SUBCLASS features (A4/B4.5b)', () => {
   mockLocalStorage('builder');
   try {
-    const { rec } = dryRunRegister(register, META, PHB());
+    const { rec } = dryRun(PHB());
     rec.actions.find((a) => a.name === 'builderTab').fn('cbs', 'fighter');   // open the Fighter class tab
     // Eldritch Knight grants "War Bond" at level 3; the spine filters subclass features
     // by cl.subclass — not cl.classId — so it appears in the Fighter tab's spine.
@@ -265,7 +301,7 @@ test('sheets: a class tab spine shows SUBCLASS features (A4/B4.5b)', () => {
 test('sheets: the class spine links resolved feature names to the compendium (B1.2)', () => {
   mockLocalStorage('builder');
   try {
-    const { rec } = dryRunRegister(register, META, PHB());
+    const { rec } = dryRun(PHB());
     rec.actions.find((a) => a.name === 'builderTab').fn('cbl', 'sorcerer');   // open the Sorcerer class tab
     // Sorcerer L2's "Metamagic" resolves to the sorcerer-metamagic feature record → its
     // name links to the compendium detail page (in the class spine now, not a flat log).
@@ -289,7 +325,7 @@ test('sheets: featureChoices resolve into engine inputs (skill prof + expertise)
     getItem: (kind, id) => ((kind === 'class' && id === 'wizard') ? WIZ : null),
     getItemByName: (kind, name) => ((kind === 'class' && /wizard/i.test(String(name))) ? WIZ : null),
   }));
-  const { host } = createMockHost(META, {});
+  const { host } = mockHost({});
   const { sheetOf } = makeHelpers(host);
   const E = makeEngine({ host, NS: 'dnd-sheets', ABILITIES, SKILLS, num, abilityMod, sheetOf });
   const s = sheetOf({ addonData: { 'dnd-sheets': {
@@ -307,7 +343,7 @@ test('sheets: duplicate multi-pick values dedupe in resolved inputs (FE-7)', () 
   const api = makeRulesApi(() => ({ apiVersion: 1,
     getItem: (kind, id) => ((kind === 'class' && id === 'wizard') ? WIZ : null),
     getItemByName: (kind, name) => ((kind === 'class' && /wizard/i.test(String(name))) ? WIZ : null) }));
-  const { host } = createMockHost(META, {});
+  const { host } = mockHost({});
   const { sheetOf } = makeHelpers(host);
   const E = makeEngine({ host, NS: 'dnd-sheets', ABILITIES, SKILLS, num, abilityMod, sheetOf });
   const s = sheetOf({ addonData: { 'dnd-sheets': { className: 'Wizard',
@@ -332,7 +368,7 @@ test('sheets: duplicate L1 skills descriptor dedupes to one picker — no "conte
   const api = makeRulesApi(() => ({ apiVersion: 1,
     getItem: (kind, id) => ((kind === 'class' && id === 'cleric') ? CLERIC : null),
     getItemByName: (kind, name) => ((kind === 'class' && /cleric/i.test(String(name))) ? CLERIC : null) }));
-  const { host } = createMockHost(META, {});
+  const { host } = mockHost({});
   const { sheetOf } = makeHelpers(host);
   const E = makeEngine({ host, NS: 'dnd-sheets', ABILITIES, SKILLS, num, abilityMod, sheetOf });
   const choices = E.collectChoices([{ classId: 'cleric', level: 1, subclass: '' }], api);
@@ -344,7 +380,7 @@ test('sheets: duplicate L1 skills descriptor dedupes to one picker — no "conte
 });
 
 test('sheets: Builder actions mutate the model + materialize without throwing', () => {
-  const { rec } = dryRunRegister(register, META, PHB());
+  const { rec } = dryRun(PHB());
   const act = (name, ...args) => rec.actions.find(a => a.name === name).fn(...args);
   assert.doesNotThrow(() => act('builderAbility', 'c1', 'STR', '15'));
   assert.doesNotThrow(() => act('builderClassSet', 'c1', 0, 'wizard'));
@@ -357,7 +393,7 @@ test('sheets: Builder actions mutate the model + materialize without throwing', 
 test('sheets: a half-feat chosen at an ASI level applies its ability bump (AB-2)', () => {
   // great-weapon-master (single-option +1 STR) and fey-touched (choose one of
   // INT/WIS/CHA) both live in the shared fake book data.
-  const { host, rec } = createMockHost(META, PHB());
+  const { host, rec } = mockHost(PHB());
   let stored = {};
   host.store.patchAddonData = (_c, itemId, fn) => { stored = fn(stored) || stored; return { id: itemId, addonData: { 'dnd-sheets': stored } }; };
   register(host);
@@ -377,7 +413,7 @@ test('sheets: a half-feat chosen at an ASI level applies its ability bump (AB-2)
 });
 
 test('sheets: ASI number picker distributes a 2-point budget (+2 or +1/+1), capped (B5)', () => {
-  const { host, rec } = createMockHost(META, PHB());
+  const { host, rec } = mockHost(PHB());
   let stored = {};
   host.store.patchAddonData = (_c, itemId, fn) => { stored = fn(stored) || stored; return { id: itemId, addonData: { 'dnd-sheets': stored } }; };
   register(host);
@@ -401,7 +437,7 @@ test('sheets: ASI number picker distributes a 2-point budget (+2 or +1/+1), capp
 });
 
 test('sheets: background ASI number picker distributes 3 points, +2 max per ability (B5)', () => {
-  const { host, rec } = createMockHost(META, PHB());
+  const { host, rec } = mockHost(PHB());
   let stored = {};
   host.store.patchAddonData = (_c, itemId, fn) => { stored = fn(stored) || stored; return { id: itemId, addonData: { 'dnd-sheets': stored } }; };
   register(host);
@@ -419,7 +455,7 @@ test('sheets: background ASI number picker distributes 3 points, +2 max per abil
 test('sheets: ASI level renders ability number-pickers, not a single-ability select (B5)', () => {
   mockLocalStorage('builder');
   try {
-    const { rec } = dryRunRegister(register, META, PHB());
+    const { rec } = dryRun(PHB());
     const act = (n, ...a) => rec.actions.find((x) => x.name === n).fn(...a);
     act('builderTab', 'casi', 'fighter');
     act('builderToggleLevel', 'casi', 'fighter:4');   // expand the L4 ASI row
@@ -435,7 +471,7 @@ test('sheets: ASI level renders ability number-pickers, not a single-ability sel
 test('sheets: the L19 slot offers Epic Boon feats (grouped); earlier ASI levels stay general-only', () => {
   mockLocalStorage('builder');
   try {
-    const { rec } = dryRunRegister(register, META, PHB());
+    const { rec } = dryRun(PHB());
     const act = (n, ...a) => rec.actions.find((x) => x.name === n).fn(...a);
     const charOf = (id, extra) => ({ id, name: 'Ftr', addonData: { 'dnd-sheets': {
       classes: [{ classId: 'fighter', level: 19, subclass: '' }], abilities: {},
@@ -462,7 +498,7 @@ test('sheets: the L19 slot offers Epic Boon feats (grouped); earlier ASI levels 
 });
 
 test('sheets: a picked Epic Boon applies its +1 through the grant machinery with the 30 cap', () => {
-  const { host, rec } = createMockHost(META, PHB());
+  const { host, rec } = mockHost(PHB());
   let stored = {
     classes: [{ classId: 'fighter', level: 19, subclass: '' }],
     manualScores: true, baseStats: { STR: 10, DEX: 10, CON: 10, INT: 20, WIS: 10, CHA: 10 },
@@ -487,7 +523,7 @@ test('sheets: a picked Epic Boon applies its +1 through the grant machinery with
 test('sheets: a multi-pick pool excludes an option already taken in another box (FE-7)', () => {
   mockLocalStorage('builder');
   try {
-    const { rec } = dryRunRegister(register, META, PHB());
+    const { rec } = dryRun(PHB());
     const act = (n, ...a) => rec.actions.find((x) => x.name === n).fn(...a);
     act('builderTab', 'cfe7', 'sorcerer');            // open the Sorcerer class tab
     act('builderToggleLevel', 'cfe7', 'sorcerer:2');  // expand L2 (Metamagic) to reveal the pickers
@@ -504,7 +540,7 @@ test('sheets: a multi-pick pool excludes an option already taken in another box 
 test('sheets: builder spine rows are whole-row click targets, inner links stay live (B5)', () => {
   mockLocalStorage('builder');
   try {
-    const { rec } = dryRunRegister(register, META, PHB());
+    const { rec } = dryRun(PHB());
     const act = (n, ...a) => rec.actions.find((x) => x.name === n).fn(...a);
     act('builderTab', 'cct', 'sorcerer');   // Sorcerer L2 has Metamagic → an expandable spine row
     const out = renderBody(rec, { id: 'cct', name: 'Sorc', addonData: { 'dnd-sheets': {
@@ -529,7 +565,7 @@ test('sheets: builder sub-tabs support roving-tabindex arrow-key nav (a11y)', ()
   mockLocalStorage('builder');
   try {
     const char = { id: 'ctk', name: 'Mage', addonData: { 'dnd-sheets': { classes: [{ classId: 'wizard', level: 1, subclass: '' }], abilities: { INT: 15 } } } };
-    const { rec } = dryRunRegister(register, META, { ...PHB(), fixtures: { characters: [char] } });
+    const { rec } = dryRun({ ...PHB(), fixtures: { characters: [char] } });
     const act = (n, ...a) => rec.actions.find((x) => x.name === n).fn(...a);
     const out = renderBody(rec, char);
     // ARIA tablist wiring: the active tab is the sole roving tab stop + keydown-wired.
@@ -546,7 +582,7 @@ test('sheets: builder sub-tabs support roving-tabindex arrow-key nav (a11y)', ()
 test('sheets: Spellbook separates granted from picks + shows the available pool', () => {
   mockLocalStorage('spellbook');
   try {
-    const { rec } = dryRunRegister(register, META, PHB());
+    const { rec } = dryRun(PHB());
     // Life Domain (subclass grant, level 3) → Bless always-prepared via the
     // real engine (mirrors tests/rules.mjs "grants always-prepared spells").
     const out = renderBody(rec, { id: 'csp', name: 'Mage', addonData: { 'dnd-sheets': {
@@ -576,7 +612,7 @@ test('sheets: Spellbook separates granted from picks + shows the available pool'
 test('sheets: a prepared ritual spell is marked when the class can ritual-cast (B4.2)', () => {
   mockLocalStorage('spellbook');
   try {
-    const { rec } = dryRunRegister(register, META, PHB());
+    const { rec } = dryRun(PHB());
     // Wizard can ritual-cast; Detect Magic (prepared) has the Ritual tag → ⟳ marker.
     const out = renderBody(rec, { id: 'crit', name: 'Mage', addonData: { 'dnd-sheets': {
       classes: [{ classId: 'wizard', level: 5, subclass: '' }],
@@ -589,7 +625,7 @@ test('sheets: a prepared ritual spell is marked when the class can ritual-cast (
 test('sheets: a Wizard prepares from the learned spellbook, not the full class list (B4.2b)', () => {
   mockLocalStorage('spellbook');
   try {
-    const { rec } = dryRunRegister(register, META, PHB());
+    const { rec } = dryRun(PHB());
     // Wizard L5: only Mage Armor learned into the book; nothing prepared yet.
     const out = renderBody(rec, { id: 'cbk', name: 'Mage', addonData: { 'dnd-sheets': {
       classes: [{ classId: 'wizard', level: 5, subclass: '' }], abilities: { INT: 16 },
@@ -625,7 +661,7 @@ test('sheets: Spellbook management — two buttons, copy mode + other-source mod
   // Button gating (no modal open): Wizard shows BOTH add buttons; a list-caster only "another source".
   mockLocalStorage('spellbook');
   try {
-    const { rec } = dryRunRegister(register, META, PHB());
+    const { rec } = dryRun(PHB());
     const wiz = renderBody(rec, char);
     assert.match(wiz, /Copy from a spell scroll/, 'wizard shows the scroll-copy button');
     assert.match(wiz, /Add from another source/, 'wizard shows the other-source button');
@@ -637,7 +673,7 @@ test('sheets: Spellbook management — two buttons, copy mode + other-source mod
   // COPY mode — scroll + gp form (titles/costs are modal-only, so mode is unambiguous).
   globalThis.localStorage = modeLS('copy');
   try {
-    const { rec } = dryRunRegister(register, META, PHB());
+    const { rec } = dryRun(PHB());
     const out = renderBody(rec, char);
     assert.match(out, /Copy a spell into your Wizard spellbook/, 'copy modal title');
     assert.match(out, /Fireball — 150 gp/, 'a copyable spell shows its 50-gp-per-level cost');
@@ -650,7 +686,7 @@ test('sheets: Spellbook management — two buttons, copy mode + other-source mod
   // OTHER-SOURCE mode — homebrew form with the cast-with-slots option (SP-10).
   globalThis.localStorage = modeLS('other');
   try {
-    const { rec } = dryRunRegister(register, META, PHB());
+    const { rec } = dryRun(PHB());
     const out = renderBody(rec, char);
     assert.match(out, /Add a spell from another source/, 'other-source modal title');
     assert.match(out, /dse-custom-slots-cmgr/, 'a caster gets the "cast with spell slots" checkbox');
@@ -677,7 +713,7 @@ test('sheets: scroll-copy offers only scrolls of the picked spell + never consum
   // Picked spell = Fireball: only the Fireball scroll is offered (ROADMAP 5b).
   globalThis.localStorage = modeLS('copy', 'fireball');
   try {
-    const { rec } = dryRunRegister(register, META, PHB());
+    const { rec } = dryRun(PHB());
     const out = renderBody(rec, char);
     assert.match(scrollSelect(out), /Spell Scroll of Fireball/, 'the scroll holding the picked spell is offered');
     assert.doesNotMatch(scrollSelect(out), /Scroll of Healing Word/, 'a scroll of a DIFFERENT spell is never offered');
@@ -686,13 +722,13 @@ test('sheets: scroll-copy offers only scrolls of the picked spell + never consum
   // Picked spell = Detect Magic: no matching scroll → disabled message, wrong scrolls hidden.
   globalThis.localStorage = modeLS('copy', 'detect-magic');
   try {
-    const { rec } = dryRunRegister(register, META, PHB());
+    const { rec } = dryRun(PHB());
     const out = renderBody(rec, char);
     assert.match(out, /No scroll of this spell/, 'a no-match state instead of wrong scrolls');
     assert.doesNotMatch(scrollSelect(out), /Scroll of Healing Word/, 'wrong scrolls stay hidden in the no-match state');
   } finally { clearLocalStorage(); }
   // Apply-time guard: a mismatched scroll id is NOT consumed (the copy still lands).
-  const { host, rec } = createMockHost(META, PHB());
+  const { host, rec } = mockHost(PHB());
   let stored = blob();
   host.store.patchAddonData = (_c, itemId, fn) => { stored = fn(stored) || stored; return { id: itemId, addonData: { 'dnd-sheets': stored } }; };
   register(host);
@@ -712,7 +748,7 @@ test('sheets: scroll-copy offers only scrolls of the picked spell + never consum
 test('sheets: a Warlock shows Pact Magic in the Spellbook summary (B4.3)', () => {
   mockLocalStorage('spellbook');
   try {
-    const { rec } = dryRunRegister(register, META, PHB());
+    const { rec } = dryRun(PHB());
     const out = renderBody(rec, { id: 'cwl', name: 'Lock', addonData: { 'dnd-sheets': {
       classes: [{ classId: 'warlock', level: 5, subclass: '' }], abilities: { CHA: 16 } } } });
     assert.match(out, /Pact/, 'the Spellbook summary shows a Pact indicator');
@@ -722,7 +758,7 @@ test('sheets: a Warlock shows Pact Magic in the Spellbook summary (B4.3)', () =>
 test('sheets: pact slots are a short-rest tracker resource (B4.3)', () => {
   mockLocalStorage('combat');
   try {
-    const { rec } = dryRunRegister(register, META, PHB());
+    const { rec } = dryRun(PHB());
     const out = renderBody(rec, { id: 'cwlt', name: 'Lock', addonData: { 'dnd-sheets': {
       classes: [{ classId: 'warlock', level: 5, subclass: '' }], abilities: { CHA: 16 } } } });
     assert.match(out, /Pact Slots/, 'pact slots listed as a tracker');
@@ -733,7 +769,7 @@ test('sheets: pact slots are a short-rest tracker resource (B4.3)', () => {
 test('sheets: Combat tab shows a read-only Features summary linking to the compendium (B4.4)', () => {
   mockLocalStorage('combat');
   try {
-    const { rec } = dryRunRegister(register, META, PHB());
+    const { rec } = dryRun(PHB());
     const out = renderBody(rec, { id: 'cfs', name: 'Sorc', addonData: { 'dnd-sheets': {
       classes: [{ classId: 'sorcerer', level: 2, subclass: '' }], abilities: { CHA: 15 } } } });
     assert.match(out, /Features/, 'a Features summary section is present');
@@ -744,7 +780,7 @@ test('sheets: Combat tab shows a read-only Features summary linking to the compe
 test('sheets: a chosen ASI feat shows a ↗ compendium link in the Builder (B4.4 / B2.2)', () => {
   mockLocalStorage('builder');
   try {
-    const { rec } = dryRunRegister(register, META, PHB());
+    const { rec } = dryRun(PHB());
     const act = (n, ...a) => rec.actions.find((x) => x.name === n).fn(...a);
     act('builderTab', 'cfl', 'fighter');           // open the Fighter class tab
     act('builderToggleLevel', 'cfl', 'fighter:4');  // expand L4 (ASI) to reveal the feat picker
@@ -758,7 +794,7 @@ test('sheets: a chosen ASI feat shows a ↗ compendium link in the Builder (B4.4
 test('sheets: the class spine flags unresolved levels + summarizes made choices as chips (B4.5b)', () => {
   mockLocalStorage('builder');
   try {
-    const { rec } = dryRunRegister(register, META, PHB());
+    const { rec } = dryRun(PHB());
     rec.actions.find((a) => a.name === 'builderTab').fn('cch', 'fighter');   // Fighter tab, nothing expanded
     // L4 is an ASI level. Unresolved → a soft "needs choices" flag; editor stays hidden (collapsed).
     const unset = renderBody(rec, { id: 'cch', name: 'Ftr', addonData: { 'dnd-sheets': {
@@ -776,7 +812,7 @@ test('sheets: the class spine flags unresolved levels + summarizes made choices 
 test('sheets: a class tab levels via +/- and picks its subclass in the spine (B4.5b)', () => {
   mockLocalStorage('builder');
   try {
-    const { rec } = dryRunRegister(register, META, PHB());
+    const { rec } = dryRun(PHB());
     const act = (n, ...a) => rec.actions.find((x) => x.name === n).fn(...a);
     act('builderTab', 'clv', 'fighter');
     const char = { id: 'clv', name: 'Ftr', addonData: { 'dnd-sheets': {
@@ -797,7 +833,7 @@ test('sheets: a class tab levels via +/- and picks its subclass in the spine (B4
 test('sheets: the Character tab manages extra feats (compendium + free-text) (B4.5b)', () => {
   mockLocalStorage('builder');
   try {
-    const { rec } = dryRunRegister(register, META, PHB());
+    const { rec } = dryRun(PHB());
     const out = renderBody(rec, { id: 'cxf', name: 'Hero', addonData: { 'dnd-sheets': {
       classes: [{ classId: 'fighter', level: 1, subclass: '' }], abilities: { STR: 15 },
       extraFeats: [{ id: 'x1', featId: 'tough', sourceNote: 'from a boon' }, { id: 'x2', name: 'Homebrew Luck', sourceNote: 'DM gift' }] } } });
@@ -812,7 +848,7 @@ test('sheets: the Character tab manages extra feats (compendium + free-text) (B4
 
 test('sheets: an extra feat with a featId feeds the engine feats list (B4.5b)', () => {
   const api = makeRulesApi(() => ({ apiVersion: 1, getItem: () => null, getItemByName: () => null }));
-  const { host } = createMockHost(META, {});
+  const { host } = mockHost({});
   const { sheetOf } = makeHelpers(host);
   const E = makeEngine({ host, NS: 'dnd-sheets', ABILITIES, SKILLS, num, abilityMod, sheetOf });
   const s = sheetOf({ addonData: { 'dnd-sheets': {
@@ -825,7 +861,7 @@ test('sheets: an extra feat with a featId feeds the engine feats list (B4.5b)', 
 test('sheets: a recorded spell swap shows in the class spine at its level (B4.5b)', () => {
   mockLocalStorage('builder');
   try {
-    const { rec } = dryRunRegister(register, META, PHB());
+    const { rec } = dryRun(PHB());
     rec.actions.find((a) => a.name === 'builderTab').fn('csw', 'wizard');   // open the Wizard class tab
     const out = renderBody(rec, { id: 'csw', name: 'Mage', addonData: { 'dnd-sheets': {
       classes: [{ classId: 'wizard', level: 5, subclass: '' }], abilities: { INT: 15 },
@@ -840,7 +876,7 @@ test('sheets: printSheet builds a self-contained print sheet (B4.6)', () => {
     classes: [{ classId: 'wizard', level: 5, subclass: '' }], abilities: { INT: 16, DEX: 14, CON: 14 },
     preparedSpells: { wizard: ['fireball'] }, cantrips: { wizard: ['fire-bolt'] },
     inventory: [{ id: 'i1', name: 'Spellbook', qty: 1, location: 'pack' }], currency: { gp: 25 } } } };
-  const { rec } = dryRunRegister(register, META, { ...PHB(), fixtures: { characters: [char] } });
+  const { rec } = dryRun({ ...PHB(), fixtures: { characters: [char] } });
   let captured = '';
   globalThis.window = { open: () => ({ document: { open() {}, write(h) { captured = h; }, close() {} }, focus() {}, print() {} }) };
   try { rec.actions.find((a) => a.name === 'printSheet').fn('cp'); } finally { delete globalThis.window; }
@@ -854,7 +890,7 @@ test('sheets: printSheet builds a self-contained print sheet (B4.6)', () => {
 
 test('sheets: exportSheet serializes the character to JSON (B4.6)', () => {
   const char = { id: 'ce', name: 'Frodo', addonData: { 'dnd-sheets': { className: 'Rogue', level: 3, abilities: { DEX: 16 } } } };
-  const { rec } = dryRunRegister(register, META, { ...PHB(), fixtures: { characters: [char] } });
+  const { rec } = dryRun({ ...PHB(), fixtures: { characters: [char] } });
   let captured = '';
   const oB = globalThis.Blob, oU = globalThis.URL, oD = globalThis.document;
   globalThis.Blob = function (parts) { captured = String((parts && parts[0]) || ''); };
@@ -870,7 +906,7 @@ test('sheets: exportSheet serializes the character to JSON (B4.6)', () => {
 test('sheets: the import modal renders a paste area (B4.6)', () => {
   globalThis.localStorage = { getItem: (k) => (String(k).startsWith('dse-import:') ? 'open' : null), setItem() {}, removeItem() {} };
   try {
-    const { rec } = dryRunRegister(register, META, PHB());
+    const { rec } = dryRun(PHB());
     const out = renderBody(rec, { id: 'cim', name: 'Sam', addonData: { 'dnd-sheets': { className: 'Fighter' } } });
     assert.match(out, /Import character/, 'the import modal title');
     assert.match(out, /dse-import-cim/, 'the paste textarea');
@@ -879,7 +915,7 @@ test('sheets: the import modal renders a paste area (B4.6)', () => {
 });
 
 test('sheets: import parses safely — valid + garbage JSON never throw (B4.6)', () => {
-  const { rec } = dryRunRegister(register, META, PHB());
+  const { rec } = dryRun(PHB());
   const act = (n, ...a) => rec.actions.find((x) => x.name === n).fn(...a);
   assert.doesNotThrow(() => act('importOpen', 'c1'));
   assert.doesNotThrow(() => act('importClose', 'c1'));
@@ -892,7 +928,7 @@ test('sheets: import parses safely — valid + garbage JSON never throw (B4.6)',
 test('sheets: recorded spell swaps show as a linked history in the Spellbook (B4.5)', () => {
   mockLocalStorage('spellbook');
   try {
-    const { rec } = dryRunRegister(register, META, PHB());
+    const { rec } = dryRun(PHB());
     const out = renderBody(rec, { id: 'csw', name: 'Mage', addonData: { 'dnd-sheets': {
       classes: [{ classId: 'wizard', level: 5, subclass: '' }],
       spellSwaps: [{ level: 3, classId: 'wizard', out: 'fireball', in: 'misty-step' }] } } });
@@ -904,7 +940,7 @@ test('sheets: recorded spell swaps show as a linked history in the Spellbook (B4
 });
 
 test('sheets: spell-swap actions do not throw (open/close/apply/forget)', () => {
-  const { rec } = dryRunRegister(register, META, PHB());
+  const { rec } = dryRun(PHB());
   const act = (name, ...args) => rec.actions.find((a) => a.name === name).fn(...args);
   assert.doesNotThrow(() => act('spellSwapOpen', 'c1', 'wizard'));
   assert.doesNotThrow(() => act('spellSwapClose', 'c1'));
@@ -915,7 +951,7 @@ test('sheets: spell-swap actions do not throw (open/close/apply/forget)', () => 
 test('sheets: choose-grant picker renders a filtered pool + pick/unpick actions', () => {
   mockLocalStorage('spellbook');
   try {
-    const { rec } = dryRunRegister(register, META, PHB());
+    const { rec } = dryRun(PHB());
     // Acolyte's origin feat is Magic Initiate (choose 2 wizard cantrips + 1
     // level-1 spell) → pending choices surface pickers.
     const out = renderBody(rec, { id: 'cmi', name: 'Mage', addonData: { 'dnd-sheets': { className: 'Wizard', background: 'Acolyte' } } });
@@ -924,14 +960,14 @@ test('sheets: choose-grant picker renders a filtered pool + pick/unpick actions'
     assert.match(out, /<option value="fire-bolt">/, 'picker offers the matching level-0 wizard cantrip');
     assert.doesNotMatch(out, /<option value="fireball"/, 'a non-matching (level-3) spell is NOT an option in the cantrip picker');
   } finally { clearLocalStorage(); }
-  const { rec } = dryRunRegister(register, META, PHB());
+  const { rec } = dryRun(PHB());
   const act = (name, ...args) => rec.actions.find((a) => a.name === name).fn(...args);
   assert.doesNotThrow(() => act('grantPick', 'c1', 'feat:magic-initiate:mi-cantrips', 'fire-bolt'));
   assert.doesNotThrow(() => act('grantUnpick', 'c1', 'feat:magic-initiate:mi-cantrips', 'fire-bolt'));
 });
 
 test('sheets: spellbook prepare/cantrip/manager + drag-drop actions do not throw', () => {
-  const { rec } = dryRunRegister(register, META, PHB());
+  const { rec } = dryRun(PHB());
   const act = (name, ...args) => rec.actions.find(a => a.name === name).fn(...args);
   assert.doesNotThrow(() => act('prepSpell', 'c1', 'wizard', 'fireball'));
   assert.doesNotThrow(() => act('learnCantrip', 'c1', 'wizard', 'fire-bolt'));
@@ -960,7 +996,7 @@ test('sheets: spellbook prepare/cantrip/manager + drag-drop actions do not throw
 test('sheets: prepared picks over the limit stay visible + removable (never hidden)', () => {
   mockLocalStorage('spellbook');
   try {
-    const { rec } = dryRunRegister(register, META, PHB());
+    const { rec } = dryRun(PHB());
     // L1 Wizard (preparedLimit 4) holding 5 picks — e.g. after a level-down.
     // Every chip must render; the one past the cap gets the warning treatment.
     const out = renderBody(rec, { id: 'cov', name: 'Mage', addonData: { 'dnd-sheets': {
@@ -975,7 +1011,7 @@ test('sheets: prepared picks over the limit stay visible + removable (never hidd
 });
 
 test('sheets: spellDrop validates class list / level / capacity / book membership (no silent overfill)', () => {
-  const { host, rec } = createMockHost(META, PHB());
+  const { host, rec } = mockHost(PHB());
   let stored = { className: 'Wizard', level: 1, abilities: {} };
   host.store.patchAddonData = (_c, itemId, fn) => { stored = fn(stored) || stored; return { id: itemId, addonData: { 'dnd-sheets': stored } }; };
   register(host);
@@ -1002,7 +1038,7 @@ test('sheets: spellDrop validates class list / level / capacity / book membershi
 test('sheets: Combat tab shows engine-computed attacks from equipped weapons', () => {
   mockLocalStorage('combat');
   try {
-    const { rec } = dryRunRegister(register, META, PHB());
+    const { rec } = dryRun(PHB());
     // Real engine: Fighter STR 16 L1, proficient martial → +3 STR +2 PB = +5
     // (mirrors tests/rules.mjs EQ-3/4/5).
     const out = renderBody(rec, { id: 'ck', name: 'Knight', addonData: { 'dnd-sheets': {
@@ -1019,7 +1055,7 @@ test('sheets: Combat tab shows engine-computed attacks from equipped weapons', (
 test('sheets: Combat tab renders trackers; ± is a live-play control', () => {
   mockLocalStorage('combat');
   try {
-    const { rec } = dryRunRegister(register, META);
+    const { rec } = dryRun();
     const out = renderBody(rec, { id: 'ct', name: 'Brn', addonData: { 'dnd-sheets': { className: 'Barbarian', resources: [{ id: 'r1', name: 'Rage', current: 2, max: 3 }] } } });
     assert.match(out, /Trackers/, 'trackers section on the Combat tab');
     assert.match(out, /Rage/, 'the tracker is shown');
@@ -1030,7 +1066,7 @@ test('sheets: Combat tab renders trackers; ± is a live-play control', () => {
 test('sheets: Combat tab auto-generates trackers + Rest button, with structured recharge', () => {
   mockLocalStorage('combat');
   try {
-    const { rec } = dryRunRegister(register, META, PHB());
+    const { rec } = dryRun(PHB());
     // Real engine: Barbarian L5 → Rage (pool, max 3), Insp (+1 on short rest /
     // full on long rest), d12 hit dice (mirrors tests/rules.mjs FE-2/FE-3).
     const out = renderBody(rec, { id: 'cr', name: 'Brn', addonData: { 'dnd-sheets': { className: 'Barbarian', level: 5 } } });
@@ -1045,7 +1081,7 @@ test('sheets: Combat tab auto-generates trackers + Rest button, with structured 
 });
 
 test('sheets: rest actions (open / spend hit die / short+long apply / close) do not throw', () => {
-  const { rec } = dryRunRegister(register, META, PHB());
+  const { rec } = dryRun(PHB());
   const act = (name, ...args) => rec.actions.find((a) => a.name === name).fn(...args);
   assert.doesNotThrow(() => act('restOpen', 'c1'));
   assert.doesNotThrow(() => act('restSpendHitDie', 'c1', 'hit-dice-d12'));
@@ -1055,7 +1091,7 @@ test('sheets: rest actions (open / spend hit die / short+long apply / close) do 
 });
 
 test('sheets: overrides.maxHp governs every HP clamp + the rest heal (ARCH-3)', () => {
-  const { host, rec } = createMockHost(META, PHB());
+  const { host, rec } = mockHost(PHB());
   // Engine-built L5 Wizard (computed max 32, mirrors tests/rules.mjs) with a DM
   // override of 50 — the override must be the clamp everywhere the tile shows it.
   let stored = { className: 'Wizard', level: 5, abilities: { CON: 14 }, hp: 10, maxHp: 32, overrides: { maxHp: 50 } };
@@ -1086,7 +1122,7 @@ test('sheets: pure HP changes absorb temporary HP and clamp damage/healing', () 
 test('sheets: equipment — free-form Worn slots + strict Attunement, de-duped from the pack', () => {
   mockLocalStorage('stats');
   try {
-    const { rec } = dryRunRegister(register, META, PHB());
+    const { rec } = dryRun(PHB());
     const out = renderBody(rec, { id: 'cb2', name: 'Knight', addonData: { 'dnd-sheets': { className: 'Fighter', inventory: [
       { id: 'i1', ref: 'leather', name: 'Leather Armor', kind: 'armor', location: 'equipped' },
       { id: 'i2', name: 'Ring of Protection', kind: 'magic-item', location: 'pack', attuned: true },
@@ -1121,7 +1157,7 @@ test('sheets: COMPACT layout docks Init / passive / DC / Atk onto the ability ca
   // pre-per-sheet 'compact' choice must carry over via uiLayout's fallback.
   mapLocalStorage({ 'dse-tab:cc': 'stats', 'dse-ui:layout': 'compact' });
   try {
-    const { rec } = dryRunRegister(register, META, PHB());
+    const { rec } = dryRun(PHB());
     const out = renderBody(rec, { id: 'cc', name: 'Mage', addonData: { 'dnd-sheets': { className: 'Wizard', abilities: { DEX: 14 } } } });
     // Docked chips: Initiative on DEX, passive on WIS, Save DC / Spell Atk on
     // the caster card (accent ring only — no "caster" text).
@@ -1147,7 +1183,7 @@ test('sheets: COMPACT layout docks Init / passive / DC / Atk onto the ability ca
 test('sheets: ⚙ Settings tab — per-sheet layout switch + the print/export/import tools', () => {
   const ls = mapLocalStorage({ 'dse-tab:cs': 'settings' });
   try {
-    const { rec } = dryRunRegister(register, META, PHB());
+    const { rec } = dryRun(PHB());
     const out = renderBody(rec, { id: 'cs', name: 'Mage', addonData: { 'dnd-sheets': { className: 'Wizard' } } });
     assert.match(out, /name="dse-layout-cs"/, 'layout radios render on the sheet\'s own tab');
     assert.match(out, /value="classic"[^>]*checked/, 'classic is the default');
@@ -1167,7 +1203,7 @@ test('sheets: ⚙ Settings tab — per-sheet layout switch + the print/export/im
 test('sheets: toolbar gone from the sheet body — Print/Export ride the ⚙ tab only', () => {
   mockLocalStorage('stats');
   try {
-    const { rec } = dryRunRegister(register, META);
+    const { rec } = dryRun();
     const out = renderBody(rec, FIGHTER);
     assert.doesNotMatch(out, /printSheet/, 'no Print button above the tab strip');
     assert.match(out, /⚙️/, 'the Settings tab is offered (standalone + anonymous too)');
@@ -1177,7 +1213,7 @@ test('sheets: toolbar gone from the sheet body — Print/Export ride the ⚙ tab
 test('sheets: currency renders as ONE line pinned under the whole Backpack split', () => {
   mockLocalStorage('stats');
   try {
-    const { rec } = dryRunRegister(register, META);
+    const { rec } = dryRun();
     const out = renderBody(rec, { ...FIGHTER, addonData: { 'dnd-sheets': { ...FIGHTER.addonData['dnd-sheets'], currency: { gp: 10 } } } });
     const body = out.slice(out.indexOf('</style>'));   // skip the CSS (class names appear there too)
     const split = body.indexOf('dse-bp-split');
@@ -1190,7 +1226,7 @@ test('sheets: currency renders as ONE line pinned under the whole Backpack split
 test('sheets: empty equipment slots render click-to-fill pickers (editor)', () => {
   mockLocalStorage('stats');
   try {
-    const { rec } = dryRunRegister(register, META, PHB());
+    const { rec } = dryRun(PHB());
     const out = renderBody(rec, { id: 'ce', name: 'Mage', addonData: { 'dnd-sheets': { className: 'Wizard', inventory: [
       { id: 'p1', ref: 'leather', name: 'Leather Armor', kind: 'armor', location: 'pack' },   // owned, not worn
       { id: 'p2', name: 'Cloak of Protection', kind: 'magic-item', location: 'pack' },          // owned, not attuned
@@ -1203,7 +1239,7 @@ test('sheets: empty equipment slots render click-to-fill pickers (editor)', () =
 });
 
 test('sheets: equipment slot actions (equip / attune / clear) mutate without throwing', () => {
-  const { host, rec } = createMockHost(META, PHB());
+  const { host, rec } = mockHost(PHB());
   let stored = { inventory: [{ id: 'x1', ref: 'leather', name: 'Leather Armor', kind: 'armor', location: 'pack' }, { id: 'x2', name: 'Amulet', kind: 'magic-item', location: 'pack' }] };
   host.store.patchAddonData = (_c, itemId, fn) => { stored = fn(stored) || stored; return { id: itemId, addonData: { 'dnd-sheets': stored } }; };
   register(host);
@@ -1226,7 +1262,7 @@ test('sheets: equipment slot actions (equip / attune / clear) mutate without thr
 test('sheets: Backpack tab retired — no backpack tab button, content in Character Sheet (UI polish)', () => {
   mockLocalStorage('stats');
   try {
-    const { rec } = dryRunRegister(register, META, PHB());
+    const { rec } = dryRun(PHB());
     const out = renderBody(rec, { id: 'cbp', name: 'Knight', addonData: { 'dnd-sheets': { className: 'Fighter', inventory: [{ id: 'i1', name: 'Rope', qty: 1, location: 'pack' }] } } });
     assert.doesNotMatch(out, /:tab" data-args='\["[^"]*","backpack"\]/, 'no standalone Backpack tab button');
     assert.match(out, /Rope/, 'inventory renders inside the Character Sheet tab');
@@ -1236,7 +1272,7 @@ test('sheets: Backpack tab retired — no backpack tab button, content in Charac
 test('sheets: Combat attacks link the weapon to the compendium (B2.3)', () => {
   mockLocalStorage('combat');
   try {
-    const { rec } = dryRunRegister(register, META, PHB());
+    const { rec } = dryRun(PHB());
     const out = renderBody(rec, { id: 'catk', name: 'Knight', addonData: { 'dnd-sheets': {
       classes: [{ classId: 'fighter', level: 1, subclass: '' }], abilities: { STR: 16 },
       inventory: [{ id: 'i1', ref: 'longsword', name: 'Longsword', location: 'equipped' }] } } });
@@ -1247,7 +1283,7 @@ test('sheets: Combat attacks link the weapon to the compendium (B2.3)', () => {
 test('sheets: header class + subclass link to the compendium (B2.4)', () => {
   mockLocalStorage('combat');
   try {
-    const { rec } = dryRunRegister(register, META, PHB());
+    const { rec } = dryRun(PHB());
     // The flat `subclass` deliberately carries the ID here — that's what every
     // blob materialized BEFORE the name fix contains. The header must resolve
     // it (id-first lookup) and display the record's NAME, never the slug.
@@ -1261,7 +1297,7 @@ test('sheets: header class + subclass link to the compendium (B2.4)', () => {
 });
 
 test('sheets: materialize stores the subclass NAME in the flat fallback, id stays in classes[] (DEG-1)', () => {
-  const { host, rec } = createMockHost(META, PHB());
+  const { host, rec } = mockHost(PHB());
   let stored = { classes: [{ classId: 'fighter', level: 3, subclass: '' }], abilities: {} };
   host.store.patchAddonData = (_c, itemId, fn) => { stored = fn(stored) || stored; return { id: itemId, addonData: { 'dnd-sheets': stored } }; };
   register(host);
@@ -1273,7 +1309,7 @@ test('sheets: materialize stores the subclass NAME in the flat fallback, id stay
 });
 
 test('sheets: materialize writes the DEG-1 spell snapshot + the joined multiclass class line', () => {
-  const { host, rec } = createMockHost(META, PHB());
+  const { host, rec } = mockHost(PHB());
   let stored = {
     classes: [{ classId: 'wizard', level: 5, subclass: '' }, { classId: 'fighter', level: 2, subclass: '' }],
     abilities: {}, cantrips: { wizard: ['fire-bolt'] }, preparedSpells: { wizard: ['mage-armor'] },
@@ -1294,7 +1330,7 @@ test('sheets: materialize writes the DEG-1 spell snapshot + the joined multiclas
 });
 
 test('sheets: materialize writes skill EXPERTISE; standalone totals keep the doubled PB (DEG-1)', () => {
-  const { host, rec } = createMockHost(META, PHB());
+  const { host, rec } = mockHost(PHB());
   let stored = {
     classes: [{ classId: 'rogue', level: 1, subclass: '' }],
     abilities: { DEX: 14 },
@@ -1321,12 +1357,12 @@ test('sheets: the spell snapshot renders standalone (book removed) and hides in 
   mockLocalStorage('spellbook');
   try {
     // Standalone (engine off): the snapshot IS the visible spellbook — DEG-1.
-    const { rec } = dryRunRegister(register, META);
+    const { rec } = dryRun();
     const out = renderBody(rec, { id: 'cs1', name: 'Mage', addonData: { 'dnd-sheets': blob } });
     assert.match(out, /Mage Armor/, 'the snapshot spell stays visible after engine/book removal');
     assert.match(out, /📌/, 'marked as the engine-loadout snapshot');
     // Engine mode: the live prep UI owns the loadout — the Extra group hides snapshots.
-    const { rec: rec2 } = dryRunRegister(register, META, PHB());
+    const { rec: rec2 } = dryRun(PHB());
     const out2 = renderBody(rec2, { id: 'cs2', name: 'Mage', addonData: { 'dnd-sheets': blob } });
     assert.doesNotMatch(out2, /📌/, 'engine mode never shows snapshot entries as Extra spells');
   } finally { clearLocalStorage(); }
@@ -1335,7 +1371,7 @@ test('sheets: the spell snapshot renders standalone (book removed) and hides in 
 test('sheets: Backpack add-item + attune actions do not throw', () => {
   mapLocalStorage({});
   try {
-  const { rec } = dryRunRegister(register, META, PHB());
+  const { rec } = dryRun(PHB());
   const act = (name, ...args) => rec.actions.find(a => a.name === name).fn(...args);
   assert.doesNotThrow(() => act('addItemStage', 'c1', 'weapon', 'longsword'));
   assert.doesNotThrow(() => act('addItemStage', 'c1', 'armor', 'leather'));
@@ -1359,7 +1395,7 @@ function mapLocalStorage(initial) {
 test('sheets: add-item wizard — search box, category tree, batch tray with typed quantity', () => {
   const ls = mapLocalStorage({ 'dse-tab:cw': 'stats', 'dse-additem:cw': 'open' });
   try {
-    const { rec } = dryRunRegister(register, META, PHB());
+    const { rec } = dryRun(PHB());
     const char = { id: 'cw', name: 'Mage', addonData: { 'dnd-sheets': { className: 'Wizard' } } };
     const out = renderBody(rec, char);
     assert.match(out, /Add to Backpack/, 'the wizard overlay is open');
@@ -1381,7 +1417,7 @@ test('sheets: add-item wizard — search box, category tree, batch tray with typ
 test('sheets: add-item wizard stages with a quantity + commits the batch to the pack', () => {
   mapLocalStorage({});
   try {
-    const { host, rec } = createMockHost(META, PHB());
+    const { host, rec } = mockHost(PHB());
     let stored = {};
     host.store.patchAddonData = (_c, itemId, fn) => { stored = fn(stored) || stored; return { id: itemId, addonData: { 'dnd-sheets': stored } }; };
     register(host);
@@ -1415,7 +1451,7 @@ test('sheets: internal inventory helper stores item kind; free-text armor resolv
   // kinds) — links show on the read view, so render as an anonymous viewer.
   mockLocalStorage('stats');
   try {
-    const { rec: rec2 } = dryRunRegister(register, META, { ...PHB(), isAnonymous: true });
+    const { rec: rec2 } = dryRun({ ...PHB(), isAnonymous: true });
     const out = renderBody(rec2, { id: 'cit', name: 'Knight', addonData: { 'dnd-sheets': {
       className: 'Fighter', inventory: [{ id: 'i1', name: 'Leather Armor', qty: 1, location: 'pack' }] } } });
     assert.match(out, /href="#\/compendium\/armor:leather"/, 'free-text armor resolves to its compendium page');
@@ -1423,7 +1459,7 @@ test('sheets: internal inventory helper stores item kind; free-text armor resolv
 });
 
 test('sheets: resource tracker actions mutate without throwing', () => {
-  const { rec } = dryRunRegister(register, META);
+  const { rec } = dryRun();
   const act = (name, ...args) => rec.actions.find((a) => a.name === name).fn(...args);
   assert.doesNotThrow(() => act('resourceAdd', 'c1'));
   assert.doesNotThrow(() => act('resourceSet', 'c1', 'x', 'name', 'Rage'));
@@ -1435,7 +1471,7 @@ test('sheets: resource tracker actions mutate without throwing', () => {
 test('sheets: proficiency dots are direct toggles for editors (standalone)', () => {
   mockLocalStorage('stats');
   try {
-    const { rec } = dryRunRegister(register, META);
+    const { rec } = dryRun();
     const out = renderBody(rec, { id: 'pv', name: 'Rgr', addonData: { 'dnd-sheets': { className: 'Ranger' } } });
     assert.match(out, /toggleSkill/, 'skill dots toggle directly (editor)');
     assert.match(out, /toggleSave/, 'save dots toggle directly (editor)');
@@ -1443,7 +1479,7 @@ test('sheets: proficiency dots are direct toggles for editors (standalone)', () 
 });
 
 test('sheets: no Spellbook tab for a non-caster with no spells (engine mode)', () => {
-  const { rec } = dryRunRegister(register, META, PHB());
+  const { rec } = dryRun(PHB());
   const out = renderBody(rec, { id: 'cf', name: 'Brute', addonData: { 'dnd-sheets': { className: 'Fighter' } } });
   assert.doesNotMatch(out, /Spellbook/, 'spellbook tab hidden for a non-caster');
 });
@@ -1473,7 +1509,7 @@ test('sheets: unload clears domain timers and a reload registers one clean actio
   };
   mockLocalStorage('overview');
   try {
-    const run = dryRunRegister(register, META, { ...PHB(), fixtures: { characters: [FIGHTER] } });
+    const run = dryRun({ ...PHB(), fixtures: { characters: [FIGHTER] } });
     const act = (name, ...args) => run.rec.actions.find((action) => action.name === name).fn(...args);
     act('tabKey', { key: 'ArrowRight', preventDefault() {} }, 'c1', 'overview');
     act('builderTabKey', { key: 'ArrowRight', preventDefault() {} }, 'c1', 'character');
@@ -1484,7 +1520,7 @@ test('sheets: unload clears domain timers and a reload registers one clean actio
     assert.equal(run.rec.actions.length, 0, 'the host removes every action registration on unload');
     assert.deepEqual(cleared.slice().sort(), scheduled.map((timer) => timer.id).sort(), 'domain disposers clear every pending timer');
 
-    const reload = dryRunRegister(register, META, PHB());
+    const reload = dryRun(PHB());
     assert.deepEqual(reload.rec.actions.map((action) => action.name).sort(), RETAINED_ACTIONS, 'reload registers one fresh retained action set');
     await reload.dispose();
   } finally {

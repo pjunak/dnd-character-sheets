@@ -34,6 +34,7 @@ addon's data is present. `provide()`s the rules API for future consumers
 
 ```
 addon.json          manifest — id dnd-sheets, optionalDependencies, tests.client
+locales/en.json     declarative English UI source catalog loaded by the host
 entry.js            composition root: register(host), panels, tab routing,
                     fragment render, rules API provision, domain disposers
 actions.base.js     tabs, direct fields/proficiencies, overrides, layout
@@ -159,7 +160,9 @@ components; standalone (no book) degrades to a hand-filled sheet (DEG-1).
   programmatic contract is the versioned object passed to `host.provide()`.
   `tests/smoke.mjs` locks the retained action inventory, render paths, and
   unload/reload cleanup.
-- Everything in **English**.
+- Code and source data stay in **English**. UI text is keyed through the
+  scoped `host.i18n` facade; English lives in `locales/en.json`, and any
+  additional locale may be partial.
 
 ## Settled decisions (don't relitigate)
 

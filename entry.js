@@ -51,10 +51,9 @@
 //
 //  Style/safety contract: HTML only via host.h (esc/dataAction/dataOn), never
 //  inline onclick; colours/spacing only via design tokens var(--…); every
-//  display string flows through i18n.t() so locales layer on with no rewrite.
+//  display string flows through host.i18n.t() so locales layer on with no rewrite.
 // ═══════════════════════════════════════════════════════════════
 
-import { t } from './i18n.js';
 import {
   ABILITIES, COINS, LOCATIONS, SKILLS,
   num, abilityMod, signed, titleize, clampHp, blank, makeHelpers, compendiumHref, firstPara, featureRecordFor,
@@ -82,6 +81,7 @@ import { registerTransferActions } from './actions.transfer.js';
 
 export default function register(host) {
   const { esc } = host.h;
+  const { t } = host.i18n;
   const NS = host.id; // 'dnd-sheets'
   const { uid, sheetOf } = makeHelpers(host);
 
