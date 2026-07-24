@@ -5,8 +5,8 @@
 //  host chrome AND the host theme (its CSS vars + component classes live only in
 //  the host page). It therefore ships its OWN inline light-theme styles (good on
 //  paper) and pulls from the computed sheet (`comp`) + `viewModel`, degrading to
-//  the hand-filled flat fields when the engine is absent. Labels are English (the
-//  addon ships EN only today); i18n of the print sheet can follow localization.
+//  the hand-filled flat fields when the engine is absent. Labels use the add-on's
+//  scoped locale just like the in-app sheet.
 //  (B4.6)
 // ═══════════════════════════════════════════════════════════════
 
@@ -61,11 +61,11 @@ export function makePrintPanel(ctx) {
       const score = comp && comp.abilities && comp.abilities[a] ? num(comp.abilities[a].score, num(s.abilities[a], 10)) : num(s.abilities[a], 10);
       const mod = comp && comp.abilities && comp.abilities[a] ? num(comp.abilities[a].mod, abilityMod(score)) : abilityMod(score);
       const sv = vm.save(a);
-      return `<div class="cell"><div class="k">${esc(a)}</div><div class="big">${esc(String(score))}</div><div>${esc(signed(mod))}</div><div class="k">save ${esc(signed(sv.total))}${sv.prof ? ' &#9679;' : ''}</div></div>`;
+      return `<div class="cell"><div class="k">${esc(a)}</div><div class="big">${esc(String(score))}</div><div>${esc(signed(mod))}</div><div class="k">${esc(t('sheet.saveTag'))} ${esc(signed(sv.total))}${sv.prof ? ' &#9679;' : ''}</div></div>`;
     }).join('');
 
     // Combat vitals.
-    const vit = [['AC', vm.ac], ['HP', vm.maxHp], ['Init', signed(vm.init)], ['Speed', vm.speed], ['Prof', signed(vm.pb)], ['Passive Perc', vm.passivePerc]]
+    const vit = [[t('stat.ac'), vm.ac], [t('stat.hp'), vm.maxHp], [t('stat.init'), signed(vm.init)], [t('stat.speed'), vm.speed], [t('stat.pb'), signed(vm.pb)], [t('stat.passivePercAbbr'), vm.passivePerc]]
       .map(([k, v]) => `<div class="cell"><div class="k">${esc(k)}</div><div class="big">${esc(String(v))}</div></div>`).join('');
 
     // Skills.
@@ -83,7 +83,7 @@ export function makePrintPanel(ctx) {
     // Features.
     const features = (comp && comp.features) || [];
     const featList = features.length
-      ? `<ul class="feat">${features.map((f) => `<li>${esc(f.name || titleize(f.id))}${f.source && f.source.level ? ' <span class="k">L' + esc(String(f.source.level)) + '</span>' : ''}</li>`).join('')}</ul>`
+      ? `<ul class="feat">${features.map((f) => `<li>${esc(f.name || titleize(f.id))}${f.source && f.source.level ? ' <span class="k">' + esc(t('print.levelShort', { level: f.source.level })) + '</span>' : ''}</li>`).join('')}</ul>`
       : '';
 
     // Spellcasting.
@@ -94,13 +94,13 @@ export function makePrintPanel(ctx) {
         const cants = ((s.cantrips && s.cantrips[p.classId]) || []).map((r) => spellName(engine, r));
         const prep = ((s.preparedSpells && s.preparedSpells[p.classId]) || []).map((r) => spellName(engine, r));
         const cn = (engine && engine.getItem && (engine.getItem('class', p.classId) || {}).name) || titleize(p.classId);
-        return `<div style="margin-bottom:4px"><b>${esc(cn)}</b> &mdash; DC ${esc(String(num(p.saveDC)))}, atk ${esc(signed(num(p.spellAttack)))}${p.pact ? ', pact ' + num(p.pact.slots) + '&times;L' + num(p.pact.level) : ''}
-          ${cants.length ? `<div><span class="k">Cantrips:</span> ${cants.join(', ')}</div>` : ''}
-          ${prep.length ? `<div><span class="k">Prepared:</span> ${prep.join(', ')}</div>` : ''}</div>`;
+        return `<div style="margin-bottom:4px"><b>${esc(cn)}</b> &mdash; ${esc(t('print.spellDc', { value: num(p.saveDC) }))}, ${esc(t('print.spellAttack', { value: signed(num(p.spellAttack)) }))}${p.pact ? ', ' + esc(t('print.pactSlots', { slots: num(p.pact.slots), level: num(p.pact.level) })) : ''}
+          ${cants.length ? `<div><span class="k">${esc(t('print.cantrips'))}:</span> ${cants.join(', ')}</div>` : ''}
+          ${prep.length ? `<div><span class="k">${esc(t('print.prepared'))}:</span> ${prep.join(', ')}</div>` : ''}</div>`;
       }).join('');
       const slots = (sc.slots || []).map((n, i) => (n > 0 ? 'L' + (i + 1) + ':' + n : '')).filter(Boolean).join('  ');
       const granted = (sc.granted || []).map((g) => esc(g.name)).join(', ');
-      spells = `${per}${slots ? `<div><span class="k">Slots:</span> ${esc(slots)}</div>` : ''}${granted ? `<div><span class="k">Always prepared:</span> ${granted}</div>` : ''}`;
+      spells = `${per}${slots ? `<div><span class="k">${esc(t('print.slots'))}:</span> ${esc(slots)}</div>` : ''}${granted ? `<div><span class="k">${esc(t('print.alwaysPrepared'))}:</span> ${granted}</div>` : ''}`;
     }
     const extraSpells = (s.spells || []).filter((sp) => !(comp && sp.origin === 'snapshot')).map((sp) => esc(sp.name || '')).filter(Boolean).join(', ');
 
@@ -108,7 +108,7 @@ export function makePrintPanel(ctx) {
     const inv = (s.inventory || []).map((it) => `<li>${esc(it.name || '')}${num(it.qty, 1) !== 1 ? ' &times;' + num(it.qty, 1) : ''}${it.location ? ' <span class="k">' + esc(it.location) + '</span>' : ''}</li>`).join('');
     const coins = ['pp', 'gp', 'ep', 'sp', 'cp'].map((k) => { const v = num((s.currency || {})[k], 0); return v ? v + ' ' + k : ''; }).filter(Boolean).join(', ');
 
-    return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${name}</title><style>
+    return `<!doctype html><html lang="${esc(host.i18n.locale || 'en')}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${name}</title><style>
       @page { margin: 14mm; }
       * { box-sizing: border-box; }
       body { font-family: system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif; color:#1a1a1a; background:#fff; margin:0; padding:16px; font-size:12px; line-height:1.45; }
@@ -122,15 +122,15 @@ export function makePrintPanel(ctx) {
       ul { margin:4px 0; padding-left:18px; } ul.feat { columns:2; -webkit-columns:2; }
     </style></head><body>
       <h1>${name}</h1>
-      <div class="sub">${ident ? ident + ' &middot; ' : ''}Level ${esc(String(total))}</div>
-      <h2>Ability Scores</h2><div class="row abil">${abilCells}</div>
-      <h2>Combat</h2><div class="row vit">${vit}</div>
-      ${attacks ? '<h2>Attacks</h2>' + attacks : ''}
-      <h2>Skills</h2><div class="row sk">${skills}</div>
-      ${featList ? '<h2>Features</h2>' + featList : ''}
-      ${spells ? '<h2>Spells</h2>' + spells : ''}
-      ${extraSpells ? '<h2>Other spells</h2><div>' + extraSpells + '</div>' : ''}
-      ${(inv || coins) ? '<h2>Equipment</h2>' + (coins ? '<div><span class="k">Coins:</span> ' + esc(coins) + '</div>' : '') + (inv ? '<ul>' + inv + '</ul>' : '') : ''}
+      <div class="sub">${ident ? ident + ' &middot; ' : ''}${esc(t('print.level', { level: total }))}</div>
+      <h2>${esc(t('sheet.abilities'))}</h2><div class="row abil">${abilCells}</div>
+      <h2>${esc(t('sheet.combat'))}</h2><div class="row vit">${vit}</div>
+      ${attacks ? '<h2>' + esc(t('sheet.attacks')) + '</h2>' + attacks : ''}
+      <h2>${esc(t('sheet.skills'))}</h2><div class="row sk">${skills}</div>
+      ${featList ? '<h2>' + esc(t('sheet.features')) + '</h2>' + featList : ''}
+      ${spells ? '<h2>' + esc(t('print.spells')) + '</h2>' + spells : ''}
+      ${extraSpells ? '<h2>' + esc(t('print.otherSpells')) + '</h2><div>' + extraSpells + '</div>' : ''}
+      ${(inv || coins) ? '<h2>' + esc(t('print.equipment')) + '</h2>' + (coins ? '<div><span class="k">' + esc(t('print.coins')) + ':</span> ' + esc(coins) + '</div>' : '') + (inv ? '<ul>' + inv + '</ul>' : '') : ''}
     </body></html>`;
   }
 

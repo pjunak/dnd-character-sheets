@@ -115,6 +115,8 @@ test('sheets: scoped host locale changes and partial catalogs update rendered UI
       cs: {
         'tab.stats': 'Deník postavy',
         'sheet.title': 'Deník D&D',
+        'sheet.abilities': 'Vlastnosti',
+        'print.level': 'Úroveň {level}',
       },
     };
     const localizedMeta = {
@@ -124,9 +126,17 @@ test('sheets: scoped host locale changes and partial catalogs update rendered UI
     const { ok, rec, error } = dryRunRegister(register, localizedMeta, {
       locale: 'cs-CZ',
       catalogs,
+      fixtures: { characters: [FIGHTER] },
     });
     assert.ok(ok, error);
     assert.match(renderBody(rec, FIGHTER), /Deník postavy/);
+    let captured = '';
+    globalThis.window = { open: () => ({ document: { open() {}, write(html) { captured = html; }, close() {} }, focus() {}, print() {} }) };
+    try { rec.actions.find((action) => action.name === 'printSheet').fn(FIGHTER.id); } finally { delete globalThis.window; }
+    assert.match(captured, /<html lang="cs-cz">/);
+    assert.match(captured, /<h2>Vlastnosti<\/h2>/);
+    assert.match(captured, /Úroveň 5/);
+    assert.deepEqual(rec.i18nMissing, []);
   } finally {
     clearLocalStorage();
   }
@@ -422,7 +432,7 @@ test('sheets: ASI number picker distributes a 2-point budget (+2 or +1/+1), capp
   const set = (ab, v) => act('builderAsiSet', 'c1', 'asi:wizard:4:ability', ab, v, 2, 2);
   // +1/+1 across two abilities — something the old single-ability select couldn't express.
   set('STR', 1);
-  assert.ok(rec.announces.includes('1 pts left'), 'each budget change announces the remainder (host live region)');
+  assert.ok(rec.announces.includes('1 pt left'), 'each budget change announces the remainder (host live region)');
   set('DEX', 1);
   assert.ok(rec.announces.includes('0 pts left'), 'spending the last point announces zero');
   assert.deepEqual(asi().assign, { STR: 1, DEX: 1 }, 'two abilities each +1');
@@ -881,11 +891,13 @@ test('sheets: printSheet builds a self-contained print sheet (B4.6)', () => {
   globalThis.window = { open: () => ({ document: { open() {}, write(h) { captured = h; }, close() {} }, focus() {}, print() {} }) };
   try { rec.actions.find((a) => a.name === 'printSheet').fn('cp'); } finally { delete globalThis.window; }
   assert.match(captured, /<!doctype html>/i, 'a standalone HTML document (opens in a new window)');
+  assert.match(captured, /<html lang="en">/, 'the document carries the scoped locale');
   assert.match(captured, /Gandalf/, 'the character name');
   assert.match(captured, /Ability Scores/, 'the abilities section');
   assert.match(captured, /Fireball/, 'a prepared spell is listed');
   assert.match(captured, /Fire Bolt/, 'a cantrip is listed');
   assert.match(captured, /Spellbook/, 'inventory is listed');
+  assert.deepEqual(rec.i18nMissing, [], 'print labels all come from declared source keys');
 });
 
 test('sheets: exportSheet serializes the character to JSON (B4.6)', () => {

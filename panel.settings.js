@@ -14,7 +14,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 export function makeSettingsPanel(ctx) {
-  const { host, t, ui, uiLayout } = ctx;
+  const { host, t, plural, ui, uiLayout } = ctx;
   const { esc, dataAction, dataOn } = host.h;
   const { section } = ui;
 
@@ -46,7 +46,7 @@ export function makeSettingsPanel(ctx) {
       ${edit ? tool('importOpen', '⬆', t('action.import'), t('settings.importDesc')) : ''}</div>`;
 
     const status = engine
-      ? t('rules.connected', { count: engine.listClasses().length })
+      ? plural('rules.connected', engine.listClasses().length)
       : t('rules.disconnected');
 
     return `<div style="display:flex;flex-direction:column;gap:var(--space-4);max-width:44rem;padding-top:var(--space-3)">

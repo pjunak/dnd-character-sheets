@@ -10,7 +10,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 export function makeBuilderPanel(ctx) {
-  const { host, t, ABILITIES, SKILLS, num, signed, abilityMod, titleize, firstPara, featureRecordFor, ui, engine: E, POINT_BUY, pointCost, pointsSpent, featAsiFrom, builderState } = ctx;
+  const { host, t, plural, ABILITIES, SKILLS, num, signed, abilityMod, titleize, firstPara, featureRecordFor, ui, engine: E, POINT_BUY, pointCost, pointsSpent, featAsiFrom, builderState } = ctx;
   const { esc, dataAction, dataOn } = host.h;
   const { section, miniStat, selectBox, fieldRow, choiceBlock, warningsBlock, numField, entityRef } = ui;
   const { builderModel, collectChoices } = E;
@@ -260,7 +260,7 @@ export function makeBuilderPanel(ctx) {
     const spent = pointsSpent(base);
     const remaining = POINT_BUY.budget - spent;
     const remColor = remaining < 0 ? 'var(--color-danger)' : remaining === 0 ? 'var(--text-muted)' : 'var(--accent-gold)';
-    const budget = `<span style="font-size:var(--text-xs);font-weight:600;color:${remColor};font-variant-numeric:tabular-nums">${esc(t('builder.pointsLeft', { n: remaining }))}</span>`;
+    const budget = `<span style="font-size:var(--text-xs);font-weight:600;color:${remColor};font-variant-numeric:tabular-nums">${esc(plural('builder.pointsLeft', remaining))}</span>`;
     const cells = ABILITIES.map((a) => {
       const b = Math.max(POINT_BUY.min, Math.min(POINT_BUY.max, num(base[a], POINT_BUY.min)));
       // Host `.codex-stepper` (numField): min = the point-buy floor, max = the highest
@@ -390,7 +390,7 @@ export function makeBuilderPanel(ctx) {
       </div>`;
     }).join('');
     const remColor = remaining === 0 ? 'var(--text-muted)' : 'var(--accent-gold)';
-    const tag = `<span style="font-size:var(--text-xs);font-weight:600;color:${remColor};font-variant-numeric:tabular-nums">${esc(t('builder.pointsLeft', { n: remaining }))}</span>`;
+    const tag = `<span style="font-size:var(--text-xs);font-weight:600;color:${remColor};font-variant-numeric:tabular-nums">${esc(plural('builder.pointsLeft', remaining))}</span>`;
     return `<div style="display:flex;flex-direction:column;gap:var(--space-1)">
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(4.5rem,1fr));gap:var(--space-2)">${tiles}</div>
       ${ro ? '' : tag}</div>`;

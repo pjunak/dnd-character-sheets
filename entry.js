@@ -81,13 +81,13 @@ import { registerTransferActions } from './actions.transfer.js';
 
 export default function register(host) {
   const { esc } = host.h;
-  const { t } = host.i18n;
+  const { t, plural } = host.i18n;
   const NS = host.id; // 'dnd-sheets'
   const { uid, sheetOf } = makeHelpers(host);
 
   // ── Shared context handed to every module. ──
   const ctx = {
-    host, t, NS,
+    host, t, plural, NS,
     ABILITIES, COINS, LOCATIONS, SKILLS,
     num, abilityMod, signed, titleize, clampHp, blank, uid, sheetOf, compendiumHref, firstPara, featureRecordFor,
     POINT_BUY, pointCost, pointsSpent, hitDieAvg, scrollCopyCost, ASI_RULES, featAsiFrom, featAbilityCap,
@@ -259,7 +259,7 @@ export default function register(host) {
     registerSpellActions({ host, num, uid, mutate, getRules, safeHydrate, decisionsOf, scrollCopyCost }),
     registerInventoryActions({ host, num, uid, mutate, getRules, LOCATIONS }),
     registerResourceActions({ host, num, uid, mutate, getRules, safeHydrate, decisionsOf, effectiveMaxHp, hitDieAvg }),
-    registerBuilderActions({ host, t, num, uid, ABILITIES, POINT_BUY, pointCost, pointsSpent, featAsiFrom, featAbilityCap, builderState: ctx.builderState, sheetOf, getRules, engine: ctx.engine }),
+    registerBuilderActions({ host, plural, num, uid, ABILITIES, POINT_BUY, pointCost, pointsSpent, featAsiFrom, featAbilityCap, builderState: ctx.builderState, sheetOf, getRules, engine: ctx.engine }),
     registerTransferActions({ host, NS, sheetOf, getRules, safeHydrate, decisionsOf, buildPrintHtml, mutate }),
   ].filter(Boolean);
 

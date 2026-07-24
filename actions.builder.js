@@ -1,7 +1,7 @@
 export const BUILDER_ACTIONS = Object.freeze(['builderField','builderAbility','builderToggleManual','builderAbilitySet','builderClassSet','builderLevelSet','builderSubclassSet','builderAddClass','builderRemoveClass','builderTab','builderTabKey','builderToggleLevel','builderExtraFeatAdd','builderExtraFeatRemove','builderAsiSet','builderChoose']);
 
 export function registerBuilderActions(deps) {
-  const { host, t, num, uid, ABILITIES, POINT_BUY, pointCost, pointsSpent, featAsiFrom, featAbilityCap, builderState, sheetOf, getRules } = deps;
+  const { host, plural, num, uid, ABILITIES, POINT_BUY, pointCost, pointsSpent, featAsiFrom, featAbilityCap, builderState, sheetOf, getRules } = deps;
   const { builderMutate, reconcile, builderModel } = deps.engine;
   const register = (name, fn) => host.registerAction(name, fn);
   const timers = new Set();
@@ -53,7 +53,7 @@ export function registerBuilderActions(deps) {
     // Announce the new remaining budget through the HOST's persistent live
     // region — the full-panel re-render destroys any in-page live region, so
     // this is what actually reaches screen readers. Feature-detected.
-    if (left != null && typeof host.ui.announce === 'function') host.ui.announce(t('builder.pointsLeft', { n: left }));
+    if (left != null && typeof host.ui.announce === 'function') host.ui.announce(plural('builder.pointsLeft', left));
   });
   // Structural edits (class/level/subclass/remove) can orphan level- or
   // owner-scoped decisions (ASI picks, pool picks) — reconcile prunes them so a
@@ -165,7 +165,7 @@ export function registerBuilderActions(deps) {
       upsertGrant(s, k, { type }, assign, cap);
     });
     // Same persistent-live-region announcement as point-buy (builderAbilitySet).
-    if (left != null && typeof host.ui.announce === 'function') host.ui.announce(t('builder.pointsLeft', { n: left }));
+    if (left != null && typeof host.ui.announce === 'function') host.ui.announce(plural('builder.pointsLeft', left));
   });
   register('builderChoose', (cid, key, value) => {
     builderMutate(cid, (s, engine) => {
