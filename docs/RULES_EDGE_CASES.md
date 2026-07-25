@@ -33,9 +33,18 @@ The view model applies explicit overrides over the derived result; overrides
 are never folded into provider data.
 
 When no compatible provider is available, the sheet remains hand-fillable and
-uses the last materialized flat fields. When the provider returns, hydration
-resumes from the stored decision spine. How to reconcile intervening manual
-edits is an open product decision tracked in `ROADMAP.md`.
+uses the last materialized flat fields. The sheet records a bounded baseline of
+the fields owned by materialization. If any of those fields change before the
+provider returns, or the returning provider has a different edition, computed
+mode remains disabled for that character until the user explicitly chooses:
+
+- keep the exact hand-filled values and remain in manual mode; or
+- resume the stored decision spine and rematerialize from the installed
+  provider.
+
+Play state such as current HP, inventory, currency, resource uses, and manual
+spell entries is not part of the baseline and never triggers reconciliation.
+The choice is per character and does not disable the provider for other sheets.
 
 Derived validation is advisory. Over-budget point buy, over-limit prepared
 spells, unmet prerequisites, and similar warnings do not silently delete user

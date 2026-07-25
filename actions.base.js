@@ -2,13 +2,14 @@ import { registerActionMap } from './actions.shared.js';
 
 export const BASE_ACTIONS = Object.freeze([
   'tab', 'tabKey', 'setField', 'setAbility', 'toggleSave', 'toggleSkill',
-  'setOverrideValue', 'clearOverride', 'uiLayoutSet',
+  'setOverrideValue', 'clearOverride', 'uiLayoutSet', 'providerResolve',
 ]);
 
 export function registerBaseActions(deps) {
   const {
     host, ABILITIES, SKILLS, num, clampHp, sheetOf, mutate, effectiveMaxHp,
-    getRules, safeHydrate, decisionsOf, visibleTabs, hasSpellsOf, tabBtnId, uiState,
+    getRules, safeHydrate, decisionsOf, resolveProvider, visibleTabs,
+    hasSpellsOf, tabBtnId, uiState,
   } = deps;
   const timers = new Set();
   const later = (fn) => {
@@ -29,8 +30,8 @@ export function registerBaseActions(deps) {
       const key = ev && ev.key;
       if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(key)) return;
       if (ev.preventDefault) ev.preventDefault();
-      const engine = getRules();
       const sheet = sheetOf(host.store.getCharacters().find((item) => item && item.id === cid) || {});
+      const engine = getRules(sheet);
       const result = engine ? safeHydrate(engine, decisionsOf(sheet, engine)) : null;
       const tabs = visibleTabs(engine, hasSpellsOf(engine, result && result.sheet, sheet), !host.role.isAnonymous());
       const ids = tabs.map((tab) => tab.id);
@@ -100,6 +101,9 @@ export function registerBaseActions(deps) {
     uiLayoutSet(cid, mode) {
       uiState.setLayout(cid, String(mode));
       host.ui.rerender();
+    },
+    providerResolve(cid, choice) {
+      resolveProvider(cid, choice);
     },
   });
 

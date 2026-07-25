@@ -13,7 +13,7 @@ export function addInventoryItems(sheet, items, deps) {
 }
 
 export function registerInventoryActions(deps) {
-  const { host, num, uid, mutate, getRules, LOCATIONS, uiState } = deps;
+  const { host, num, uid, sheetOf, mutate, getRules, LOCATIONS, uiState } = deps;
   const register = (name, fn) => host.registerAction(name, fn);
   // Backpack.
   register('invDel', (cid, iid) => {
@@ -57,7 +57,7 @@ export function registerInventoryActions(deps) {
   register('slotEquip', (cid, type, iid) => {
     if (!iid) return;
     mutate(cid, (s) => {
-      const engine = getRules();
+      const engine = getRules(s);
       const single = String(type) === 'armor' || String(type) === 'shield';
       const armorRec = (it) => (engine && engine.getItem ? (engine.getItem('armor', it.ref) || (it.name && engine.getItemByName ? engine.getItemByName('armor', it.name) : null)) : null);
       const isType = (it) => { const r = armorRec(it); if (!r) return false; return String(type) === 'shield' ? r.armorType === 'shield' : ['light', 'medium', 'heavy'].includes(r.armorType); };
@@ -116,7 +116,9 @@ export function registerInventoryActions(deps) {
     host.ui.rerender();
   });
   register('addItemStage', (cid, kind, ref) => {
-    const engine = getRules();
+    const sheet = sheetOf(host.store.getCharacters()
+      .find(character => character?.id === cid) || {});
+    const engine = getRules(sheet);
     const rec = engine && engine.getItem ? engine.getItem(String(kind), String(ref)) : null;
     aiwStage(cid, { key: String(kind) + ':' + String(ref), kind: String(kind), ref: String(ref), name: rec ? rec.name : String(ref), qty: 1 });
   });

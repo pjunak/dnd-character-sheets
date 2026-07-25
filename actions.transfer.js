@@ -1,7 +1,29 @@
-export const TRANSFER_ACTIONS = Object.freeze(['printSheet','exportSheet','importOpen','importClose','importApply']);
+import { parseSheet, serializeSheet } from './sheet-transfer.js';
+
+export const TRANSFER_ACTIONS = Object.freeze([
+  'printSheet',
+  'exportSheet',
+  'importOpen',
+  'importClose',
+  'importPreview',
+  'importConfirm',
+  'importUndo',
+]);
 
 export function registerTransferActions(deps) {
-  const { host, NS, sheetOf, getRules, safeHydrate, decisionsOf, buildPrintHtml, mutate, uiState } = deps;
+  const {
+    host,
+    NS,
+    blank,
+    sheetOf,
+    getRules,
+    safeHydrate,
+    decisionsOf,
+    buildPrintHtml,
+    mutate,
+    prepareSheetExport,
+    uiState,
+  } = deps;
   const register = (name, fn) => host.registerAction(name, fn);
   const timers = new Set();
   const later = (fn, delay) => { const id = setTimeout(() => { timers.delete(id); fn(); }, delay); timers.add(id); };
@@ -11,7 +33,7 @@ export function registerTransferActions(deps) {
   register('printSheet', (cid) => {
     const ent = host.store.getCharacters().find((x) => x && x.id === cid) || { id: cid };
     const s = sheetOf(ent);
-    const engine = getRules();
+    const engine = getRules(s);
     const r = engine ? safeHydrate(engine, decisionsOf(s, engine)) : null;
     const html = buildPrintHtml(ent, s, r && r.sheet, engine);
     try {
@@ -23,7 +45,7 @@ export function registerTransferActions(deps) {
   // transfer). Serializes the normalized sheet; no-ops safely without a DOM.
   register('exportSheet', (cid) => {
     const ent = host.store.getCharacters().find((x) => x && x.id === cid) || { id: cid };
-    const json = JSON.stringify(sheetOf(ent), null, 2);
+    const json = serializeSheet(prepareSheetExport(sheetOf(ent)));
     const fname = String(ent.name || 'character').replace(/[^a-z0-9_-]+/gi, '_').replace(/^_+|_+$/g, '') || 'character';
     try {
       const blob = new Blob([json], { type: 'application/json' });
@@ -35,22 +57,60 @@ export function registerTransferActions(deps) {
     } catch (_) {}
   });
   register('importOpen', (cid) => {
+    uiState.remove(cid, 'importDraft');
     uiState.set(cid, 'importOpen', true);
     host.ui.rerender();
   });
   register('importClose', (cid) => {
     uiState.remove(cid, 'importOpen');
+    uiState.remove(cid, 'importDraft');
     host.ui.rerender();
   });
-  register('importApply', (cid) => {
+  register('importPreview', async (cid) => {
     let raw = '';
-    try { raw = (document.getElementById('dse-import-' + cid) || {}).value || ''; } catch (_) {}
-    let parsed = null;
-    try { parsed = JSON.parse(raw); } catch (_) { parsed = null; }
+    try {
+      const input = document.getElementById('dse-import-file-' + cid);
+      const file = input?.files?.[0];
+      raw = file
+        ? await file.text()
+        : (document.getElementById('dse-import-' + cid)?.value || '');
+    } catch {
+      uiState.set(cid, 'importDraft', { ok: false, code: 'read' });
+      host.ui.rerender();
+      return;
+    }
+    const draft = parseSheet(raw, {
+      template: blank(),
+      normalize: sheet => sheetOf({ addonData: { [NS]: sheet } }),
+    });
+    uiState.set(cid, 'importDraft', draft);
+    host.ui.rerender();
+  });
+  register('importConfirm', (cid) => {
+    const draft = uiState.get(cid, 'importDraft');
+    if (!draft?.ok || draft.status === 'completed') return;
+    const current = host.store.getCharacters()
+      .find(character => character?.id === cid);
+    if (!current) return;
+    if (draft.legacy && getRules(draft.sheet)) {
+      draft.sheet.rulesMode = 'manual';
+    }
+    uiState.set(cid, 'importDraft', {
+      ...draft,
+      status: 'completed',
+      previous: sheetOf(current),
+    });
+    mutate(cid, () => draft.sheet);
+    host.ui.announce(host.i18n.t('data.importComplete'));
+  });
+  register('importUndo', (cid) => {
+    const draft = uiState.get(cid, 'importDraft');
+    if (draft?.status !== 'completed' || !draft.previous) return;
+    const previous = draft.previous;
     uiState.remove(cid, 'importOpen');
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) { host.ui.rerender(); return; }
-    // Replace the whole sheet with the imported data, normalized through sheetOf.
-    mutate(cid, () => sheetOf({ addonData: { [NS]: parsed } }));
+    uiState.remove(cid, 'importDraft');
+    mutate(cid, () => previous);
+    host.ui.announce(host.i18n.t('data.importUndone'));
   });
   return () => { for (const timer of timers) clearTimeout(timer); timers.clear(); };
 }

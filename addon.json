@@ -1,7 +1,7 @@
 {
   "id": "dnd-sheets",
   "name": "D&D Character Sheets",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "apiVersion": 2,
   "hostVersion": ">=1.0.0",
   "capabilities": {
@@ -27,7 +27,9 @@
   "tests": {
     "client": [
       "tests/smoke.mjs",
-      "tests/rules.mjs"
+      "tests/rules.mjs",
+      "tests/sheet-transfer.mjs",
+      "tests/provider-state.mjs"
     ]
   },
   "summary": "A fully hand-fillable D&D character sheet with a built-in rules engine on every character page; auto-fills from rulebook data addons (e.g. the D&D 5.5e Compendium) when installed, and provides the rules API for other addons."

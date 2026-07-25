@@ -113,7 +113,15 @@ export default function register(host) {
     ...makePrintPanel(ctx),
   };
 
-  const { getRules, safeHydrate, decisionsOf, mutate, effectiveMaxHp } = ctx.engine;
+  const {
+    getRules,
+    safeHydrate,
+    decisionsOf,
+    mutate,
+    effectiveMaxHp,
+    resolveProvider,
+    prepareSheetExport,
+  } = ctx.engine;
   const { vitalsBar, panelOverview, panelSheet, panelSpellbook, panelBuilder, panelSettings, restModal, spellSwapModal, spellbookMgrModal, buildPrintHtml, importModal, addItemModal } = ctx.panels;
 
   // ── Tab model ────────────────────────────────────────────────────
@@ -151,7 +159,7 @@ export default function register(host) {
       if (!c) return html;                       // defensive: never blank the page
       const s = sheetOf(c);
       const editable = !host.role.isAnonymous();
-      const engine = getRules();
+      const engine = getRules(s);
       const result = engine ? safeHydrate(engine, decisionsOf(s, engine)) : null;
       const comp = result && result.sheet;
       const warnings = (result && result.warnings) || [];
@@ -224,12 +232,12 @@ export default function register(host) {
 
 
   const disposers = [
-    registerBaseActions({ host, ABILITIES, SKILLS, num, clampHp, sheetOf, mutate, effectiveMaxHp, getRules, safeHydrate, decisionsOf, visibleTabs, hasSpellsOf, tabBtnId, uiState: ctx.uiState }),
+    registerBaseActions({ host, ABILITIES, SKILLS, num, clampHp, sheetOf, mutate, effectiveMaxHp, getRules, safeHydrate, decisionsOf, resolveProvider, visibleTabs, hasSpellsOf, tabBtnId, uiState: ctx.uiState }),
     registerSpellActions({ host, num, uid, mutate, getRules, safeHydrate, decisionsOf, scrollCopyCost, uiState: ctx.uiState }),
-    registerInventoryActions({ host, num, uid, mutate, getRules, LOCATIONS, uiState: ctx.uiState }),
+    registerInventoryActions({ host, num, uid, sheetOf, mutate, getRules, LOCATIONS, uiState: ctx.uiState }),
     registerResourceActions({ host, num, uid, mutate, getRules, safeHydrate, decisionsOf, effectiveMaxHp, hitDieAvg, uiState: ctx.uiState }),
     registerBuilderActions({ host, plural, num, uid, ABILITIES, POINT_BUY, pointCost, pointsSpent, featAsiFrom, featAbilityCap, uiState: ctx.uiState, sheetOf, getRules, engine: ctx.engine }),
-    registerTransferActions({ host, NS, sheetOf, getRules, safeHydrate, decisionsOf, buildPrintHtml, mutate, uiState: ctx.uiState }),
+    registerTransferActions({ host, NS, blank, sheetOf, getRules, safeHydrate, decisionsOf, buildPrintHtml, mutate, prepareSheetExport, uiState: ctx.uiState }),
   ].filter(Boolean);
 
   host.provide(ctx.engine.rulesApi);

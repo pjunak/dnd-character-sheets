@@ -72,6 +72,8 @@ export function featureRecordFor(engine, cl, level, f) {
 export const blank = () => ({
   v: 2,
   ruleset: '2024',   // ARCH-7: which edition's rules built this character — re-stamped from the data provider's ruleset record on every Builder save (model.js materializeInto)
+  rulesMode: 'auto',
+  rulesProvider: null,
   player: '', className: '', subclass: '', race: '', background: '', alignment: '',
   level: 1,
   abilities: { STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10 },
@@ -130,6 +132,16 @@ export function makeHelpers(host) {
       skillExpertise: { ...(s.skillExpertise || {}) },
       currency:  { ...b.currency, ...(s.currency || {}) },
       overrides: { ...(s.overrides || {}) },
+      rulesMode: s.rulesMode === 'manual' ? 'manual' : 'auto',
+      rulesProvider: s.rulesProvider && typeof s.rulesProvider === 'object'
+        ? {
+          edition: String(s.rulesProvider.edition || ''),
+          materialized: s.rulesProvider.materialized
+            && typeof s.rulesProvider.materialized === 'object'
+            ? JSON.parse(JSON.stringify(s.rulesProvider.materialized))
+            : null,
+        }
+        : null,
       spells:    Array.isArray(s.spells) ? s.spells : [],
       preparedSpells: { ...(s.preparedSpells || {}) },
       spellbook: { ...(s.spellbook || {}) },

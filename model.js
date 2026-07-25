@@ -18,6 +18,10 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { makeRulesApi } from './rules/api.js';
+import {
+  captureProviderState,
+  resolveProviderState,
+} from './provider-state.js';
 
 export function makeEngine(ctx) {
   const { host, NS, ABILITIES, SKILLS, num, abilityMod, sheetOf } = ctx;
@@ -270,6 +274,10 @@ export function makeEngine(ctx) {
     }
     for (const g of (cs.spellcasting && cs.spellcasting.granted) || []) addSnap(g.ref, nice((g.source && (g.source.id || g.source.type)) || ''));
     s.spells = (Array.isArray(s.spells) ? s.spells : []).filter((sp) => sp && sp.origin !== 'snapshot').concat(snap);
+    captureProviderState(
+      s,
+      engine.getRuleset ? engine.getRuleset().edition : s.ruleset,
+    );
   };
 
   // ── The rules api — the built-in engine bound to live book data ──
@@ -289,17 +297,30 @@ export function makeEngine(ctx) {
   // standalone paths otherwise (ARCH-4). The probe is lazy, per render,
   // try/caught — installing/removing a book mid-session never breaks the sheet.
   const DATA_ADDONS = ['dnd55e-compendium', 'dnd5e-compendium'];   // 2024, 2014 (future repo)
-  const _probeData = () => {
+  const _probeProvider = () => {
     for (const id of DATA_ADDONS) {
       try {
         const d = host.use && host.use(id);
-        if (d && d.apiVersion >= 1) return d;
+        if (d && d.apiVersion >= 1) return { id, data: d };
       } catch (_) { /* not installed / not declared — try the next candidate */ }
     }
     return null;
   };
+  const _probeData = () => _probeProvider()?.data || null;
   const rulesApi = makeRulesApi(_probeData);
-  const getRules = () => (_probeData() ? rulesApi : null);
+  const providerState = (sheet) => {
+    const provider = _probeProvider();
+    if (!provider) return { status: 'unavailable', engine: null };
+    const edition = rulesApi.getRuleset().edition;
+    const state = resolveProviderState(sheet, edition);
+    return {
+      ...state,
+      providerId: provider.id,
+      edition,
+      engine: state.status === 'active' ? rulesApi : null,
+    };
+  };
+  const getRules = sheet => providerState(sheet).engine;
 
   /** ARCH-3 for max HP — the ONE value every HP clamp/heal respects (setField /
    *  applyHp / the Rest wizard / materialize all route through this, so a clamp
@@ -312,7 +333,7 @@ export function makeEngine(ctx) {
    *      dormant overrides there, so the clamp does too). */
   const effectiveMaxHp = (s, comp) => {
     const ov = (s && s.overrides) || {};
-    if (getRules() && ov.maxHp != null) return num(ov.maxHp, 0);
+    if (getRules(s) && ov.maxHp != null) return num(ov.maxHp, 0);
     if (comp && comp.derived && comp.derived.maxHp != null) return num(comp.derived.maxHp, 0);
     return num(s && s.maxHp, 0);
   };
@@ -376,7 +397,21 @@ export function makeEngine(ctx) {
   const mutate = (cid, fn) => {
     host.store.patchAddonData('characters', cid, (raw) => {
       const s = sheetOf({ addonData: { [NS]: raw } });
+      const before = providerState(s);
+      const hasBuilderState = s.baseStats
+        || s.classes.length
+        || s.spells.some(spell => spell?.origin === 'snapshot');
+      if (before.status === 'unavailable'
+          && s.rulesMode !== 'manual'
+          && !s.rulesProvider
+          && hasBuilderState) {
+        captureProviderState(s, s.ruleset);
+      }
       const out = fn(s) || s;
+      const state = providerState(out);
+      if (state.status === 'active' && !out.rulesProvider) {
+        captureProviderState(out, state.edition);
+      }
       return out;
     });
     host.ui.rerender();
@@ -385,8 +420,8 @@ export function makeEngine(ctx) {
   /** Builder mutation: seed the rich model (migration) if needed, apply `fn`,
    *  then materialize the DEG-1 fallback. Persists + re-renders via `mutate`. */
   const builderMutate = (cid, fn) => {
-    const engine = getRules();
     mutate(cid, (s) => {
+      const engine = getRules(s);
       const m = builderModel(s, engine);
       if (!Array.isArray(s.classes) || !s.classes.length) s.classes = m.classes;
       if (!s.baseStats || !Object.keys(s.baseStats).length) s.baseStats = m.baseStats;
@@ -396,9 +431,34 @@ export function makeEngine(ctx) {
     });
   };
 
+  const resolveProvider = (cid, choice) => {
+    if (choice !== 'manual' && choice !== 'builder') return;
+    mutate(cid, (sheet) => {
+      if (choice === 'manual') {
+        sheet.rulesMode = 'manual';
+        return sheet;
+      }
+      const provider = _probeProvider();
+      if (!provider) return sheet;
+      sheet.rulesMode = 'auto';
+      sheet.rulesProvider = null;
+      materializeInto(sheet, rulesApi);
+      return sheet;
+    });
+  };
+
+  const prepareSheetExport = (sheet) => {
+    const copy = JSON.parse(JSON.stringify(sheet));
+    const state = providerState(copy);
+    if (state.status === 'active' && !copy.rulesProvider) {
+      captureProviderState(copy, state.edition);
+    }
+    return copy;
+  };
+
   return {
     builderModel, collectChoices, resolveChoices, reconcile, decisionsOf,
     safeHydrate, materializeInto, getRules, rulesApi, viewModel, mutate, builderMutate,
-    effectiveMaxHp,
+    effectiveMaxHp, providerState, resolveProvider, prepareSheetExport,
   };
 }

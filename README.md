@@ -33,8 +33,9 @@ above it). The D&D tabs follow:
   Only with the rules engine and only for editors.
 - **Settings** — per-sheet tools, rightmost: the vitals-layout switch (compact /
   classic), plus **🖨 Print / PDF** (a self-contained printable sheet), **⬇ Export**
-  (download the character as JSON), and **⬆ Import** (paste an exported JSON to
-  overwrite — editors only).
+  (download a versioned character JSON), and **⬆ Import** (file or paste,
+  bounded validation, preview, explicit confirmation, and immediate undo —
+  editors only).
 
 A slim **vitals bar** (a directly-editable **HP** stepper, plus text-labelled AC,
 Initiative, Speed, Passive Perception and a class-level line — Proficiency has no
@@ -70,6 +71,10 @@ and collects domain disposers. Controller actions live in focused modules:
   to tab and layout preferences.
 - `equipment-model.js` — pure inventory resolution and equipment-slot
   classification shared by the header and backpack.
+- `sheet-transfer.js` — versioned export envelope and bounded legacy-compatible
+  import validation.
+- `provider-state.js` — per-character materialized baseline and explicit
+  rulebook-return reconciliation.
 
 Panels remain render-only, `model.js` owns stored-sheet mutation and
 materialization, and `rules/` remains pure and host-free. Action names are
@@ -86,7 +91,9 @@ through `host.provide()`.
   a sheet. Further books ride the compendium's content groups (DM-toggleable per
   campaign), and the engine is **edition-parameterized**: built-in 2024 constants,
   overridable by a provider's `ruleset` record (`dnd5e-compendium` is the reserved
-  2014 provider).
+  2014 provider). If computed flat values were edited while the provider was
+  unavailable, that character stays hand-filled until the user explicitly
+  keeps manual mode or resumes the rulebook; other characters are unaffected.
 - **Rules API for other addons:** the addon `provide()`s the same rules api the panels
   consume (`hydrate` / `derive.*` / `list*` passthroughs), so another addon can
   declare a dependency on `dnd-sheets` and reuse the engine.
@@ -103,12 +110,10 @@ No build step (browser ES modules). From a sibling checkout of the host:
 node scripts/dev-install-addon.cjs ../dnd-character-sheets   # from the ttrpg-codex repo
 ```
 
-Run the test suites (assume the host repo is a sibling directory) — the sheet
-smoke tests and the pure rules-engine tests:
+Run the complete test suite (assume the host repo is a sibling directory):
 
 ```sh
-node --test tests/smoke.mjs
-node --test tests/rules.mjs
+node --test tests/smoke.mjs tests/rules.mjs tests/ui-state.mjs tests/equipment-model.mjs tests/sheet-transfer.mjs tests/provider-state.mjs
 ```
 
 See [`rules/README.md`](rules/README.md) for the provided API and

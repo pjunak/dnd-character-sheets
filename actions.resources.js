@@ -25,7 +25,7 @@ export function registerResourceActions(deps) {
     ? Math.max(0, Math.min(num(max, 0), num(current, 0)))
     : Math.max(0, num(current, 0));
   const hydrate = (sheet) => {
-    const engine = getRules();
+    const engine = getRules(sheet);
     const result = engine ? safeHydrate(engine, decisionsOf(sheet, engine)) : null;
     return result && result.sheet;
   };

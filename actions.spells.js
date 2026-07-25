@@ -3,7 +3,7 @@ export const SPELL_ACTIONS = Object.freeze(['spellAdd','spellDel','learnCantrip'
 export function registerSpellActions(deps) {
   const { host, num, uid, mutate, getRules, safeHydrate, decisionsOf, scrollCopyCost, uiState } = deps;
   const register = (name, fn) => host.registerAction(name, fn);
-  const hydrateFor = (sheet) => { const engine = getRules(); const result = engine ? safeHydrate(engine, decisionsOf(sheet, engine)) : null; return result && result.sheet; };
+  const hydrateFor = (sheet) => { const engine = getRules(sheet); const result = engine ? safeHydrate(engine, decisionsOf(sheet, engine)) : null; return result && result.sheet; };
   // Spellbook — manual/extra entries (s.spells).
   register('spellAdd', (cid) => {
     mutate(cid, (s) => { s.spells = s.spells.concat([{ id: uid('spell'), name: '', level: 0, school: '', prepared: false, origin: 'manual' }]); return s; });
@@ -43,10 +43,10 @@ export function registerSpellActions(deps) {
     try { const sp = document.getElementById('dse-copy-spell-' + cid); const sc = document.getElementById('dse-copy-scroll-' + cid); ref = sp && sp.value; scrollId = sc && sc.value; } catch (_) {}
     if (!ref) { host.ui.rerender(); return; }
     uiState.remove(cid, 'spellCopySelection');
-    const engine = getRules();
-    const rec = engine && engine.getItem ? engine.getItem('spell', ref) : null;
-    const cost = scrollCopyCost(rec && rec.level);   // 50 gp × spell level (rules/engine.js)
     mutate(cid, (s) => {
+      const engine = getRules(s);
+      const rec = engine && engine.getItem ? engine.getItem('spell', ref) : null;
+      const cost = scrollCopyCost(rec && rec.level);
       addRef(s, 'spellbook', classId, ref);
       s.currency = { ...s.currency, gp: Math.max(0, num(s.currency.gp, 0) - cost) };
       // Consume the scroll ONLY when it actually holds the copied spell (the
@@ -117,8 +117,8 @@ export function registerSpellActions(deps) {
     const ref = _dragRef; _dragRef = null;
     if (!ref) return;
     const bag = kind === 'cantrip' ? 'cantrips' : kind === 'spellbook' ? 'spellbook' : 'preparedSpells';
-    const engine = getRules();
     mutate(cid, (s) => {
+      const engine = getRules(s);
       // A drop can arrive from ANY group's pool card (unlike the click actions,
       // whose pools are pre-filtered), so validate it the same way those pools
       // are built: right class list, right level band for the target group,

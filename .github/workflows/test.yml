@@ -23,5 +23,5 @@ jobs:
         with:
           node-version: 26
 
-      - run: node --test tests/smoke.mjs tests/rules.mjs
+      - run: node --test tests/smoke.mjs tests/rules.mjs tests/ui-state.mjs tests/equipment-model.mjs tests/sheet-transfer.mjs tests/provider-state.mjs
         working-directory: dnd-character-sheets

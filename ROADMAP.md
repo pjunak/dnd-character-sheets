@@ -22,25 +22,12 @@ when a concrete workflow needs source notes, copy cost, or transcription
 status. Keep provider records immutable and store character-specific metadata
 in the sheet blob.
 
-## Print, export, and import
-
-Provide a user-facing JSON export and add an explicit file-picker import flow
-with validation and a recoverable preview.
-
 ## Multiclass proficiency contract
 
 Distinguish the origin class from later classes while collecting proficiency
 choices. Consume reduced weapon, armor, tool, and skill grants once the
 compendium supplies complete `multiclassProficiencies` payloads. The present
 cross-repository gap is detailed in the compendium's `data/GAPS.md`.
-
-## Provider-loss reconciliation
-
-Decide how to reconcile manual edits made while the optional compendium is
-unavailable with the stored builder decisions that resume when it returns.
-The current behavior deliberately preserves both: flat materialized fields are
-the fallback while offline, and the engine resumes from the decision spine
-after rehydration.
 
 ## Future 2014 provider compatibility
 

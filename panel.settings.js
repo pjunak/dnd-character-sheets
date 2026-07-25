@@ -45,14 +45,34 @@ export function makeSettingsPanel(ctx) {
       ${tool('exportSheet', '⬇', t('action.export'), t('settings.exportDesc'))}
       ${edit ? tool('importOpen', '⬆', t('action.import'), t('settings.importDesc')) : ''}</div>`;
 
-    const status = engine
-      ? plural('rules.connected', engine.listClasses().length)
-      : t('rules.disconnected');
+    const provider = ctx.engine.providerState(s);
+    let status = '';
+    if (provider.status === 'active') {
+      status = `<p style="color:var(--color-success);font-size:var(--text-sm);margin:0">${esc(plural('rules.connected', engine.listClasses().length))}</p>`;
+    } else if (provider.status === 'reconcile') {
+      const message = provider.reason === 'edition'
+        ? t('rules.reconcileEdition')
+        : t('rules.reconcileManual');
+      status = `<div class="codex-warnings">
+        <p style="margin:0 0 var(--space-2)">${esc(message)}</p>
+        <div style="display:flex;gap:var(--space-2);flex-wrap:wrap">
+          <button class="inline-create-btn"${dataAction(host.action('providerResolve'), c.id, 'manual')}>${esc(t('rules.keepManual'))}</button>
+          <button class="edit-save-btn"${dataAction(host.action('providerResolve'), c.id, 'builder')}>${esc(t('rules.resumeBuilder'))}</button>
+        </div>
+      </div>`;
+    } else if (provider.status === 'manual') {
+      status = `<div style="display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap">
+        <p style="color:var(--text-muted);font-size:var(--text-sm);margin:0">${esc(t('rules.manualMode'))}</p>
+        <button class="inline-create-btn"${dataAction(host.action('providerResolve'), c.id, 'builder')}>${esc(t('rules.enableBuilder'))}</button>
+      </div>`;
+    } else {
+      status = `<p style="color:var(--text-muted);font-size:var(--text-sm);margin:0">${esc(t('rules.disconnected'))}</p>`;
+    }
 
     return `<div style="display:flex;flex-direction:column;gap:var(--space-4);max-width:44rem;padding-top:var(--space-3)">
       ${section(t('settings.layoutTitle'), layoutBody)}
       ${section(t('settings.dataTitle'), tools)}
-      <p style="color:${engine ? 'var(--color-success)' : 'var(--text-muted)'};font-size:var(--text-sm);margin:0">${esc(status)}</p>
+      ${status}
     </div>`;
   }
 

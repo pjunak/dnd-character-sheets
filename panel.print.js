@@ -14,11 +14,46 @@ export function makePrintPanel(ctx) {
   const { host, t, ABILITIES, SKILLS, num, signed, abilityMod, titleize, viewModel } = ctx;
   const { esc, dataAction } = host.h;
 
-  // Import modal (B4.6) — a floating overlay to paste a previously-exported JSON
-  // and overwrite THIS character. The explicit "Import" button is the confirmation
-  // (it replaces the sheet). Rendered at the fragment root when the flag is set.
   function importModal(c) {
     const cid = c.id;
+    const draft = ctx.uiState.get(cid, 'importDraft');
+    const error = draft && !draft.ok
+      ? `<div class="codex-warnings" role="alert">${esc(t('data.importError.' + draft.code))}</div>`
+      : '';
+    const picker = `<label style="display:flex;flex-direction:column;gap:var(--space-1)">
+      <span style="color:var(--text-muted);font-size:var(--text-sm)">${esc(t('data.importFile'))}</span>
+      <input id="dse-import-file-${esc(cid)}" class="edit-input" type="file" accept="application/json,.json">
+    </label>
+    <div style="text-align:center;color:var(--text-muted);font-size:var(--text-xs)">${esc(t('data.importOrPaste'))}</div>
+    <textarea id="dse-import-${esc(cid)}" class="edit-input" spellcheck="false" style="width:100%;min-height:9rem;font-family:var(--font-mono,monospace);font-size:var(--text-xs)" placeholder="${esc(t('data.importPlaceholder'))}"></textarea>`;
+    const preview = draft?.ok && draft.status !== 'completed'
+      ? `<div style="display:flex;flex-direction:column;gap:var(--space-2)">
+          <strong style="color:var(--text-parchment)">${esc(t('data.importPreviewTitle'))}</strong>
+          <dl style="display:grid;grid-template-columns:max-content 1fr;gap:var(--space-1) var(--space-3);margin:0">
+            <dt>${esc(t('field.class'))}</dt><dd style="margin:0">${esc(draft.preview.className || t('misc.notSet'))}</dd>
+            <dt>${esc(t('field.level'))}</dt><dd style="margin:0">${esc(String(draft.preview.level))}</dd>
+            <dt>${esc(t('data.importInventory'))}</dt><dd style="margin:0">${esc(String(draft.preview.inventory))}</dd>
+            <dt>${esc(t('data.importSpells'))}</dt><dd style="margin:0">${esc(String(draft.preview.spells))}</dd>
+          </dl>
+          <div class="codex-warnings">${esc(t('data.importOverwriteWarning'))}</div>
+        </div>`
+      : '';
+    const completed = draft?.status === 'completed'
+      ? `<div style="display:flex;flex-direction:column;gap:var(--space-3)">
+          <div style="color:var(--color-success)">${esc(t('data.importComplete'))}</div>
+          <div style="display:flex;gap:var(--space-2);justify-content:flex-end">
+            <button class="inline-create-btn"${dataAction(host.action('importUndo'), cid)}>${esc(t('data.importUndo'))}</button>
+            <button class="edit-save-btn"${dataAction(host.action('importClose'), cid)}>${esc(t('action.done'))}</button>
+          </div>
+        </div>`
+      : '';
+    const body = completed || preview || `${error}${picker}`;
+    const buttons = completed
+      ? ''
+      : `<div style="display:flex;gap:var(--space-2);justify-content:flex-end;margin-top:var(--space-2)">
+          <button class="inline-create-btn"${dataAction(host.action('importClose'), cid)}>${esc(t('action.cancel'))}</button>
+          <button class="edit-save-btn"${dataAction(host.action(draft?.ok ? 'importConfirm' : 'importPreview'), cid)}>${esc(t(draft?.ok ? 'data.importConfirm' : 'data.importPreview'))}</button>
+        </div>`;
     return `<div class="addon-wizard-overlay">
       <div style="position:absolute;inset:0" title="${esc(t('action.cancel'))}"${dataAction(host.action('importClose'), cid)}></div>
       <div class="addon-wizard" role="dialog" aria-modal="true" aria-label="${esc(t('data.importTitle'))}" style="position:relative;z-index:1">
@@ -26,11 +61,7 @@ export function makePrintPanel(ctx) {
           <button class="inline-create-btn" title="${esc(t('action.cancel'))}"${dataAction(host.action('importClose'), cid)}>✕</button></div>
         <div class="addon-wizard-body">
           <div style="color:var(--text-muted);font-size:var(--text-sm);margin-bottom:var(--space-2)">${esc(t('data.importHint'))}</div>
-          <textarea id="dse-import-${esc(cid)}" class="edit-input" spellcheck="false" style="width:100%;min-height:9rem;font-family:var(--font-mono,monospace);font-size:var(--text-xs)" placeholder="${esc(t('data.importPlaceholder'))}"></textarea>
-          <div style="display:flex;gap:var(--space-2);justify-content:flex-end;margin-top:var(--space-2)">
-            <button class="inline-create-btn"${dataAction(host.action('importClose'), cid)}>${esc(t('action.cancel'))}</button>
-            <button class="edit-save-btn"${dataAction(host.action('importApply'), cid)}>${esc(t('data.importConfirm'))}</button>
-          </div>
+          ${body}${buttons}
         </div></div></div>`;
   }
 

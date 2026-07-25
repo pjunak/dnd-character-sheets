@@ -46,6 +46,8 @@ actions.transfer.js print/export/import; owns download URL timers
 actions.shared.js   small action-map registration helper
 ui-state.js         per-character session UI state; persists tab/layout only
 equipment-model.js pure inventory resolution + worn/attuned slot model
+sheet-transfer.js   versioned export + bounded import validation
+provider-state.js   materialized baseline + per-character provider resolution
 model.js            THE data layer: stored-blob read/migration, viewModel,
                     builderMutate + materializeInto (DEG-1), getRules() probe
 panel.overview.js   ⚠ renders the CHARACTER SHEET tab (id `stats`) — entry.js appends
@@ -84,6 +86,10 @@ persisted. A sheet-wide toolbar offers Print / Export / Import (B4.6).
   **DEG-1 obligation**: every Builder edit materializes computed values into
   the flat fallback fields so removing the engine/book degrades to a
   hand-filled sheet, never a data loss.
+- **Provider return is per character.** `provider-state.js` records only the
+  engine-materialized flat fields. If they diverge while the rulebook is
+  unavailable, engine mode stays off for that character until the user chooses
+  manual mode or explicitly rematerializes from the provider.
 - **`rules/` stays pure and host-free** (no `host`, no DOM) — that's what
   makes it unit-testable. Rules facts (point-buy costs, clamps, tables) live
   here, never in panels.
@@ -118,7 +124,9 @@ components; standalone (no book) degrades to a hand-filled sheet (DEG-1).
 - **Dev loop**: from `../ttrpg-codex` run
   `node scripts/dev-install-addon.cjs ../dnd-character-sheets`, restart the
   app. **Repo edits are invisible until re-dev-installed.**
-- **Tests**: `node --test tests/smoke.mjs tests/rules.mjs` from THIS repo's
+- **Tests**: `node --test tests/smoke.mjs tests/rules.mjs tests/ui-state.mjs
+  tests/equipment-model.mjs tests/sheet-transfer.mjs tests/provider-state.mjs`
+  from THIS repo's
   root — on Windows only relative file paths work (`node --test tests/` and
   absolute paths false-fail); node runs from PowerShell, not Git Bash, on the
   maintainer's machine. `tests.client` in the manifest is dev-only (the

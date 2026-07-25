@@ -105,9 +105,9 @@ export function registerBuilderActions(deps) {
     const key = ev && ev.key;
     if (key !== 'ArrowLeft' && key !== 'ArrowRight' && key !== 'Home' && key !== 'End') return;
     if (ev.preventDefault) ev.preventDefault();
-    const engine = getRules();
-    if (!engine) return;
     const s = sheetOf(host.store.getCharacters().find((x) => x && x.id === cid) || {});
+    const engine = getRules(s);
+    if (!engine) return;
     const classes = builderModel(s, engine).classes || [];
     const ids = ['character', ...classes.filter((cl) => cl.classId).map((cl) => cl.classId)];
     const cur = ids.indexOf(String(tabId));

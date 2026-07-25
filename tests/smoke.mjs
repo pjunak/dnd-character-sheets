@@ -34,6 +34,7 @@ import { SPELL_ACTIONS } from '../actions.spells.js';
 import { INVENTORY_ACTIONS, addInventoryItems } from '../actions.inventory.js';
 import { BUILDER_ACTIONS } from '../actions.builder.js';
 import { TRANSFER_ACTIONS } from '../actions.transfer.js';
+import { captureProviderState } from '../provider-state.js';
 
 const EN_CATALOG = JSON.parse(readFileSync(new URL('../locales/en.json', import.meta.url), 'utf8'));
 
@@ -61,7 +62,7 @@ function renderBody(rec, char, lore) {
 
 const META = {
   id: 'dnd-sheets',
-  version: '0.6.0',
+  version: '0.7.0',
   apiVersion: 2,
   hostVersion: '>=1.0.0',
   capabilities: { required: ['lifecycle.dispose', 'i18n.catalogs'] },
@@ -922,8 +923,10 @@ test('sheets: exportSheet serializes the character to JSON (B4.6)', () => {
   try { rec.actions.find((a) => a.name === 'exportSheet').fn('ce'); }
   finally { globalThis.Blob = oB; globalThis.URL = oU; globalThis.document = oD; }
   const parsed = JSON.parse(captured);
-  assert.equal(parsed.className, 'Rogue', 'exported JSON carries the sheet data');
-  assert.equal(parsed.abilities.DEX, 16, 'and the abilities');
+  assert.equal(parsed.format, 'dnd-sheets.character', 'export carries an explicit format');
+  assert.equal(parsed.version, 1, 'export carries a transfer-schema version');
+  assert.equal(parsed.sheet.className, 'Rogue', 'exported JSON carries the sheet data');
+  assert.equal(parsed.sheet.abilities.DEX, 16, 'and the abilities');
 });
 
 test('sheets: the import modal renders a paste area (B4.6)', () => {
@@ -933,20 +936,101 @@ test('sheets: the import modal renders a paste area (B4.6)', () => {
     rec.actions.find(action => action.name === 'importOpen').fn('cim');
     const out = renderBody(rec, { id: 'cim', name: 'Sam', addonData: { 'dnd-sheets': { className: 'Fighter' } } });
     assert.match(out, /Import character/, 'the import modal title');
+    assert.match(out, /type="file"/, 'the import modal offers a JSON file picker');
     assert.match(out, /dse-import-cim/, 'the paste textarea');
-    assert.match(out, /importApply/, 'the import action');
+    assert.match(out, /importPreview/, 'the validation action');
   } finally { clearLocalStorage(); }
 });
 
-test('sheets: import parses safely — valid + garbage JSON never throw (B4.6)', () => {
-  const { rec } = dryRun(PHB());
+test('sheets: import validates, previews, confirms, and can undo without an early write', async () => {
+  const original = {
+    className: 'Fighter',
+    level: 2,
+    abilities: { STR: 15 },
+  };
+  const character = {
+    id: 'c1',
+    name: 'Hero',
+    addonData: { 'dnd-sheets': original },
+  };
+  const { host, rec } = mockHost({
+    ...PHB(),
+    fixtures: { characters: [character] },
+  });
+  let stored = original;
+  host.store.patchAddonData = (_collection, _id, update) => {
+    stored = update(stored) || stored;
+    return stored;
+  };
+  register(host);
   const act = (n, ...a) => rec.actions.find((x) => x.name === n).fn(...a);
-  assert.doesNotThrow(() => act('importOpen', 'c1'));
-  assert.doesNotThrow(() => act('importClose', 'c1'));
-  globalThis.document = { getElementById: () => ({ value: '{"className":"Bard","abilities":{"CHA":15}}' }) };
-  try { assert.doesNotThrow(() => act('importApply', 'c1')); } finally { delete globalThis.document; }
-  globalThis.document = { getElementById: () => ({ value: 'not valid json {{{' }) };
-  try { assert.doesNotThrow(() => act('importApply', 'c1')); } finally { delete globalThis.document; }
+  act('importOpen', 'c1');
+  const raw = JSON.stringify({
+    format: 'dnd-sheets.character',
+    version: 1,
+    sheet: { v: 2, className: 'Bard', level: 4, abilities: { CHA: 16 } },
+  });
+  globalThis.document = {
+    getElementById: id => (
+      id === 'dse-import-file-c1'
+        ? { files: [] }
+        : { value: raw }
+    ),
+  };
+  try {
+    await act('importPreview', 'c1');
+    assert.equal(stored.className, 'Fighter', 'preview is read-only');
+    const preview = renderBody(rec, character);
+    assert.match(preview, /Validated import preview/);
+    assert.match(preview, /Bard/);
+    assert.match(preview, /importConfirm/);
+
+    act('importConfirm', 'c1');
+    assert.equal(stored.className, 'Bard');
+    const complete = renderBody(rec, character);
+    assert.match(complete, /Character sheet imported/);
+    assert.match(complete, /importUndo/);
+
+    act('importUndo', 'c1');
+    assert.equal(stored.className, 'Fighter');
+    assert.ok(rec.announces.includes('Character sheet imported.'));
+    assert.ok(rec.announces.includes('Character sheet import undone.'));
+  } finally {
+    delete globalThis.document;
+  }
+});
+
+test('sheets: invalid import remains open and cannot mutate the sheet', async () => {
+  const character = {
+    id: 'c1',
+    name: 'Hero',
+    addonData: { 'dnd-sheets': { className: 'Fighter' } },
+  };
+  const { host, rec } = mockHost({
+    ...PHB(),
+    fixtures: { characters: [character] },
+  });
+  let writes = 0;
+  host.store.patchAddonData = () => { writes += 1; };
+  register(host);
+  const act = (name, ...args) => rec.actions
+    .find(action => action.name === name).fn(...args);
+  act('importOpen', 'c1');
+  globalThis.document = {
+    getElementById: id => (
+      id === 'dse-import-file-c1'
+        ? { files: [] }
+        : { value: 'not valid json {{{' }
+    ),
+  };
+  try {
+    await act('importPreview', 'c1');
+    act('importConfirm', 'c1');
+    assert.equal(writes, 0);
+    assert.match(renderBody(rec, character), /not valid JSON/);
+  } finally {
+    delete globalThis.document;
+  }
 });
 
 test('sheets: recorded spell swaps show as a linked history in the Spellbook (B4.5)', () => {
@@ -1222,6 +1306,119 @@ test('sheets: ⚙ Settings tab — per-sheet layout switch + the print/export/im
     act('uiLayoutSet', 'cs', 'classic');
     assert.equal(ls.get('dse-ui:layout:cs'), 'classic', 'classic is stored explicitly (beats the legacy global fallback)');
   } finally { clearLocalStorage(); }
+});
+
+test('sheets: provider return keeps changed materialized values manual until resolved', () => {
+  mockLocalStorage('settings');
+  try {
+    const sheet = {
+      ...FIGHTER.addonData['dnd-sheets'],
+      abilities: { ...FIGHTER.addonData['dnd-sheets'].abilities },
+    };
+    captureProviderState(sheet, '2024');
+    sheet.abilities.STR = 18;
+    const character = {
+      ...FIGHTER,
+      addonData: { 'dnd-sheets': sheet },
+    };
+    const { rec } = dryRun(PHB());
+    const out = renderBody(rec, character);
+    assert.match(out, /Values that were previously computed changed/);
+    assert.match(out, /Keep manual values/);
+    assert.match(out, /Resume rulebook values/);
+    assert.doesNotMatch(out, /dse-tab-c1-builder/, 'Builder stays inactive before the decision');
+  } finally {
+    clearLocalStorage();
+  }
+});
+
+test('sheets: provider reconciliation can preserve manual mode or explicitly resume computation', () => {
+  const sheet = {
+    ...FIGHTER.addonData['dnd-sheets'],
+    abilities: { ...FIGHTER.addonData['dnd-sheets'].abilities },
+  };
+  captureProviderState(sheet, '2024');
+  sheet.ac = 21;
+  let stored = sheet;
+  const character = {
+    ...FIGHTER,
+    addonData: { 'dnd-sheets': stored },
+  };
+  const { host, rec } = mockHost({
+    ...PHB(),
+    fixtures: { characters: [character] },
+  });
+  host.store.patchAddonData = (_collection, _id, update) => {
+    stored = update(stored) || stored;
+    return stored;
+  };
+  register(host);
+  const resolve = rec.actions
+    .find(action => action.name === 'providerResolve').fn;
+
+  resolve('c1', 'manual');
+  assert.equal(stored.rulesMode, 'manual');
+  assert.equal(stored.ac, 21, 'manual choice preserves the changed value');
+
+  resolve('c1', 'builder');
+  assert.equal(stored.rulesMode, 'auto');
+  assert.ok(stored.rulesProvider?.materialized);
+  assert.notEqual(stored.ac, 21, 'builder choice explicitly rematerializes');
+  assert.equal(
+    stored.rulesProvider.materialized.ac,
+    stored.ac,
+    'the new computed baseline is recorded',
+  );
+});
+
+test('sheets: the first edit during a provider outage captures the pre-edit baseline', () => {
+  let provider = null;
+  let stored = {
+    ruleset: '2024',
+    className: 'Fighter',
+    level: 3,
+    classes: [{ classId: 'fighter', level: 3, subclass: '' }],
+    baseStats: { STR: 15, DEX: 12, CON: 14, INT: 10, WIS: 10, CHA: 8 },
+    abilities: { STR: 15, DEX: 12, CON: 14, INT: 10, WIS: 10, CHA: 8 },
+    ac: 16,
+  };
+  const host = {
+    id: 'dnd-sheets',
+    use: () => provider,
+    store: {
+      patchAddonData(_collection, _id, update) {
+        stored = update(stored) || stored;
+      },
+    },
+    ui: { rerender() {} },
+  };
+  const { sheetOf } = makeHelpers(host);
+  const model = makeEngine({
+    host,
+    NS: 'dnd-sheets',
+    ABILITIES,
+    SKILLS,
+    num,
+    abilityMod,
+    clampHp,
+    sheetOf,
+  });
+
+  model.mutate('c1', sheet => {
+    sheet.ac = 19;
+    return sheet;
+  });
+  assert.equal(stored.rulesProvider.materialized.ac, 16);
+
+  provider = makeFake();
+  assert.deepEqual(model.providerState(stored), {
+    status: 'reconcile',
+    reason: 'manual',
+    changed: ['ac'],
+    providerId: 'dnd55e-compendium',
+    edition: '2024',
+    engine: null,
+  });
 });
 
 test('sheets: toolbar gone from the sheet body — Print/Export ride the ⚙ tab only', () => {
