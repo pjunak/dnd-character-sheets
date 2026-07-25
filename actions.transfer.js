@@ -27,7 +27,7 @@ export function registerTransferActions(deps) {
   const register = (name, fn) => host.registerAction(name, fn);
   const timers = new Set();
   const later = (fn, delay) => { const id = setTimeout(() => { timers.delete(id); fn(); }, delay); timers.add(id); };
-  // Print / PDF (B4.6): build a self-contained sheet and open it in a new window,
+  // Print/PDF: build a self-contained sheet and open it in a new window,
   // which auto-opens the browser's print dialog (→ paper or Save as PDF). Isolated
   // from host chrome + theme. No-ops safely without a DOM (tests / headless).
   register('printSheet', (cid) => {
@@ -41,7 +41,7 @@ export function registerTransferActions(deps) {
       if (w && w.document) { w.document.open(); w.document.write(html); w.document.close(); w.focus(); w.print(); }
     } catch (_) {}
   });
-  // Export (B4.6): download the character's sheet data as a JSON file (backup /
+  // Export: download the character's sheet data as a JSON file (backup /
   // transfer). Serializes the normalized sheet; no-ops safely without a DOM.
   register('exportSheet', (cid) => {
     const ent = host.store.getCharacters().find((x) => x && x.id === cid) || { id: cid };

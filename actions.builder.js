@@ -35,7 +35,7 @@ export function registerBuilderActions(deps) {
       }
     });
   });
-  // Point-buy SET (B5): the host `.codex-stepper` input fires change with the new
+  // Point-buy set: the host `.codex-stepper` input fires change with the new
   // score; clamp to the point-buy floor/ceiling, then step down until within the
   // 27-point budget.
   register('builderAbilitySet', (cid, ability, value) => {
@@ -61,7 +61,7 @@ export function registerBuilderActions(deps) {
   register('builderClassSet', (cid, idx, classId) => {
     builderMutate(cid, (s, engine) => { if (s.classes[idx]) { s.classes[idx] = { ...s.classes[idx], classId: String(classId), subclass: '' }; } if (engine) reconcile(s, engine); });
   });
-  // Set a class level (host `.codex-stepper` input change, B5). Reconciles orphaned
+  // Set a class level from the host stepper. Reconciles orphaned
   // decisions, and — like the old +/- stepper — focuses (opens) the new top level
   // when the level grows so that level's choices are right there to resolve.
   register('builderLevelSet', (cid, idx, value) => {
@@ -134,7 +134,7 @@ export function registerBuilderActions(deps) {
     }), {});
     host.ui.rerender();
   });
-  // Level-independent extra feats (B4.5b) — read the picker + optional custom name +
+  // Level-independent extra feats: read the picker and optional custom name,
   // note at click time. A compendium featId feeds the engine (mechanics apply); a
   // free-text name is tracked. builderMutate so a real feat re-materializes the sheet.
   register('builderExtraFeatAdd', (cid) => {
@@ -150,7 +150,7 @@ export function registerBuilderActions(deps) {
   register('builderExtraFeatRemove', (cid, id) => {
     builderMutate(cid, (s) => { s.extraFeats = (Array.isArray(s.extraFeats) ? s.extraFeats : []).filter((f) => f.id !== id); });
   });
-  // Distribute-N-points ASI picker (B5): set one ability's delta (from the host
+  // Distribute-N-points ASI picker: set one ability's delta (from the host
   // `.codex-stepper` input's change) in an ability grant (bg ASI 'bgasi' / class ASI
   // 'asi:<c>:<l>:ability' / half-feat '…:featability'), clamping to [0, perMax] and to
   // the shared `budget` server-side. The abilityGrants `assign` map is the source of

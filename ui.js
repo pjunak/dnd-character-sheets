@@ -322,7 +322,7 @@ export function makeUI(ctx) {
 
   // ── A record name that (when resolvable) links to its compendium detail page
   //    AND carries a hover legend — the shared "click-to-go + hover" primitive
-  //    (B1/B2). Gates on `id`: with no id the name stays plain text (no dead link),
+  // Gates on `id`: with no id the name stays plain text (no dead link),
   //    mirroring the Builder log. `legend` is a statTip legend (or null → link
   //    only, no card). The dotted "has-info" underline shows only with a legend. ──
   function entityRef(kind, id, name, legend, opts) {
@@ -332,7 +332,7 @@ export function makeUI(ctx) {
     return statTip(inner, legend || null, { underline: !!legend, ...opts });
   }
 
-  // ── Engine-mode "manual override" control pair (ARCH-3). Type a value to beat
+  // ── Engine-mode manual override control pair. Type a value to beat
   //    the computed one; ↺ clears back to auto; a faint line flags divergence. ──
   function overrideControls(cid, field, label, numeric, autoVal, isOver) {
     const input = numField(

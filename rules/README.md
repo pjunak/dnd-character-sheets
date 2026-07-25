@@ -11,7 +11,7 @@ comes from a per-book data addon —
 via `host.use` (a manifest `optionalDependencies` entry). Adding a new
 class/subclass/item/spell is a book-addon data change and never touches this engine.
 
-**Edition independence (ARCH-7, 2026-07-10).** The engine targets no single edition:
+**Edition independence.** The engine targets no single edition:
 its system constants (multiclass slot table, caster-fraction rounding, ASI budgets,
 ability caps, point buy, rest rules, …) and subsystem capability flags (weapon
 mastery, epic boons, background-vs-species ASI) live in **`ruleset.js`** as
@@ -64,10 +64,9 @@ doc, and keep the old name delegating for at least one release. This contract
 lets the sheet's panels and external consumers evolve without moving the
 engine out of this addon.
 
-## Status
+## Hydration contract
 
-The full hydration pipeline is **implemented**. `hydrate(decisions)` runs the
-whole sequence — abilities (with
+`hydrate(decisions)` runs the whole sequence — abilities (with
 ability grants, capped per the ruleset; 2024: 20) → classes + proficiency bonus → species/lineage
 (speed, senses, resistances, per-level HP) → background → HP → AC → initiative →
 saves → skills (proficiency + expertise) → spellcasting (per-class DC/attack,
@@ -93,11 +92,10 @@ unchanged.
 
 **Collected features:** class features grant from the per-class `feature`
 records (`listFeatures({classId})`, record level ≤ class level) — the
-`progression[].features` name-strings are display labels, not identity (a
-drifted table once granted the L18 Spell Mastery to a L2 wizard). A string
+`progression[].features` name-strings are display labels, not identity. A string
 grants only when the class has no record of that name (the generic labels —
-ASI / Epic Boon / "\<Class\> Subclass" / upgrade markers — and whole books that
-predate feature records, ARCH-4); a string whose name is a record's at another
+ASI / Epic Boon / "\<Class\> Subclass" / upgrade markers — and providers that
+do not ship feature records); a string whose name is a record's at another
 level is drift and grants nothing. Same-name repeat records (rogue/bard
 Expertise, Metamagic) each grant at their own level; option-pool records
 (`category`: metamagic/maneuver/invocation) are choice fodder, never

@@ -64,7 +64,7 @@ export function makeFake() {
         id: 'rogue', name: 'Rogue', kind: 'class', hitDie: 'd8', savingThrows: ['DEX', 'INT'],
         spellcasting: null, weaponMastery: { count: 2 }, acFormulas: [],
         // Skills choose + an L1 expertise choice — mirrors the real 2024 rogue
-        // (exercises the expertise → DEG-1 materialization path).
+        // (exercises expertise materialization into the standalone fallback).
         startingProficiencies: { weapons: ['martial-finesse-or-light'], skills: { choose: 4, from: ['acrobatics', 'athletics', 'deception', 'insight', 'intimidation', 'investigation', 'perception', 'persuasion', 'sleightOfHand', 'stealth'] } },
         grants: { choices: [{ id: 'rogue-expertise-1', source: 'level:1', type: 'expertise', count: 2, prompt: 'Expertise (choose 2 skills)' }] },
         // Mirrors the real table's tricky rows: 'Expertise' repeats at two levels
@@ -85,7 +85,7 @@ export function makeFake() {
         id: 'warlock', name: 'Warlock', kind: 'class', hitDie: 'd8', savingThrows: ['WIS', 'CHA'],
         spellcasting: { ability: 'CHA', type: 'pact', prepares: 'list' }, weaponMastery: { count: 0 }, acFormulas: [],
         // 'Pact Magic' has NO feature record → the recordless-book string
-        // fallback (ARCH-4) must grant it verbatim.
+        // recordless-provider fallback must grant it verbatim.
         progression: [{ level: 1, cantripsKnown: 2, preparedSpells: 2, features: ['Pact Magic'] }, { level: 5, cantripsKnown: 3, preparedSpells: 6 }],
       },
     },

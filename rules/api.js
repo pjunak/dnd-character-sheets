@@ -21,7 +21,7 @@ import * as Engine from './engine.js';
 export function makeRulesApi(getData) {
   const data = () => { try { return getData() || null; } catch (_) { return null; } };
 
-  // The provider's raw `ruleset` record (ARCH-7) — null when the provider is
+  // The provider's raw `ruleset` record; null when the provider is
   // absent or predates getRuleset(). hydrate() resolves it per constant over
   // the 2024 defaults, so either null keeps today's behavior exactly.
   const rawRuleset = () => { try { return data()?.getRuleset?.() || null; } catch (_) { return null; } };
@@ -47,7 +47,7 @@ export function makeRulesApi(getData) {
     getItem:         (kind, id) => (data()?.getItem?.(kind, id) || null),
     getItemByName:   (kind, name) => (data()?.getItemByName?.(kind, name) || null),
     getRecords:      (kind) => (data()?.getRecords?.(kind) || []),
-    // The RESOLVED ruleset (ARCH-7): the provider's record merged per constant
+    // The resolved ruleset: the provider's record merged per constant
     // over the 2024 defaults — always a full object, never null, so panels can
     // read `getRuleset().capabilities.epicBoons` without guards.
     getRuleset:      () => Engine.resolveRuleset(rawRuleset()),

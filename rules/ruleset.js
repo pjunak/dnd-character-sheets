@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-//  rules/ruleset.js — edition system constants (ARCH-7).
+//  rules/ruleset.js — edition system constants.
 //
 //  The engine's SYSTEM numbers (slot tables, rounding, budgets, caps) live
 //  here as DEFAULT_RULESET — the D&D 2024 values the engine has always used.

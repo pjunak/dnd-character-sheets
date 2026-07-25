@@ -7,7 +7,6 @@
 //  paper) and pulls from the computed sheet (`comp`) + `viewModel`, degrading to
 //  the hand-filled flat fields when the engine is absent. Labels use the add-on's
 //  scoped locale just like the in-app sheet.
-//  (B4.6)
 // ═══════════════════════════════════════════════════════════════
 
 export function makePrintPanel(ctx) {

@@ -71,7 +71,7 @@ export function featureRecordFor(engine, cl, level, f) {
  *  the empty arrays). Multiclass `classes[]` arrives with the Builder. */
 export const blank = () => ({
   v: 2,
-  ruleset: '2024',   // ARCH-7: which edition's rules built this character — re-stamped from the data provider's ruleset record on every Builder save (model.js materializeInto)
+  ruleset: '2024',   // edition used to materialize this character; restamped on every Builder save
   rulesMode: 'auto',
   rulesProvider: null,
   player: '', className: '', subclass: '', race: '', background: '', alignment: '',
@@ -79,7 +79,7 @@ export const blank = () => ({
   abilities: { STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10 },
   maxHp: 0, hp: 0, tempHp: 0, ac: 10, initiative: 0, speed: 30, profBonus: 2,
   saveProf: {}, skillProf: {},
-  skillExpertise: {},  // { <skillId>: true } — DEG-1 fallback for expertise (materialized from the engine; the standalone viewModel doubles PB from it). In engine mode the Builder's expertise picks override it via resolveChoices.
+  skillExpertise: {},  // { <skillId>: true } — materialized so standalone mode retains expertise
   spells: [],      // manual/extra + copied spell entries [{id,name,level,school,origin}] (SP-1/SP-15)
   preparedSpells: {}, // engine mode: { <classId>: [spellRef,…] } prepared picks (SP-2)
   spellbook: {},      // engine mode: { <classId>: [spellRef,…] } the Wizard's LEARNED pool — prepared draws from this subset, not the whole class list (SP-5)
@@ -90,18 +90,18 @@ export const blank = () => ({
   resources: [],   // [{id, name, current, max}] manual play trackers (standalone / homebrew)
   resourceUses: {}, // engine mode: { <resourceKey>: current } — spend state for build-derived trackers; max/name/recharge come from the engine
   currency: { pp: 0, gp: 0, ep: 0, sp: 0, cp: 0 },
-  overrides: {},   // engine-mode manual overrides (ARCH-3)
+  overrides: {},   // engine-mode manual overrides
   // ── Builder decision model (engine mode). The flat fields above are kept as
-  //    the DEG-1 fallback: each Builder edit materializes the computed sheet
+  //    the durable fallback: each Builder edit materializes the computed sheet
   //    INTO them, so removing the engine degrades to a hand-filled sheet. ──
   baseStats: null,        // {STR..CHA} base scores before ASIs; null → migrate from `abilities`
   manualScores: false,    // Builder: false → point buy (27 pts, 8–15); true → free manual entry
   classes: [],            // ordered [{classId, level, subclass}] (MC-1)
   lineage: '',            // species sub-choice id (SB-3)
   abilityGrants: [],      // [{id, source, assign:{STR:+2,…}}] background ASI / half-feats (AB-1)
-  featureChoices: {},     // { <choiceId>: <value> } generic choice resolutions (ARCH-9/FE-1)
+  featureChoices: {},     // { <choiceId>: <value> } generic choice resolutions
   feats: [],              // [{featId, source}] chosen feats
-  extraFeats: [],         // level-independent feats from a custom source: [{id, featId?|name, sourceNote}] — compendium featIds feed the engine; free-text is tracked (B4.5b)
+  extraFeats: [],         // level-independent custom-source feats; compendium refs feed the engine
   notes: '',
 });
 

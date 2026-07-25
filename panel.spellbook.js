@@ -224,11 +224,11 @@ export function makeSpellbookPanel(ctx) {
   }
 
   // Extra (manual) + copied + other-source spells, separate from the granted set
-  // (SP-1/SP-15). Two add buttons (B4.2c): 📜 copy-from-scroll (spellbook casters
+  // Two add buttons: copy from a scroll for spellbook casters
   // only) and ✎ add-from-another-source (any class).
   function extraSection(c, s, edit, granted, comp) {
     const gnames = new Set((granted || []).map((g) => String(g.name || '').toLowerCase()));
-    // DEG-1 snapshot entries are the ENGINE loadout's fallback copy — the live
+    // Snapshot entries are the engine loadout's fallback copy; the live
     // prep UI above already shows those spells, so the Extra group hides them.
     const spells = (s.spells || []).filter((sp) => sp.origin !== 'snapshot').slice().sort((a, b) => num(a.level) - num(b.level) || String(a.name || '').localeCompare(String(b.name || '')));
     if (!spells.length && !edit) return '';
@@ -249,7 +249,7 @@ export function makeSpellbookPanel(ctx) {
     const originBadge = sp.origin === 'copied' ? `<span title="${esc(t('spell.copied'))}">📖</span> `
       : (sp.origin === 'other' || sp.origin === 'custom') ? `<span title="${esc(t('spell.fromOther'))}">✎</span> `
       : sp.origin === 'snapshot' ? `<span title="${esc(t('spell.snapshot'))}">📌</span> ` : '';
-    // A spell from another source that a spellcaster can cast with slots (B4.2c/SP-10).
+    // A spell from another source that a spellcaster can cast with slots.
     const slotTag = sp.castWithSlots ? `<span title="${esc(t('spell.castWithSlotsHint'))}" style="color:var(--accent-gold);font-size:var(--text-xs)">◈ ${esc(t('spell.castWithSlots'))}</span>` : '';
     const noteLine = sp.sourceNote ? `<div style="color:var(--text-muted);font-size:var(--text-xs);font-style:italic">${esc(sp.sourceNote)}</div>` : '';
     const dupBd = dup ? 'var(--color-danger)' : 'var(--border-subtle)';
@@ -310,7 +310,7 @@ export function makeSpellbookPanel(ctx) {
       </div></div>`;
   }
 
-  // Spellbook management modal (floating overlay) — TWO modes, one per button (B4.2c):
+  // Spellbook management modal: two modes, one per button.
   //  • 'copy'  → copy a spell into the book (spellbook casters): pick a class spell,
   //     pay 50 gp × level, optionally consume a /scroll/i inventory item → s.spellbook.
   //  • 'other' → add a spell from another source (feat / magic item / homebrew) with a
@@ -336,10 +336,8 @@ export function makeSpellbookPanel(ctx) {
       const selRef = uiState.get(cid, 'spellCopySelection', '');
       const selected = copyable.some((sp) => sp.id === selRef) ? selRef : ((copyable[0] && copyable[0].id) || '');
       const selSpell = copyable.find((sp) => sp.id === selected) || null;
-      // Only scrolls that actually HOLD the picked spell may be consumed
-      // (ROADMAP 5b): prefer the canonical "Scroll of <spell>" form, fall back
-      // to any scroll whose name contains the spell's name. Wrong scrolls are
-      // never offered; with no match, copying without a scroll stays possible.
+      // Prefer the canonical "Scroll of <spell>" form, then tolerate imported
+      // scroll names that contain the spell name.
       const allScrolls = (s.inventory || []).filter((it) => /scroll/i.test(String(it.name || '')));
       const reEsc = (x) => String(x).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const ofRe = selSpell ? new RegExp('scroll\\s+of\\s+' + reEsc(selSpell.name), 'i') : null;

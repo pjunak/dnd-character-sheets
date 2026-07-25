@@ -21,8 +21,8 @@ above it). The D&D tabs follow:
 
 - **Overview** — the host's own wiki profile (side-card + sections + lore), reused as tab 1 (not copied).
 - **Character Sheet** — D&D identity (class/level/background/alignment), ability scores,
-  saving throws, skills, mechanical notes, and the **inventory + currency** (grouped by
-  carry location — folded in from the former Backpack tab).
+  saving throws, skills, mechanical notes, and **inventory + currency** grouped by
+  carry location.
 - **Combat** — attacks from equipped/ready weapons, a castable-spells quick-reference,
   and resource trackers (Rage, Ki, slots…) with the Rest wizard.
 - **Spellbook** — prepared/cantrip slots, granted & choose-grant sections; a Wizard prepares from a **learned

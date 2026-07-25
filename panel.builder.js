@@ -2,7 +2,7 @@
 //  panel.builder.js — the Builder (guided progression + edit surface, engine mode).
 //
 //  Writes the rich decision model (classes[]/baseStats/grants/choices); every edit
-//  re-hydrates + materializes the DEG-1 fallback. Reached only when rulebook
+//  rehydrates and materializes the durable fallback. Reached only when rulebook
 //  data is present (the tab is gated on `getRules()`), and the rules api is
 //  built in-addon (rules/api.js) with a guaranteed shape — its list* members
 //  return [] while data is missing, so sections degrade to empty pickers
@@ -144,7 +144,7 @@ export function makeBuilderPanel(ctx) {
 
   // A recorded spell-swap chip (out → in), both linked to the compendium + hovered.
   // Read-only here — swaps are made/removed on the Spellbook tab; the spine just shows
-  // them at the level they happened (FE-4 / B4.5b).
+  // them at the level they happened.
   function swapChip(sw, engine) {
     const nm = (ref) => { const r = engine.getItem && engine.getItem('spell', ref); return r ? r.name : String(ref); };
     const leg = (ref) => { const r = engine.getItem && engine.getItem('spell', ref); return r && r.text ? { title: r.name, desc: firstPara(r.text), aria: r.name } : null; };
@@ -319,7 +319,7 @@ export function makeBuilderPanel(ctx) {
   function builderCreationChoices(c, s, engine, ro) {
     const bgRec = s.background ? (engine.getItemByName('background', s.background) || engine.getItem('background', s.background)) : null;
     if (!(bgRec && Array.isArray(bgRec.abilityScores) && bgRec.abilityScores.length)) return '';
-    // Background ASI budgets come from the ruleset (ARCH-7): 2024 distributes 3
+    // Background ASI budgets come from the ruleset; 2024 distributes 3
     // points across the background's abilities (+2/+1 or +1/+1/+1, max +2 to any
     // one); a ruleset with bgBudget 0 (2014 — backgrounds grant no ASI) hides the
     // block entirely, even if a record carries a stray abilityScores field.
@@ -331,7 +331,7 @@ export function makeBuilderPanel(ctx) {
     return section(t('builder.choices'), `<div style="display:flex;flex-direction:column;gap:var(--space-2)">${blocks.join('')}</div>`);
   }
 
-  // Level-independent extra feats (B4.5b) — feats from a boon / magic item / homebrew,
+  // Level-independent extra feats from a boon, magic item, or homebrew source,
   // separate from leveling. Pick a compendium feat (its mechanics apply via the engine)
   // or type a custom name (tracked only); each carries an optional source note. Remove
   // any of them. This is the "extras" home the maintainer asked for on the Character tab.
@@ -369,7 +369,7 @@ export function makeBuilderPanel(ctx) {
   // "Distribute N points across these abilities" — a +/- stepper per eligible
   // ability sharing a cumulative `budget` (ASI = 2, background = 3, a half-feat =
   // its amount), each capped at `perMax`. Replaces the old split-select dropdowns
-  // (B5), mirroring the point-buy stepper; every step routes through builderAsiStep,
+  // mirroring the point-buy stepper; every step routes through builderAsiStep,
   // which re-validates the budget server-side. `key` is the abilityGrant id.
   function abilityBudgetPickers(c, key, eligible, assign, budget, perMax, ro) {
     const spent = eligible.reduce((n, a) => n + num(assign[a], 0), 0);
@@ -458,7 +458,7 @@ export function makeBuilderPanel(ctx) {
     let detail = '';
     if (mode === 'asi') {
       // ASI budgets from the ruleset (2024: distribute 2 points — +2 to one, or
-      // +1/+1 to two) — number pickers (B5).
+      // +1/+1 to two) through number pickers.
       const asiRules = engine.getRuleset().constants.asi;
       detail = `<div style="margin-top:var(--space-2)">${abilityBudgetPickers(c, key + ':ability', ABILITIES, assignOf(s, key + ':ability'), asiRules.budget, asiRules.perMax, ro)}</div>`;
     } else if (mode === 'feat') {
@@ -471,7 +471,7 @@ export function makeBuilderPanel(ctx) {
         : generalOpts;
       const featRec = chosenFeat ? engine.getItem('feat', chosenFeat) : null;
       // Chosen feat → a ↗ link to its compendium page (+ summary hover) beside the
-      // picker, since a <select><option> can't itself be a link (B2.2, folded in).
+      // picker, since a <select><option> cannot itself be a link.
       const featLink = featRec ? ' ' + entityRef('feat', chosenFeat, '↗', featRec.text ? { title: featRec.name, desc: firstPara(featRec.text), aria: featRec.name } : null) : '';
       detail = `<div style="margin-top:var(--space-1);min-width:12rem">${selectBox(chosenFeat, featOpts, dataOn('change', host.action('builderChoose'), c.id, featKey, '$value'), t('builder.choose'), ro)}${featLink}</div>`;
       // Half-feat with a CHOICE of ability → ability sub-pick (AB-2). A fixed
@@ -481,7 +481,7 @@ export function makeBuilderPanel(ctx) {
       // 'ANY' (Boon of Skill) expands to all six abilities for the picker.
       const from = featAsiFrom(asi);
       if (asi && from.length > 1) {
-        // Half-feat/boon with a choice of ability → distribute its amount (usually +1) — pickers (B5).
+        // Distribute a half-feat or boon ability increase through the pickers.
         const amt = Math.max(1, num(asi.amount, 1));
         detail += `<div style="margin-top:var(--space-2)">${abilityBudgetPickers(c, key + ':featability', from, assignOf(s, key + ':featability'), amt, amt, ro)}</div>`;
       }

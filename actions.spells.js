@@ -37,7 +37,7 @@ export function registerSpellActions(deps) {
   });
   // Copy a spell into the book: read the picked spell (+ optional scroll) at click
   // time, charge 50 gp × spell level (2024 copying cost), consume the scroll if one
-  // was chosen, and add the ref to s.spellbook[classId] (→ preparable via B4.2b).
+  // was chosen, and add the ref to s.spellbook[classId].
   register('spellCopy', (cid, classId) => {
     let ref = '', scrollId = '';
     try { const sp = document.getElementById('dse-copy-spell-' + cid); const sc = document.getElementById('dse-copy-scroll-' + cid); ref = sp && sp.value; scrollId = sc && sc.value; } catch (_) {}
@@ -99,7 +99,7 @@ export function registerSpellActions(deps) {
       delRef(s, 'preparedSpells', classId, out);
       addRef(s, 'preparedSpells', classId, inRef);
       // Stamp BOTH the total level (legacy display) and the class level, so the Builder
-      // spine can place the swap at the right class-tab row even when multiclassing (B4.5b).
+      // spine can place the swap at the right class-tab row when multiclassing.
       const cl = (s.classes || []).find((x) => x.classId === String(classId));
       const classLevel = cl ? num(cl.level, 1) : num(s.level, 1);
       s.spellSwaps = (s.spellSwaps || []).concat([{ level: num(s.level, 1), classLevel, classId: String(classId), out: String(out), in: String(inRef) }]);

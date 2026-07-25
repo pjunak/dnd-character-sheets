@@ -39,7 +39,7 @@ export const dieSize = (hitDie) => num(String(hitDie || '').replace(/^d/i, ''), 
  *  as DIE_AVG tables in entry.js + panel.sheet.js). */
 export const hitDieAvg = (hitDie) => Math.floor(dieSize(hitDie) / 2) + 1;
 
-// ── SYSTEM constants (ARCH-7) ───────────────────────────────────────
+// ── System constants ────────────────────────────────────────────────
 // The numbers below live in rules/ruleset.js as DEFAULT_RULESET (the 2024
 // values) and may be overridden per edition by the data addon's `ruleset`
 // record. Every helper takes an optional resolved-ruleset `rs` that defaults
@@ -152,7 +152,7 @@ export function resolveClasses(cd, api, warn) {
       // A PLACEHOLDER roster row (the Builder's "＋ Add class" before a class is
       // picked) contributes nothing — counting it would inflate total level, PB
       // and HP (an empty row used to add a phantom avg-d8 level). A row with a
-      // classId the book can't resolve still counts (ARCH-4: free-text class).
+      // A class id the provider cannot resolve still counts as free text.
       if (!c || !c.classId) continue;
       const rec = lookup(c.classId);
       if (!rec && api) warn('Unknown class: ' + c.classId);
@@ -295,9 +295,9 @@ export function computeWeaponAttack(rec, mods, pb, profW, masterySet) {
 /**
  * Hydrate player DECISIONS into a computed sheet. NEVER throws — every step is
  * error-isolated and failures accumulate in `warnings`. Returns { sheet, warnings }.
- * The engine only PROPOSES; the sheet layer lets a stored override win (ARCH-3).
+ * The engine only proposes; the sheet layer lets a stored override win.
  * `ruleset` is the data provider's (possibly partial) `ruleset` record —
- * resolved per constant over the 2024 defaults (ARCH-7), so omitting it keeps
+ * resolved per constant over the 2024 defaults, so omitting it keeps
  * every existing call site byte-identical.
  */
 export function hydrate(decisions, api, ruleset) {
@@ -657,7 +657,7 @@ export function hydrate(decisions, api, ruleset) {
   // the L18 Spell Mastery to a L2 wizard). Strings still grant whatever has no
   // record of that name in the class: the generic labels (ASI / Epic Boon /
   // "<Class> Subclass" / upgrade markers) and whole books that predate feature
-  // records (ARCH-4 degradation). A string whose name IS a record's at another
+  // records. A string whose name is a record's at another
   // level is drift and grants nothing. Option-pool records (category:
   // metamagic / maneuver / invocation) are choice fodder, never auto-granted.
   step(() => {

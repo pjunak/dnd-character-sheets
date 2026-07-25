@@ -43,7 +43,7 @@ test('rules: option-pool count grows with level (countByLevel)', () => {
   assert.equal(at(17).count, 6, 'L17 → 6');
 });
 
-test('rules: ASI-opportunity levels are per-class and include class extras (B4.0 item 3)', () => {
+test('rules: ASI-opportunity levels are per-class and include class extras', () => {
   const fake = makeFake();
   const num = (v, d = 0) => { const n = Number(v); return Number.isFinite(n) ? n : d; };
   const model = makeEngine({ num, host: {}, NS: 'x', ABILITIES: [], SKILLS: [], abilityMod: () => 0, sheetOf: () => ({}) });
@@ -58,7 +58,7 @@ test('rules: ASI-opportunity levels are per-class and include class extras (B4.0
   assert.ok([4, 8, 12, 16, 19].every((l) => lv.includes(l)), 'base ASI levels still present (union — no regression)');
 });
 
-test('rules: reconcile drops orphaned choices + ability grants after a structural change (B4.0 item 4)', () => {
+test('rules: reconcile drops orphaned choices and ability grants after a structural change', () => {
   const fake = makeFake();
   const num = (v, d = 0) => { const n = Number(v); return Number.isFinite(n) ? n : d; };
   const model = makeEngine({ num, host: {}, NS: 'x', ABILITIES: [], SKILLS: [], abilityMod: () => 0, sheetOf: () => ({}) });
@@ -78,7 +78,7 @@ test('rules: reconcile drops orphaned choices + ability grants after a structura
   assert.ok(!s.featureChoices['asi:fighter:8'], 'the orphaned L8 choice is pruned');
 });
 
-test('rules: a half-feat ability pick bumps the score (B4.0 item 2 / AB-2)', () => {
+test('rules: a half-feat ability pick bumps the score', () => {
   const { rec } = withFake();
   // A multi-option half-feat's chosen +1 reaches the engine as a feat-type abilityGrant.
   const sheet = rec.provided.hydrate({ baseStats: { INT: 15 }, className: 'Wizard',
@@ -86,7 +86,7 @@ test('rules: a half-feat ability pick bumps the score (B4.0 item 2 / AB-2)', () 
   assert.equal(sheet.abilities.INT.score, 16, '15 + 1 (half-feat ability pick applied)');
 });
 
-test('rules: per-class prepared spell level is capped by that class in a multiclass (B4.2)', () => {
+test('rules: per-class prepared spell level is capped by that class in a multiclass', () => {
   const { rec } = withFake();
   const sc = rec.provided.hydrate({ classes: [
     { classId: 'wizard', level: 5, subclass: '' },
@@ -99,7 +99,7 @@ test('rules: per-class prepared spell level is capped by that class in a multicl
   assert.ok(sc.slots.length >= 3, 'the combined slot pool still reaches 3rd level');
 });
 
-test('rules: Warlock Pact Magic — short-rest slots, own level cap, no slot combine (B4.3)', () => {
+test('rules: Warlock Pact Magic uses short-rest slots and its own level cap', () => {
   const { rec } = withFake();
   const sheet = rec.provided.hydrate({ classes: [{ classId: 'warlock', level: 5, subclass: '' }] }).sheet;
   const wl = sheet.spellcasting.perClass.find((p) => p.classId === 'warlock');
@@ -111,7 +111,7 @@ test('rules: Warlock Pact Magic — short-rest slots, own level cap, no slot com
   assert.equal(res.recharge[0].on, 'short', 'pact slots recharge on a SHORT rest');
 });
 
-test('rules: a pact class printing pact slots as spellSlots never double-counts them (B4.3 guard)', () => {
+test('rules: a pact class printing pact slots as spellSlots never double-counts them', () => {
   // Some books print the Warlock's pact-slot column as `progression[].spellSlots`.
   // Reading that as LEVELED Spellcasting slots would double-count (pactMagic
   // already emits the pact pool), so the single-caster ownSlots path skips pact.
@@ -581,7 +581,7 @@ test('rules: repeat same-name feature records (Expertise ×2) BOTH grant, each a
     'below the repeat level only the first occurrence grants');
 });
 
-test('rules: recordless strings still grant — generic labels, ARCH-4 books, subclass features', () => {
+test('rules: recordless strings still grant for generic labels, sparse providers, and subclass features', () => {
   const { rec } = withFake();
   // Mixed row: rogue L3 pairs the recordless 'Rogue Subclass' label with a real
   // record — the label survives beside it, in the printed order.
@@ -591,7 +591,7 @@ test('rules: recordless strings still grant — generic labels, ARCH-4 books, su
   // A book with NO feature records for the class (warlock) → strings verbatim.
   assert.deepEqual(rec.provided.hydrate({ className: 'Warlock', level: 1 }).sheet.features,
     [{ id: 'Pact Magic', source: { type: 'class', id: 'warlock', level: 1 } }],
-    'ARCH-4: a recordless book degrades to the printed strings');
+    'a recordless provider degrades to the printed strings');
   // Subclass features keep their own (unchanged) path + provenance.
   const ek = rec.provided.hydrate({ classes: [{ classId: 'fighter', level: 3, subclass: 'eldritch-knight' }] }).sheet.features;
   assert.deepEqual(ek.find((f) => f.id === 'war-bond'),
@@ -610,7 +610,7 @@ test('rules: renderers survive the smoke pass', () => {
   assert.ok(smokeRegistrations(rec).ok, JSON.stringify(smokeRegistrations(rec).failures));
 });
 
-// ── ARCH-7: ruleset parameterization ────────────────────────────────
+// ── Ruleset parameterization ────────────────────────────────────────
 // The engine's system constants come from the data provider's `ruleset`
 // record, resolved per constant over the 2024 defaults (rules/ruleset.js).
 
@@ -633,7 +633,7 @@ const GOLDEN_BUILDS = [
     abilityGrants: [{ source: 'boon', assign: { STR: 1 }, cap: 30 }], baseStats: { STR: 20 } },
 ];
 
-test('ruleset: golden regression — no record / null / full default record are byte-identical (ARCH-7)', () => {
+test('ruleset: no record, null, and the full default record are byte-identical', () => {
   const fake = makeFake();
   for (const cd of GOLDEN_BUILDS) {
     const bare = Engine.hydrate(cd, fake);
@@ -749,7 +749,7 @@ test('ruleset: a feat record\'s structured initiative modifiers beat the alert f
   assert.equal(Engine.hydrate(cd, bare).sheet.derived.initiative, 2 + 3, 'fallback: DEX +2, PB +3');
 });
 
-// ── ARCH-7 stage 4: provider candidate list + the character's ruleset tag ──
+// ── Provider candidate list and the character's ruleset tag ─────────
 
 const make2014Provider = () => ({
   ...makeFake(),
@@ -773,13 +773,13 @@ test('ruleset: edition mismatch warns (advisory) and Builder saves re-stamp the 
   const model = makeEngine({ num: num2, host, NS: 'x', ABILITIES: [], SKILLS: [], abilityMod: () => 0, sheetOf: () => ({}), clampHp: (hp) => num2(hp, 0) });
   const engine = model.getRules();
   assert.ok(engine, 'candidate-list probe finds the provider');
-  // A 2024-built character under a 2014 provider: renders + warns (ARCH-5 advisory).
+  // A character built under a different provider still renders with a warning.
   const r = model.safeHydrate(engine, { ruleset: '2024', className: 'Wizard', level: 1 });
   assert.ok(r && r.sheet, 'mismatch never blocks rendering');
   assert.match(r.warnings[0], /2024.*2014/, 'the mismatch is surfaced as the first warning');
   // Same-edition characters get no such warning.
   assert.ok(!model.safeHydrate(engine, { ruleset: '2014', className: 'Wizard', level: 1 }).warnings.some((w) => /ruleset/.test(w)));
-  // materializeInto re-stamps the tag from the provider's edition (DEG-1 save path).
+  // materializeInto restamps the tag from the provider's edition.
   const s = { ruleset: '2024', className: 'Wizard', level: 1, abilities: {} };
   model.materializeInto(s, engine);
   assert.equal(s.ruleset, '2014', 'Builder save stamps the active provider edition');

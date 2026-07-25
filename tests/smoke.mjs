@@ -212,7 +212,7 @@ test('sheets: engine-computed vitals + Builder tab (editor, book data present)',
   } finally { clearLocalStorage(); }
 });
 
-test('sheets: HP is a directly-editable stepper — no heal/damage-by-amount field (B5)', () => {
+test('sheets: HP is a directly editable stepper with no damage-by-amount field', () => {
   mockLocalStorage('stats');
   try {
     const { rec } = dryRun(PHB());
@@ -288,7 +288,7 @@ test('sheets: Builder tab renders the guided form when book data is present', ()
   } finally { clearLocalStorage(); }
 });
 
-test('sheets: the Builder is tabbed — Character + one tab per class (B4.5b)', () => {
+test('sheets: the Builder has a Character tab and one tab per class', () => {
   mockLocalStorage('builder');
   try {
     const { rec } = dryRun(PHB());
@@ -301,7 +301,7 @@ test('sheets: the Builder is tabbed — Character + one tab per class (B4.5b)', 
   } finally { clearLocalStorage(); }
 });
 
-test('sheets: a class tab spine shows SUBCLASS features (A4/B4.5b)', () => {
+test('sheets: a class tab spine shows subclass features', () => {
   mockLocalStorage('builder');
   try {
     const { rec } = dryRun(PHB());
@@ -314,7 +314,7 @@ test('sheets: a class tab spine shows SUBCLASS features (A4/B4.5b)', () => {
   } finally { clearLocalStorage(); }
 });
 
-test('sheets: the class spine links resolved feature names to the compendium (B1.2)', () => {
+test('sheets: the class spine links resolved feature names to the compendium', () => {
   mockLocalStorage('builder');
   try {
     const { rec } = dryRun(PHB());
@@ -428,7 +428,7 @@ test('sheets: a half-feat chosen at an ASI level applies its ability bump (AB-2)
   assert.equal(grantFor('asi:wizard:4'), undefined, 'mode switch clears the feat grant');
 });
 
-test('sheets: ASI number picker distributes a 2-point budget (+2 or +1/+1), capped (B5)', () => {
+test('sheets: ASI number picker distributes a capped 2-point budget', () => {
   const { host, rec } = mockHost(PHB());
   let stored = {};
   host.store.patchAddonData = (_c, itemId, fn) => { stored = fn(stored) || stored; return { id: itemId, addonData: { 'dnd-sheets': stored } }; };
@@ -452,7 +452,7 @@ test('sheets: ASI number picker distributes a 2-point budget (+2 or +1/+1), capp
   assert.equal(asi().assign.STR, 2, 'per-ability cap (2) enforced');
 });
 
-test('sheets: background ASI number picker distributes 3 points, +2 max per ability (B5)', () => {
+test('sheets: background ASI picker distributes 3 points with +2 max per ability', () => {
   const { host, rec } = mockHost(PHB());
   let stored = {};
   host.store.patchAddonData = (_c, itemId, fn) => { stored = fn(stored) || stored; return { id: itemId, addonData: { 'dnd-sheets': stored } }; };
@@ -468,7 +468,7 @@ test('sheets: background ASI number picker distributes 3 points, +2 max per abil
   assert.equal(bg().assign.STR, 2, 'per-ability cap (2) enforced');
 });
 
-test('sheets: ASI level renders ability number-pickers, not a single-ability select (B5)', () => {
+test('sheets: ASI level renders ability number pickers, not a single select', () => {
   mockLocalStorage('builder');
   try {
     const { rec } = dryRun(PHB());
@@ -553,7 +553,7 @@ test('sheets: a multi-pick pool excludes an option already taken in another box 
   } finally { clearLocalStorage(); }
 });
 
-test('sheets: builder spine rows are whole-row click targets, inner links stay live (B5)', () => {
+test('sheets: builder spine rows are whole-row targets while inner links stay live', () => {
   mockLocalStorage('builder');
   try {
     const { rec } = dryRun(PHB());
@@ -613,9 +613,8 @@ test('sheets: Spellbook separates granted from picks + shows the available pool'
     // pinned host-side (ttrpg-codex test/design-system.test.mjs).
     assert.match(out, /class="codex-chip"/, 'spell chips are the host chip component');
     assert.match(out, /Fireball/, 'prepared pick shown');
-    // B2.1: spell names link to their compendium detail page (prepared pick + granted).
-    assert.match(out, /href="#\/compendium\/spell:fireball"/, 'prepared spell links to its compendium page (B2.1)');
-    assert.match(out, /href="#\/compendium\/spell:bless"/, 'granted spell links to its compendium page (B2.1)');
+    assert.match(out, /href="#\/compendium\/spell:fireball"/, 'prepared spell links to its compendium page');
+    assert.match(out, /href="#\/compendium\/spell:bless"/, 'granted spell links to its compendium page');
     assert.match(out, /Fire Bolt/, 'cantrip pick shown');
     assert.match(out, /Extra spells/, 'extra/copied section');
     assert.match(out, /Counterspell/, 'copied spell shown in extras');
@@ -625,7 +624,7 @@ test('sheets: Spellbook separates granted from picks + shows the available pool'
   } finally { clearLocalStorage(); }
 });
 
-test('sheets: a prepared ritual spell is marked when the class can ritual-cast (B4.2)', () => {
+test('sheets: a prepared ritual spell is marked when the class can ritual-cast', () => {
   mockLocalStorage('spellbook');
   try {
     const { rec } = dryRun(PHB());
@@ -638,7 +637,7 @@ test('sheets: a prepared ritual spell is marked when the class can ritual-cast (
   } finally { clearLocalStorage(); }
 });
 
-test('sheets: a Wizard prepares from the learned spellbook, not the full class list (B4.2b)', () => {
+test('sheets: a Wizard prepares from the learned spellbook, not the full class list', () => {
   mockLocalStorage('spellbook');
   try {
     const { rec } = dryRun(PHB());
@@ -662,7 +661,7 @@ test('sheets: a Wizard prepares from the learned spellbook, not the full class l
   } finally { clearLocalStorage(); }
 });
 
-test('sheets: Spellbook management — two buttons, copy mode + other-source mode (B4.2c)', () => {
+test('sheets: Spellbook management separates copy and other-source modes', () => {
   const char = { id: 'cmgr', name: 'Mage', addonData: { 'dnd-sheets': {
     classes: [{ classId: 'wizard', level: 5, subclass: '' }], abilities: { INT: 16 },
     currency: { gp: 500 },
@@ -726,7 +725,7 @@ test('sheets: scroll-copy offers only scrolls of the picked spell + never consum
   // generic equip picker legitimately lists every unplaced item (scrolls incl.),
   // so whole-page matching would false-positive on it.
   const scrollSelect = (out) => { const m = /<select[^>]*id="dse-copy-scroll-cscr"[\s\S]*?<\/select>/.exec(out); return m ? m[0] : ''; };
-  // Picked spell = Fireball: only the Fireball scroll is offered (ROADMAP 5b).
+  // The consume selector must offer only the scroll for the chosen spell.
   mockLocalStorage('spellbook');
   try {
     const { rec } = dryRun(PHB());
@@ -767,7 +766,7 @@ test('sheets: scroll-copy offers only scrolls of the picked spell + never consum
   assert.ok(!stored.inventory.some((it) => it.id === 'sc1'), 'the MATCHING scroll is consumed');
 });
 
-test('sheets: a Warlock shows Pact Magic in the Spellbook summary (B4.3)', () => {
+test('sheets: a Warlock shows Pact Magic in the Spellbook summary', () => {
   mockLocalStorage('spellbook');
   try {
     const { rec } = dryRun(PHB());
@@ -777,7 +776,7 @@ test('sheets: a Warlock shows Pact Magic in the Spellbook summary (B4.3)', () =>
   } finally { clearLocalStorage(); }
 });
 
-test('sheets: pact slots are a short-rest tracker resource (B4.3)', () => {
+test('sheets: pact slots are a short-rest tracker resource', () => {
   mockLocalStorage('combat');
   try {
     const { rec } = dryRun(PHB());
@@ -788,7 +787,7 @@ test('sheets: pact slots are a short-rest tracker resource (B4.3)', () => {
   } finally { clearLocalStorage(); }
 });
 
-test('sheets: Combat tab shows a read-only Features summary linking to the compendium (B4.4)', () => {
+test('sheets: Combat shows a read-only Features summary linked to the compendium', () => {
   mockLocalStorage('combat');
   try {
     const { rec } = dryRun(PHB());
@@ -799,7 +798,7 @@ test('sheets: Combat tab shows a read-only Features summary linking to the compe
   } finally { clearLocalStorage(); }
 });
 
-test('sheets: a chosen ASI feat shows a ↗ compendium link in the Builder (B4.4 / B2.2)', () => {
+test('sheets: a chosen ASI feat links to the compendium from the Builder', () => {
   mockLocalStorage('builder');
   try {
     const { rec } = dryRun(PHB());
@@ -813,7 +812,7 @@ test('sheets: a chosen ASI feat shows a ↗ compendium link in the Builder (B4.4
   } finally { clearLocalStorage(); }
 });
 
-test('sheets: the class spine flags unresolved levels + summarizes made choices as chips (B4.5b)', () => {
+test('sheets: the class spine flags unresolved levels and summarizes choices', () => {
   mockLocalStorage('builder');
   try {
     const { rec } = dryRun(PHB());
@@ -831,7 +830,7 @@ test('sheets: the class spine flags unresolved levels + summarizes made choices 
   } finally { clearLocalStorage(); }
 });
 
-test('sheets: a class tab levels via +/- and picks its subclass in the spine (B4.5b)', () => {
+test('sheets: a class tab changes level and picks its subclass in the spine', () => {
   mockLocalStorage('builder');
   try {
     const { rec } = dryRun(PHB());
@@ -852,7 +851,7 @@ test('sheets: a class tab levels via +/- and picks its subclass in the spine (B4
   } finally { clearLocalStorage(); }
 });
 
-test('sheets: the Character tab manages extra feats (compendium + free-text) (B4.5b)', () => {
+test('sheets: the Character tab manages compendium and free-text extra feats', () => {
   mockLocalStorage('builder');
   try {
     const { rec } = dryRun(PHB());
@@ -868,7 +867,7 @@ test('sheets: the Character tab manages extra feats (compendium + free-text) (B4
   } finally { clearLocalStorage(); }
 });
 
-test('sheets: an extra feat with a featId feeds the engine feats list (B4.5b)', () => {
+test('sheets: an extra feat with a featId feeds the engine feats list', () => {
   const api = makeRulesApi(() => ({ apiVersion: 1, getItem: () => null, getItemByName: () => null }));
   const { host } = mockHost({});
   const { sheetOf } = makeHelpers(host);
@@ -880,7 +879,7 @@ test('sheets: an extra feat with a featId feeds the engine feats list (B4.5b)', 
   assert.ok(!cd.feats.some((f) => f.featId == null), 'a free-text extra feat is not fed as a mechanical feat');
 });
 
-test('sheets: a recorded spell swap shows in the class spine at its level (B4.5b)', () => {
+test('sheets: a recorded spell swap appears at its level in the class spine', () => {
   mockLocalStorage('builder');
   try {
     const { rec } = dryRun(PHB());
@@ -893,7 +892,7 @@ test('sheets: a recorded spell swap shows in the class spine at its level (B4.5b
   } finally { clearLocalStorage(); }
 });
 
-test('sheets: printSheet builds a self-contained print sheet (B4.6)', () => {
+test('sheets: printSheet builds a self-contained print sheet', () => {
   const char = { id: 'cp', name: 'Gandalf', addonData: { 'dnd-sheets': {
     classes: [{ classId: 'wizard', level: 5, subclass: '' }], abilities: { INT: 16, DEX: 14, CON: 14 },
     preparedSpells: { wizard: ['fireball'] }, cantrips: { wizard: ['fire-bolt'] },
@@ -912,7 +911,7 @@ test('sheets: printSheet builds a self-contained print sheet (B4.6)', () => {
   assert.deepEqual(rec.i18nMissing, [], 'print labels all come from declared source keys');
 });
 
-test('sheets: exportSheet serializes the character to JSON (B4.6)', () => {
+test('sheets: exportSheet serializes the character to JSON', () => {
   const char = { id: 'ce', name: 'Frodo', addonData: { 'dnd-sheets': { className: 'Rogue', level: 3, abilities: { DEX: 16 } } } };
   const { rec } = dryRun({ ...PHB(), fixtures: { characters: [char] } });
   let captured = '';
@@ -929,7 +928,7 @@ test('sheets: exportSheet serializes the character to JSON (B4.6)', () => {
   assert.equal(parsed.sheet.abilities.DEX, 16, 'and the abilities');
 });
 
-test('sheets: the import modal renders a paste area (B4.6)', () => {
+test('sheets: the import modal renders a paste area', () => {
   mockLocalStorage('settings');
   try {
     const { rec } = dryRun(PHB());
@@ -1033,7 +1032,7 @@ test('sheets: invalid import remains open and cannot mutate the sheet', async ()
   }
 });
 
-test('sheets: recorded spell swaps show as a linked history in the Spellbook (B4.5)', () => {
+test('sheets: recorded spell swaps show as linked history in the Spellbook', () => {
   mockLocalStorage('spellbook');
   try {
     const { rec } = dryRun(PHB());
@@ -1198,7 +1197,7 @@ test('sheets: rest actions (open / spend hit die / short+long apply / close) do 
   assert.doesNotThrow(() => act('restClose', 'c1'));
 });
 
-test('sheets: overrides.maxHp governs every HP clamp + the rest heal (ARCH-3)', () => {
+test('sheets: overrides.maxHp governs every HP clamp and the rest heal', () => {
   const { host, rec } = mockHost(PHB());
   // Engine-built L5 Wizard (computed max 32, mirrors tests/rules.mjs) with a DM
   // override of 50 — the override must be the clamp everywhere the tile shows it.
@@ -1490,7 +1489,7 @@ test('sheets: Backpack tab retired — no backpack tab button, content in Charac
   } finally { clearLocalStorage(); }
 });
 
-test('sheets: Combat attacks link the weapon to the compendium (B2.3)', () => {
+test('sheets: Combat attacks link the weapon to the compendium', () => {
   mockLocalStorage('combat');
   try {
     const { rec } = dryRun(PHB());
@@ -1501,7 +1500,7 @@ test('sheets: Combat attacks link the weapon to the compendium (B2.3)', () => {
   } finally { clearLocalStorage(); }
 });
 
-test('sheets: header class + subclass link to the compendium (B2.4)', () => {
+test('sheets: header class and subclass link to the compendium', () => {
   mockLocalStorage('combat');
   try {
     const { rec } = dryRun(PHB());
@@ -1517,7 +1516,7 @@ test('sheets: header class + subclass link to the compendium (B2.4)', () => {
   } finally { clearLocalStorage(); }
 });
 
-test('sheets: materialize stores the subclass NAME in the flat fallback, id stays in classes[] (DEG-1)', () => {
+test('sheets: materialize stores the subclass name in the flat fallback while the id stays in classes[]', () => {
   const { host, rec } = mockHost(PHB());
   let stored = { classes: [{ classId: 'fighter', level: 3, subclass: '' }], abilities: {} };
   host.store.patchAddonData = (_c, itemId, fn) => { stored = fn(stored) || stored; return { id: itemId, addonData: { 'dnd-sheets': stored } }; };
@@ -1529,7 +1528,7 @@ test('sheets: materialize stores the subclass NAME in the flat fallback, id stay
   assert.equal(stored.className, 'Fighter', 'class fallback stays the resolved name');
 });
 
-test('sheets: materialize writes the DEG-1 spell snapshot + the joined multiclass class line', () => {
+test('sheets: materialize writes the spell snapshot and joined multiclass class line', () => {
   const { host, rec } = mockHost(PHB());
   let stored = {
     classes: [{ classId: 'wizard', level: 5, subclass: '' }, { classId: 'fighter', level: 2, subclass: '' }],
@@ -1550,7 +1549,7 @@ test('sheets: materialize writes the DEG-1 spell snapshot + the joined multiclas
   assert.equal(stored.spells.filter((sp) => sp.origin === 'snapshot').length, 2, 'snapshots are replaced wholesale, never accumulate');
 });
 
-test('sheets: materialize writes skill EXPERTISE; standalone totals keep the doubled PB (DEG-1)', () => {
+test('sheets: materialized expertise keeps doubled proficiency in standalone mode', () => {
   const { host, rec } = mockHost(PHB());
   let stored = {
     classes: [{ classId: 'rogue', level: 1, subclass: '' }],
@@ -1577,7 +1576,7 @@ test('sheets: the spell snapshot renders standalone (book removed) and hides in 
     spells: [{ id: 'snap:mage-armor', ref: 'mage-armor', name: 'Mage Armor', level: 1, school: 'Abjuration', prepared: true, origin: 'snapshot', sourceNote: 'Wizard' }] };
   mockLocalStorage('spellbook');
   try {
-    // Standalone (engine off): the snapshot IS the visible spellbook — DEG-1.
+    // In standalone mode, the materialized snapshot is the visible spellbook.
     const { rec } = dryRun();
     const out = renderBody(rec, { id: 'cs1', name: 'Mage', addonData: { 'dnd-sheets': blob } });
     assert.match(out, /Mage Armor/, 'the snapshot spell stays visible after engine/book removal');
@@ -1663,7 +1662,7 @@ test('sheets: add-item wizard stages with a quantity + commits the batch to the 
   } finally { clearLocalStorage(); }
 });
 
-test('sheets: internal inventory helper stores item kind; free-text armor resolves by name (ROADMAP 7)', () => {
+test('sheets: internal inventory helper stores item kind; free-text armor resolves by name', () => {
   const stored = addInventoryItems({}, [{ kind: 'armor', ref: 'leather', name: 'Leather Armor', qty: 1 }], {
     uid: () => 'item-1',
     num,
@@ -1728,7 +1727,7 @@ test('sheets: unload clears domain timers and a reload registers one clean actio
     body: { appendChild() {} },
   };
   globalThis.URL = {
-    createObjectURL: () => 'blob:p8-test',
+    createObjectURL: () => 'blob:download-test',
     revokeObjectURL() {},
   };
   mockLocalStorage('overview');

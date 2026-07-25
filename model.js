@@ -3,9 +3,9 @@
 //
 //  Builds the Builder's working model from the stored sheet, collects + resolves
 //  the choice descriptors, hydrates the rules engine (error-isolated),
-//  materializes the DEG-1 fallback, and exposes the single `viewModel` the read
+//  materializes the durable fallback, and exposes the single `viewModel` the read
 //  tabs consume (computed-when-present, hand-filled otherwise; a stored override
-//  always wins — ARCH-3). Also owns `mutate` / `builderMutate` (persist + re-render
+//  always wins). Also owns `mutate` / `builderMutate` (persist + re-render
 //  through patchAddonData → this NS only).
 //
 //  The rules ENGINE is built in (rules/engine.js + rules/api.js); what's
@@ -45,7 +45,7 @@ export function makeEngine(ctx) {
   };
 
   // ASI-opportunity levels for a class. The base levels come from the ruleset
-  // (2024: 4/8/12/16/19 — ARCH-7); some classes get extras (Fighter 6 & 14,
+  // (2024: 4/8/12/16/19); some classes get extras (Fighter 6 & 14,
   // Rogue 10) declared in the class's `progression` (levels whose features
   // include an "Ability Score Improvement"). Union with the base so extras are
   // ADDED without dropping anything.
@@ -62,7 +62,7 @@ export function makeEngine(ctx) {
    *  kind ∈ skills | expertise | weaponMastery | feat | enumerated | asiMode. */
   const collectChoices = (classes, engine) => {
     const out = [];
-    // ARCH-7: a ruleset without the weapon-mastery subsystem (2014) drops those
+    // A ruleset without the weapon-mastery subsystem drops those
     // descriptors — the engine zeroes the slots too, this keeps the picker away.
     const noMastery = rulesApi.getRuleset().capabilities.weaponMastery === false;
     for (const cl of classes) {
@@ -141,7 +141,7 @@ export function makeEngine(ctx) {
     };
     const bgRec = s.background ? (engine.getItemByName('background', s.background) || engine.getItem('background', s.background)) : null;
     if (bgRec && bgRec.originFeat) feats.push(bgRec.originFeat);
-    // Level-independent extra feats from a custom source (B4.5b): a compendium featId
+    // Level-independent extra feats from a custom source: a compendium featId
     // applies its mechanics via the engine; free-text (no featId) is tracked only.
     for (const ef of (Array.isArray(s.extraFeats) ? s.extraFeats : [])) if (ef && ef.featId) feats.push(ef.featId);
     for (const ch of collectChoices(classes, engine)) {
@@ -184,14 +184,14 @@ export function makeEngine(ctx) {
 
   /** Run the rules engine over the stored decisions (error-isolated). Returns
    *  the engine result { sheet, warnings } or null in standalone / on failure —
-   *  so a broken engine never breaks the sheet (ARCH-4/ARCH-5). */
+   *  so a broken engine never breaks the sheet. */
   const safeHydrate = (engine, s) => {
     try {
       const r = engine && engine.hydrate && engine.hydrate(s);
       if (!(r && r.sheet)) return null;
-      // ARCH-7: a character built under another edition still renders — the
+      // A character built under another edition still renders; the
       // installed provider's rules interpret the decisions — but says so
-      // (advisory, never blocking, like every other warning: ARCH-5).
+      // warning is advisory and never blocks editing.
       const ed = engine.getRuleset ? engine.getRuleset().edition : null;
       if (ed && s && s.ruleset && s.ruleset !== ed) r.warnings.unshift('Character was built with the ' + s.ruleset + ' ruleset; the installed rules are ' + ed);
       return r;
@@ -199,13 +199,13 @@ export function makeEngine(ctx) {
     catch (_) { return null; }
   };
 
-  /** DEG-1: write the engine-computed sheet INTO the flat fallback fields, so
+  /** Write the engine-computed sheet into the flat fallback fields so
    *  removing the engine later degrades to this last-computed snapshot (a
    *  fully-functional hand-filled sheet) rather than blank/broken. Mutates `s`. */
   const materializeInto = (s, engine) => {
     const r = safeHydrate(engine, decisionsOf(s, engine));
     if (!r || !r.sheet) return;
-    // ARCH-7: stamp which edition's rules computed this build — the provider
+    // Stamp which edition's rules computed this build; the provider
     // selection key for campaigns with a non-2024 compendium (blank() seeds
     // '2024' for blobs that predate providers shipping a ruleset record).
     if (engine.getRuleset) { const ed = engine.getRuleset().edition; if (ed) s.ruleset = ed; }
@@ -216,7 +216,7 @@ export function makeEngine(ctx) {
     const first = named[0] || m.classes[0] || {};
     const firstRec = first.classId ? engine.getItem('class', first.classId) : null;
     const classNameOf = (cl) => { const rec2 = engine.getItem ? engine.getItem('class', cl.classId) : null; return (rec2 && rec2.name) || cl.classId; };
-    // DEG-1: a MULTICLASS build materializes the whole joined line ("Fighter 5 /
+    // A multiclass build materializes the whole joined line ("Fighter 5 /
     // Wizard 5") — collapsing to the first class name alone lost the rest of
     // the build when the engine was removed. Single-class keeps the bare name
     // (the header template already prints the level).
@@ -231,7 +231,7 @@ export function makeEngine(ctx) {
     s.level = num(cs.totalLevel, num(s.level, 1));
     for (const a of ABILITIES) if (cs.abilities && cs.abilities[a]) s.abilities[a] = num(cs.abilities[a].score, num(s.abilities[a], 10));
     s.maxHp = num(d.maxHp, s.maxHp);
-    s.hp = ctx.clampHp(num(s.hp, 0), effectiveMaxHp(s, cs));   // override-aware (ARCH-3)
+    s.hp = ctx.clampHp(num(s.hp, 0), effectiveMaxHp(s, cs));   // override-aware
     s.ac = num(d.armorClass, s.ac);
     s.initiative = num(d.initiative, s.initiative);
     s.speed = num(d.speed, s.speed);
@@ -240,12 +240,12 @@ export function makeEngine(ctx) {
     for (const a of ABILITIES) s.saveProf[a] = !!(cs.saves && cs.saves[a] && cs.saves[a].proficient);
     s.skillProf = {};
     for (const id of Object.keys(cs.skills || {})) s.skillProf[id] = !!cs.skills[id].proficient;
-    // DEG-1: expertise is part of the computed truth — materialize the flat map
+    // Expertise is part of the computed truth; materialize the flat map
     // the standalone viewModel doubles PB from, so removing the engine keeps
     // the same skill totals (they used to silently drop by PB).
     s.skillExpertise = {};
     for (const id of Object.keys(cs.skills || {})) if (cs.skills[id].expertise) s.skillExpertise[id] = true;
-    // DEG-1 (§14): a NAME-RESOLVED snapshot of the whole spell loadout —
+    // Keep a name-resolved snapshot of the whole spell loadout:
     // cantrips + prepared picks + granted/always-prepared — written into
     // s.spells with origin:'snapshot'. The standalone spellbook renders
     // s.spells, so removing the engine/book keeps the loadout visible as plain
@@ -287,14 +287,14 @@ export function makeEngine(ctx) {
   // and load-orders it before us WHEN present, but never blocks us when it's
   // absent — then use() throws → skip → standalone). The probe is duck-typed
   // (`apiVersion >= 1`), so ANY addon providing the compendium's api shape
-  // works; the first valid provider wins (ARCH-7: one edition per campaign —
+  // works; the first valid provider wins (one edition per campaign;
   // its `ruleset` record dictates the system rules; the character's stored
   // `ruleset` tag records which edition built it, and a mismatch surfaces as a
   // hydrate warning in safeHydrate). `getRules()` returns the api only while
   // book data is actually present, so every engine-mode branch (Builder tab,
   // computed vitals, the spellbook engine path) lights up exactly when there
   // is content to compute from, and the sheet degrades to the hand-filled
-  // standalone paths otherwise (ARCH-4). The probe is lazy, per render,
+  // standalone paths otherwise. The probe is lazy, per render,
   // try/caught — installing/removing a book mid-session never breaks the sheet.
   const DATA_ADDONS = ['dnd55e-compendium', 'dnd5e-compendium'];   // 2024, 2014 (future repo)
   const _probeProvider = () => {
@@ -322,12 +322,12 @@ export function makeEngine(ctx) {
   };
   const getRules = sheet => providerState(sheet).engine;
 
-  /** ARCH-3 for max HP — the ONE value every HP clamp/heal respects (setField /
+  /** The one max-HP value every clamp and heal respects (setField /
    *  applyHp / the Rest wizard / materialize all route through this, so a clamp
    *  can never disagree with the max the HP tile displays):
    *    • engine mode: a stored override BEATS the computed max ("the DM said
    *      so"), else the computed max (`comp`, when the caller already
-   *      hydrated), else the flat s.maxHp — which DEG-1 materialization keeps
+   *      hydrated), else the flat s.maxHp, which materialization keeps
    *      equal to the computed max, so the cheap flat read stays correct.
    *    • standalone: the flat hand-filled s.maxHp (the viewModel ignores
    *      dormant overrides there, so the clamp does too). */
@@ -339,8 +339,8 @@ export function makeEngine(ctx) {
   };
 
   /** One value source for the read tabs: computed values from the engine when
-   *  present (ARCH-1 — derive, don't store), else the hand-filled flat fields. A
-   *  stored override always wins (ARCH-3). The `auto` flag drives the badge.
+   *  present (derive, do not store), else the hand-filled flat fields. A
+   *  stored override always wins. The `auto` flag drives the badge.
    *  Passive perception routes through the resolved Perception skill total so
    *  expertise is reflected and the formula lives in exactly one place. */
   const viewModel = (s, comp) => {
@@ -379,7 +379,7 @@ export function makeEngine(ctx) {
       init: num(s.initiative, 0),
       speed: num(s.speed, 30),
       save: (a) => { const prof = !!s.saveProf[a]; return { prof, exp: false, total: abilityMod(s.abilities[a]) + (prof ? flatPb : 0) }; },
-      // Expertise survives engine removal (DEG-1): the materialized flat
+      // Expertise survives engine removal through the materialized flat
       // skillExpertise map doubles PB exactly as the engine did — only where
       // the skill is also proficient (PR-2).
       skill: (id, ab) => {
@@ -418,7 +418,7 @@ export function makeEngine(ctx) {
   };
 
   /** Builder mutation: seed the rich model (migration) if needed, apply `fn`,
-   *  then materialize the DEG-1 fallback. Persists + re-renders via `mutate`. */
+   *  then materialize the durable fallback. Persists and rerenders via `mutate`. */
   const builderMutate = (cid, fn) => {
     mutate(cid, (s) => {
       const engine = getRules(s);

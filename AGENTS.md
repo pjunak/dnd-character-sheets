@@ -1,194 +1,118 @@
-# AGENTS.md — dnd-character-sheets (repo guide for AI agents)
+# AGENTS.md — dnd-character-sheets
 
-**What this repo is.** The D&D character-sheet addon for the
-[ttrpg-codex](https://github.com/pjunak/ttrpg-codex) host app. **Addon id is
-`dnd-sheets`** — the host keys on the manifest id, and the id (not the repo
-dir name) namespaces `character.addonData['dnd-sheets']`. Tabbed sheet UI
-(Overview / Character Sheet [incl. inventory] / Combat / Spellbook / Builder /
-Settings)
-**plus the built-in pure rules engine** (`rules/engine.js` + `rules/api.js`).
-The engine is **edition-parameterized** (ARCH-7): built-in 2024 constants, a
-data provider's `ruleset` record overrides per constant. Standalone
-hand-fillable; declares `optionalDependencies: dnd55e-compendium` (2024) and
-`dnd5e-compendium` (2014, future) — engine mode lights up when a book
-addon's data is present. `provide()`s the rules API for future consumers
-(e.g. a combat addon).
+This repository contains the `dnd-sheets` addon for the sibling
+`ttrpg-codex` host. The manifest ID is a permanent data namespace:
+character state lives at `character.addonData["dnd-sheets"]`. Do not rename it
+without a data migration.
 
-## Read these first
+The addon remains hand-fillable without a provider. When a compatible
+compendium is present, its built-in pure rules engine hydrates a guided builder
+and computed sheet. It publishes a versioned rules API for optional consumers.
 
-1. [`README.md`](README.md) — tabs, editing model, dev + test commands.
-2. [`rules/README.md`](rules/README.md) — the engine: layout, hydration
-   pipeline, slot/multiclass semantics.
-3. [`docs/RULES_EDGE_CASES.md`](docs/RULES_EDGE_CASES.md) — the canonical
-   current runtime contract and edge cases. It intentionally contains no
-   implementation history; `model.js` remains the truth for shipped field
-   names.
-4. The **canonical addon-authoring contract** lives in the host repo:
-   `../ttrpg-codex/examples/addons/AGENTS.md` (condensed) and
-   `../ttrpg-codex/examples/addons/AUTHORING.md` (full reference,
-   [GitHub](https://github.com/pjunak/ttrpg-codex/blob/main/examples/addons/AUTHORING.md)).
-   This file deliberately does NOT vendor a copy — a stale copy misled agents
-   here before.
+## Read before editing
 
-## Layout + the naming trap
+1. [`README.md`](README.md) for user-visible behavior and development commands.
+2. [`rules/README.md`](rules/README.md) for the rules-engine boundary.
+3. [`docs/RULES_EDGE_CASES.md`](docs/RULES_EDGE_CASES.md) for current mechanics
+   and deliberately unsupported cases.
+4. `../ttrpg-codex/examples/addons/AGENTS.md` for the host contract.
+5. `../dnd55e-compendium/data/SCHEMA.md` when changing provider record use.
 
+`model.js` and the tests are authoritative for stored field names. Do not copy
+the host authoring contract into this repository.
+
+## Architecture
+
+```text
+addon.json              API-v2 manifest and optional providers
+entry.js                composition root and public API registration
+actions.*.js            domain controllers and owned cleanup
+actions.shared.js       action-map registration helper
+model.js                stored-blob migration, view model, builder mutations
+provider-state.js       provider detection and per-character materialization
+ui-state.js             session UI state and persisted view preferences
+equipment-model.js      pure inventory/equipment resolution
+sheet-transfer.js       bounded, versioned JSON import/export
+panel.*.js              rendering only
+ui.js / helpers.js      shared presentation helpers
+rules/                  pure host-free rules engine and public API
+locales/en.json         complete English UI source catalog
+tests/                  smoke, rule, state, transfer, and pure-module tests
 ```
-addon.json          manifest — id dnd-sheets, optionalDependencies, tests.client
-locales/en.json     declarative English UI source catalog loaded by the host
-entry.js            composition root: register(host), panels, tab routing,
-                    fragment render, rules API provision, domain disposers
-actions.base.js     tabs, direct fields/proficiencies, overrides, layout
-actions.spells.js   spell prep/book, swaps, grants, drag/drop, manager
-actions.inventory.js inventory/equipment + add-item wizard; addInventoryItems
-actions.resources.js resources/rest; pure applyHpChange helper
-actions.builder.js  guided decision mutations
-actions.transfer.js print/export/import; owns download URL timers
-actions.shared.js   small action-map registration helper
-ui-state.js         per-character session UI state; persists tab/layout only
-equipment-model.js pure inventory resolution + worn/attuned slot model
-sheet-transfer.js   versioned export + bounded import validation
-provider-state.js   materialized baseline + per-character provider resolution
-model.js            THE data layer: stored-blob read/migration, viewModel,
-                    builderMutate + materializeInto (DEG-1), getRules() probe
-panel.overview.js   ⚠ renders the CHARACTER SHEET tab (id `stats`) — entry.js appends
-                    panel.backpack.js below it (Backpack has no own tab anymore)
-panel.sheet.js      ⚠ renders the COMBAT tab
-panel.spellbook.js / panel.backpack.js / panel.builder.js / editor.js
-panel.print.js      print/PDF sheet (new-window, self-contained) + JSON import modal
-ui.js               shared render helpers — statTip/entityRef are THE hover+link
-                    primitives; heroTile/abilityTile compose host classes; styleTag
-helpers.js          compendiumHref / firstPara / featureRecordFor
-rules/              the PURE engine (host-free, unit-tested): engine.js + api.js
-tests/              smoke/rules plus focused pure-module tests
+
+The host wiki profile is the Overview tab. `panel.overview.js` renders the
+Character Sheet tab and composes the backpack below it; `panel.sheet.js`
+renders Combat. Preserve this naming unless doing a deliberate, tested rename.
+
+## Boundaries that protect maintainability
+
+- `entry.js` composes modules. Register each action in exactly one domain
+  controller and pass dependencies explicitly.
+- Panels render. They do not mutate stored blobs or implement rules math.
+- `model.js` owns migrations and mutations. Builder changes flow through
+  `builderMutate()` and `materializeInto()` so computed state is copied into
+  flat fallback fields.
+- The fallback fields are a durability contract: losing or disabling a
+  provider must leave a usable hand-filled sheet rather than erase data.
+- `provider-state.js` resolves provider availability per character. Do not
+  assume a globally installed provider means every stored character is safe to
+  recompute.
+- `rules/` stays deterministic, host-free, and DOM-free. Rules facts and
+  edition-dependent tables belong there, not in panels.
+- Rulebook records belong in a compendium addon. Tests use `tests/fake-phb.mjs`
+  instead of embedding production book data.
+- `ui-state.js` owns transient navigation, modal, wizard, and selection state.
+  Persist only intentional view preferences.
+- Domain controllers dispose their own timers, URLs, listeners, and other
+  resources. The host disposes registrations.
+- Optional providers enhance the sheet but never become an accidental hard
+  dependency. Probe through `host.use()` behind a coherent standalone fallback.
+- Action names are internal UI wiring. The object passed to `host.provide()` is
+  the versioned consumer contract.
+
+## UI and localization
+
+- Escape dynamic and translated text with `host.h.esc()` at HTML boundaries.
+- Use host actions/events and shared `.codex-*` components for common controls.
+- Keep sheet composition and D&D-specific indicators scoped under
+  `.addon-dnd-sheets`; build them from host tokens.
+- Promote a component into the host only after it has a genuine second
+  consumer. Keep game-specific semantics local.
+- English source text lives in `locales/en.json`; other catalogs may be
+  partial. Never register strings in core or read host language storage
+  directly.
+- Renderers handle missing providers, old sparse blobs, empty collections, and
+  disposal/reload without throwing.
+
+## Working loop
+
+Run from this repository in PowerShell:
+
+```text
+node --test tests/smoke.mjs tests/rules.mjs tests/ui-state.mjs tests/equipment-model.mjs tests/sheet-transfer.mjs tests/provider-state.mjs
 ```
-The Overview tab has no module — it is the host's own wiki profile folded in
-via the `characters:body` takeover.
 
-The **Builder** is internally sub-tabbed: a **Character** tab (abilities, species,
-background, class roster, level-independent extra feats) + **one tab per class**,
-each a per-level **progression spine** whose rows expand in place (accordion) to
-edit that level's choices. Sub-tab / open-row state is session-only and not
-persisted. A sheet-wide toolbar offers Print / Export / Import (B4.6).
+Use relative test paths on Windows. From the host repository, install the
+current source with:
 
-## Layering rules (where new code goes)
+```text
+node scripts/dev-install-addon.cjs ../dnd-character-sheets
+```
 
-- **Panels render only.** No stored-blob mutation, no rules math in panels.
-- **`entry.js` composes; `actions.*.js` own controller behavior.** Register a
-  new action in exactly one domain module and pass its dependencies explicitly
-  from `entry.js`. Domain-local timers/state must have a disposer returned to
-  the composition root. The host lifecycle removes registrations; domain
-  disposers clear only their owned resources.
-- **`ui-state.js` owns UI state.** Tabs and layout are the only persisted
-  preferences. Modal, wizard, selection, and Builder state stays in memory and
-  is cleared on disposal.
-- **`model.js` owns the pipeline + every mutator.** Any new engine-affecting
-  mutation MUST route through `builderMutate`/`materializeInto` — that is the
-  **DEG-1 obligation**: every Builder edit materializes computed values into
-  the flat fallback fields so removing the engine/book degrades to a
-  hand-filled sheet, never a data loss.
-- **Provider return is per character.** `provider-state.js` records only the
-  engine-materialized flat fields. If they diverge while the rulebook is
-  unavailable, engine mode stays off for that character until the user chooses
-  manual mode or explicitly rematerializes from the provider.
-- **`rules/` stays pure and host-free** (no `host`, no DOM) — that's what
-  makes it unit-testable. Rules facts (point-buy costs, clamps, tables) live
-  here, never in panels.
-- **Content belongs in the book addon** (`../dnd55e-compendium`) — this
-  repo ships no rulebook data; `tests/fake-phb.mjs` fakes it for engine-mode
-  tests.
+Source edits are not visible in the app until reinstall. Client-only changes
+need a refresh; host/server changes may require restart. Keep test metadata
+aligned with `addon.json`, and run relevant host addon compatibility tests when
+the manifest or facade use changes.
 
-## Current state (high level; detail = git log + README)
+Development happens on `main`. Do not create branches, commits, releases, or
+pushes unless the maintainer asks. Planning notes are local-only and must not be
+committed.
 
-Feature-complete through the B4/B5 arcs: engine mode (book data present) with
-the guided per-level **tabbed Builder** (progression spines, ASI ± steppers over
-a shared budget, reconcile-on-change), the **spellbook** (Wizard learned pool,
-copy-from-scroll, Warlock Pact Magic), **print/PDF + JSON export/import**, and
-the full **UI polish** pass — whole-row click targets with hover/focus rings,
-editable-HP tile, a compact text-labelled vitals strip (incl. per-class spell
-save DC / spell attack tiles; the icon-glyph vitals were reverted), 3-state
-proficiency dots + a filled/struck shield-shaped AC indicator,
-keyboard-navigable sub-tabs, host `.codex-chip` spell/inventory chips. All repeatable UI renders host `.codex-*`
-components; standalone (no book) degrades to a hand-filled sheet (DEG-1).
+## Scope
 
-## Working here — the facts that bite
-
-- **Branch workflow** *(changed 2026-07-10)*: development happens directly on
-  **`main`** — the old long-lived `agentic-dev` branch is retired; don't create
-  it or per-task branches. Commit only when the maintainer asks. When a batch
-  spans the host, integrate **`ttrpg-codex` first** — addon CI checks out
-  `ttrpg-codex@main` for the test harness.
-- **Sibling checkouts assumed**: `../ttrpg-codex` (harness + dev-install),
-  `../dnd55e-compendium` (the data this consumes; its `data/SCHEMA.md`
-  is the record-shape contract behind `rules/api.js`), `../Living-scroll`
-  (Python port source-of-truth for rule edge cases).
-- **Dev loop**: from `../ttrpg-codex` run
-  `node scripts/dev-install-addon.cjs ../dnd-character-sheets`, restart the
-  app. **Repo edits are invisible until re-dev-installed.**
-- **Tests**: `node --test tests/smoke.mjs tests/rules.mjs tests/ui-state.mjs
-  tests/equipment-model.mjs tests/sheet-transfer.mjs tests/provider-state.mjs`
-  from THIS repo's
-  root — on Windows only relative file paths work (`node --test tests/` and
-  absolute paths false-fail); node runs from PowerShell, not Git Bash, on the
-  maintainer's machine. `tests.client` in the manifest is dev-only (the
-  install green-gate runs `tests.server`, which this addon doesn't declare).
-- **Release**: bump `addon.json` version → push → DM updates via the wizard.
-  Client-only changes need no server restart. **Update-all never grants NEW
-  permissions** — a release adding a `permissions[]` entry must go through the
-  per-addon wizard, or it silently never activates.
-- The harness enforces `meta.permissions` when the test META declares them —
-  keep test METAs in sync with `addon.json` (an under-declared permission
-  passes tests and rolls the addon back at load).
-
-## Contract recap (full rules in the host repo)
-
-- All HTML through `host.h` (`esc` everything dynamic, `dataAction`/`dataOn`
-  handlers); design tokens + host component classes (`.codex-tile`,
-  `.codex-tab-strip`, `.codex-tip` …) only.
-- **Repeatable UI is host-defined — consume it, don't re-skin it.** Forms and
-  common controls live in `../ttrpg-codex` so the whole app stays on one style
-  (and can be re-themed later); addons only use them. Number entry → `ui.numField`
-  (renders the host `.codex-stepper`); tabs → `.codex-tab-strip` / `.codex-tab`
-  (+ `.is-active`); stat tiles → `.codex-tile`; fields → `.edit-input`; hover
-  legends → `ui.statTip` / `entityRef` (`.codex-tip` / `.codex-pop`); warnings →
-  `.codex-warnings`; stat glyphs → `host.h.icon(name)` (`.codex-icon`; feature-
-  detect and fall back to text); browse rows/tiles + skeletons → `.codex-link-row`
-  / `.codex-link-tile` / `.codex-skel`. Do NOT hand-roll a look-alike (custom −/＋
-  buttons, a bespoke tab underline, a local SVG glyph set): budget/live-play logic
-  can live addon-side, but the *control* is the host's. Quick-adjust action
-  buttons (tracker ±) use `.inline-create-btn`. When something addon-local
-  proves generic (a 2nd consumer appears), promote it INTO `ttrpg-codex`
-  rather than copying it between addons — that's how the `.codex-*`
-  family grew; domain *semantics* (save shields, prof dots) stay addon-side,
-  built from host tokens.
-- **What deliberately stays addon-local** (boundary, not debt): composition
-  helpers (`ui.js` `heroTile`/`abilityTile` — layout arrangements OF host
-  components), the sheet's page-layout CSS (`ctx.ui.styleTag`, scoped under
-  `.addon-dnd-sheets`), and domain indicators (save-shield fill, 3-state
-  proficiency dots, AC shield dot — game semantics, not reusable chrome).
-  All token-built, so themes still apply.
-- `register(host)` side-effect-free except `register*`; renderers must survive
-  sparse/empty input (blobs from older schema versions included — `model.js`
-  forward-migrates on read).
-- Action names are internal UI wiring, not a consumer API. The public
-  programmatic contract is the versioned object passed to `host.provide()`.
-  `tests/smoke.mjs` locks the retained action inventory, render paths, and
-  unload/reload cleanup.
-- Code and source data stay in **English**. UI text is keyed through the
-  scoped `host.i18n` facade; English lives in `locales/en.json`, and any
-  additional locale may be partial.
-
-## Settled decisions (don't relitigate)
-
-- **One edition per campaign; the data addon dictates the rules.** The engine
-  is edition-parameterized (ARCH-7) with built-in 2024 defaults; 2014 lands as
-  structural shapes gated on record-field presence, shipped by a
-  `dnd5e-compendium` data addon (ROADMAP item 9).
-- **Combat automation out of scope** — the sheet stores/computes; a combat
-  resolver would be a separate addon consuming this one's `provide()`.
-- Engine mode == book data present (the 4-state matrix collapsed when the
-  engine merged in); stored `overrides[field]` always beats computed (ARCH-3).
-- When the engine is present, editing flows through the Builder; inline edits
-  cover the standalone mode.
-- **Whole-state Builder** — every choice stays freely editable at any time;
-  never lock out corrections (guide, don't block: warnings are advisory,
-  unaffordable actions clamp instead of refusing).
+- One ruleset provider is selected for a campaign; stored overrides win over
+  computed values.
+- Builder choices remain editable and validation is advisory where possible.
+- Combat resolution/automation is a separate addon concern.
+- Structured 2014 support depends on a future compatible provider and must
+  remain optional until one exists.
