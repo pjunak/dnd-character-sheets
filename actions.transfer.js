@@ -1,7 +1,7 @@
 export const TRANSFER_ACTIONS = Object.freeze(['printSheet','exportSheet','importOpen','importClose','importApply']);
 
 export function registerTransferActions(deps) {
-  const { host, NS, sheetOf, getRules, safeHydrate, decisionsOf, buildPrintHtml, mutate } = deps;
+  const { host, NS, sheetOf, getRules, safeHydrate, decisionsOf, buildPrintHtml, mutate, uiState } = deps;
   const register = (name, fn) => host.registerAction(name, fn);
   const timers = new Set();
   const later = (fn, delay) => { const id = setTimeout(() => { timers.delete(id); fn(); }, delay); timers.add(id); };
@@ -34,17 +34,20 @@ export function registerTransferActions(deps) {
       later(() => { try { URL.revokeObjectURL(url); } catch (_) {} }, 1000);
     } catch (_) {}
   });
-  // Import (B4.6): paste a previously-exported JSON to OVERWRITE this character.
-  // The flag is a UI open-state; apply parses + normalizes (sheetOf) + replaces.
-  const importKey = (cid) => 'dse-import:' + cid;
-  register('importOpen', (cid) => { try { localStorage.setItem(importKey(cid), 'open'); } catch (_) {} host.ui.rerender(); });
-  register('importClose', (cid) => { try { localStorage.removeItem(importKey(cid)); } catch (_) {} host.ui.rerender(); });
+  register('importOpen', (cid) => {
+    uiState.set(cid, 'importOpen', true);
+    host.ui.rerender();
+  });
+  register('importClose', (cid) => {
+    uiState.remove(cid, 'importOpen');
+    host.ui.rerender();
+  });
   register('importApply', (cid) => {
     let raw = '';
     try { raw = (document.getElementById('dse-import-' + cid) || {}).value || ''; } catch (_) {}
     let parsed = null;
     try { parsed = JSON.parse(raw); } catch (_) { parsed = null; }
-    try { localStorage.removeItem(importKey(cid)); } catch (_) {}
+    uiState.remove(cid, 'importOpen');
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) { host.ui.rerender(); return; }
     // Replace the whole sheet with the imported data, normalized through sheetOf.
     mutate(cid, () => sheetOf({ addonData: { [NS]: parsed } }));

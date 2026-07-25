@@ -18,7 +18,6 @@ export function makeSheetPanel(ctx) {
   const { section, card, subLabel, attacksBlock, numField, statTip, entityRef, spellInfo, spellLegend } = ui;
 
   const RES_ORDER = { pool: 0, charge: 1, slot: 2, hitdice: 3 };
-  function restState(cid) { try { return localStorage.getItem('dse-rest:' + cid); } catch (_) { return null; } }
 
   // "+1 on short rest, full on long rest" — what triggers a reset and by how much.
   function rechargeLabel(recharge) {

@@ -64,8 +64,12 @@ and collects domain disposers. Controller actions live in focused modules:
   and spell management.
 - `actions.inventory.js` — inventory/equipment and the add-item wizard.
 - `actions.resources.js` — resources and rests.
-- `actions.builder.js` — guided Builder decisions and its transient UI state.
+- `actions.builder.js` — guided Builder decisions.
 - `actions.transfer.js` — print, JSON export, and import.
+- `ui-state.js` — isolated per-character session state, with persistence limited
+  to tab and layout preferences.
+- `equipment-model.js` — pure inventory resolution and equipment-slot
+  classification shared by the header and backpack.
 
 Panels remain render-only, `model.js` owns stored-sheet mutation and
 materialization, and `rules/` remains pure and host-free. Action names are

@@ -13,6 +13,8 @@
 //  in the band's Attunement group now, not here.
 // ═══════════════════════════════════════════════════════════════
 
+import { resolveInventoryItem } from './equipment-model.js';
+
 export function makeBackpackPanel(ctx) {
   const { host, t, COINS, num, titleize, ui } = ctx;
   const { esc, dataAction, dataOn } = host.h;
@@ -58,32 +60,6 @@ export function makeBackpackPanel(ctx) {
       ${currencyLine(c, s, edit)}</div>`;
   }
 
-  // Resolve an inventory item → its compendium {kind, id, rec}. The stored
-  // `it.kind` (written by the add-item flow) is authoritative; the weapon→armor id
-  // probe survives only for LEGACY rows that predate the kind field, and the
-  // by-name fallback (free-text items) now tries both kinds. null for
-  // unresolvable items or when the book is absent (→ plain text, no link).
-  function itemRef(engine, it) {
-    if (!engine || !engine.getItem) return null;
-    if (it.ref && it.kind) {
-      const rec = engine.getItem(it.kind, it.ref);
-      if (rec) return { kind: it.kind, id: it.ref, rec };
-    }
-    if (it.ref) {
-      for (const kind of ['weapon', 'armor']) {
-        const rec = engine.getItem(kind, it.ref);
-        if (rec) return { kind, id: it.ref, rec };
-      }
-    }
-    if (it.name && engine.getItemByName) {
-      for (const kind of ['weapon', 'armor']) {
-        const rec = engine.getItemByName(kind, it.name);
-        if (rec) return { kind, id: rec.id, rec };
-      }
-    }
-    return null;
-  }
-
   // Light hover legend for a resolved weapon/armor item (properties + mastery, or AC).
   function itemLegend(resolved) {
     if (!resolved || !resolved.rec) return null;
@@ -101,7 +77,7 @@ export function makeBackpackPanel(ctx) {
 
   function invRow(c, it, edit, engine) {
     const loc = it.location || 'pack';
-    const resolved = itemRef(engine, it);
+    const resolved = resolveInventoryItem(engine, it);
     const wrec = resolved && resolved.kind === 'weapon' ? resolved.rec : null;
     const masteryTag = wrec && wrec.mastery ? `<span title="${esc(t('combat.mastery'))}" style="color:var(--text-muted);font-size:var(--text-xs)">${esc(wrec.mastery)}</span>` : '';
     if (!edit) {

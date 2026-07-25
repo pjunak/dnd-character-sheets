@@ -20,6 +20,8 @@
 //  fields are passed in by callers, not pulled here).
 // ═══════════════════════════════════════════════════════════════
 
+import { equipmentModel } from './equipment-model.js';
+
 export function makeUI(ctx) {
   const { host, t, num, signed, compendiumHref, titleize, firstPara } = ctx;
   const { esc } = host.h;
@@ -439,54 +441,6 @@ export function makeUI(ctx) {
       </div>`;
     }).join('');
     return section(t('combat.title'), rows);
-  }
-
-  // ── Shared equipment classifier (used by the band's equipment panel AND the
-  //    backpack de-dup). WORN is free-form: every equipped, non-attuned item gets
-  //    a slot. Armor + Shield are just the two RECOMMENDED anchors — an equipped
-  //    item that resolves as body armor / a shield fills its labelled slot (and
-  //    drives the AC math); everything else equipped sits in an untagged slot.
-  //    ATTUNEMENT is strict: only items flagged attuned live there (filling a
-  //    slot IS how an attunement item is equipped), and the picker offers only
-  //    items that require attunement. Everything shown in a slot is listed in
-  //    `slotIds` so the backpack never repeats it. `eligible*` are the pools the
-  //    empty-slot pickers choose from. ──
-  function equipmentModel(s, engine) {
-    const inv = Array.isArray(s.inventory) ? s.inventory : [];
-    const armorRec = (it) => {
-      if (!engine || !engine.getItem) return null;
-      let r = it.ref ? engine.getItem('armor', it.ref) : null;
-      if (!r && it.name && engine.getItemByName) r = engine.getItemByName('armor', it.name);
-      return r;
-    };
-    const bodyType = (r) => r && ['light', 'medium', 'heavy'].includes(r.armorType);
-    let armor = null, shield = null;
-    const wornOther = [];
-    for (const it of inv) {
-      if ((it.location || 'pack') !== 'equipped' || it.attuned) continue;
-      const r = armorRec(it);
-      if (r && r.armorType === 'shield' && !shield) shield = it;
-      else if (r && bodyType(r) && !armor) armor = it;
-      else wornOther.push(it);
-    }
-    const attuned = inv.filter((it) => !!it.attuned);
-    const slotIds = new Set([armor, shield, ...wornOther, ...attuned].filter(Boolean).map((it) => it.id));
-    // Picker pools. Worn is unrestricted — ANY item not already placed can be
-    // equipped (armor/shield pickers pre-filter to their recommended type; the
-    // generic slot takes anything). Attunement offers only non-attuned MAGIC
-    // ITEMS that require attunement (no scrolls / rope / rations); an unresolved
-    // record (no book / homebrew magic item) is allowed rather than blocked.
-    const notPlaced = (it) => (it.location || 'pack') !== 'equipped' && !it.attuned;
-    const eligibleArmor = inv.filter((it) => notPlaced(it) && bodyType(armorRec(it)));
-    const eligibleShield = inv.filter((it) => notPlaced(it) && armorRec(it) && armorRec(it).armorType === 'shield');
-    const eligibleWorn = inv.filter(notPlaced);
-    const attunable = (it) => {
-      if (it.attuned || it.kind !== 'magic-item') return false;
-      const r = it.ref && engine && engine.getItem ? engine.getItem('magic-item', it.ref) : null;
-      return r ? !!r.attunement : true;
-    };
-    const eligibleAttune = inv.filter(attunable);
-    return { armor, shield, wornOther, attuned, slotIds, eligibleArmor, eligibleShield, eligibleWorn, eligibleAttune };
   }
 
   return {

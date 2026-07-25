@@ -10,7 +10,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 export function makeBuilderPanel(ctx) {
-  const { host, t, plural, ABILITIES, SKILLS, num, signed, abilityMod, titleize, firstPara, featureRecordFor, ui, engine: E, POINT_BUY, pointCost, pointsSpent, featAsiFrom, builderState } = ctx;
+  const { host, t, plural, ABILITIES, SKILLS, num, signed, abilityMod, titleize, firstPara, featureRecordFor, ui, engine: E, POINT_BUY, pointCost, pointsSpent, featAsiFrom, uiState } = ctx;
   const { esc, dataAction, dataOn } = host.h;
   const { section, miniStat, selectBox, fieldRow, choiceBlock, warningsBlock, numField, entityRef } = ui;
   const { builderModel, collectChoices } = E;
@@ -31,9 +31,8 @@ export function makeBuilderPanel(ctx) {
       miniStat(t('builder.totalLevel'), totalLevel),
     ].join('');
 
-    // Internal sub-tabs: a Character tab (level-independent) + one per class. State
-    // is in-memory (ctx.builderState) and defaults to Character on load (B4.5b).
-    const st = (builderState && builderState[c.id]) || {};
+    // Internal sub-tabs: a Character tab (level-independent) + one per class.
+    const st = uiState.get(c.id, 'builder', {});
     const classTabs = classes.filter((cl) => cl.classId);
     const active = classTabs.some((cl) => cl.classId === st.tab) ? st.tab : 'character';
 
@@ -73,7 +72,7 @@ export function makeBuilderPanel(ctx) {
 
   // One class's progression spine — a row per class level: features gained + the
   // choices made at that level (as chips). Rows with choices are click-to-expand
-  // (accordion, one open at a time via ctx.builderState.open) into that level's
+  // (accordion, one open at a time) into that level's
   // editors; unresolved levels get a soft "needs choices" flag (never blocks — FE-7).
   function builderClassTab(c, s, classId, classes, engine, comp, ro) {
     const cl = classes.find((x) => x.classId === classId);
@@ -85,7 +84,7 @@ export function makeBuilderPanel(ctx) {
     const chDescs = collectChoices([cl], engine);   // this class's choices, each tagged with source.level
     const subclassLevel = rec ? num(rec.subclassLevel, 3) : 3;
     const hasSubclasses = (engine.listSubclasses(classId) || []).length > 0;
-    const st = (builderState && builderState[c.id]) || {};
+    const st = uiState.get(c.id, 'builder', {});
     const lvl = num(cl.level, 1);
     const rows = [];
     for (let l = 1; l <= lvl; l++) {

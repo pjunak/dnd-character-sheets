@@ -11,7 +11,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 export function makeSpellbookPanel(ctx) {
-  const { host, t, num, signed, titleize, scrollCopyCost, ui } = ctx;
+  const { host, t, num, signed, titleize, scrollCopyCost, ui, uiState } = ctx;
   const { esc, dataAction, dataOn } = host.h;
   const { section, card, subLabel, spellChip, spellInfo, spellLegend, numField, entityRef } = ui;
 
@@ -333,8 +333,7 @@ export function makeSpellbookPanel(ctx) {
       const copyable = pool.filter((sp) => num(sp.level) >= 1 && num(sp.level) <= Math.max(1, maxLvl) && !book.has(sp.id));
       // The spell pick persists across the change→re-render cycle (spellCopyPick
       // stores it), so the scroll list can be filtered to scrolls of THAT spell.
-      let selRef = '';
-      try { selRef = localStorage.getItem('dse-copysel:' + cid) || ''; } catch (_) {}
+      const selRef = uiState.get(cid, 'spellCopySelection', '');
       const selected = copyable.some((sp) => sp.id === selRef) ? selRef : ((copyable[0] && copyable[0].id) || '');
       const selSpell = copyable.find((sp) => sp.id === selected) || null;
       // Only scrolls that actually HOLD the picked spell may be consumed

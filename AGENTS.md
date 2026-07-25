@@ -41,9 +41,11 @@ actions.base.js     tabs, direct fields/proficiencies, overrides, layout
 actions.spells.js   spell prep/book, swaps, grants, drag/drop, manager
 actions.inventory.js inventory/equipment + add-item wizard; addInventoryItems
 actions.resources.js resources/rest; pure applyHpChange helper
-actions.builder.js  guided decision mutations + in-memory Builder UI state
+actions.builder.js  guided decision mutations
 actions.transfer.js print/export/import; owns download URL timers
 actions.shared.js   small action-map registration helper
+ui-state.js         per-character session UI state; persists tab/layout only
+equipment-model.js pure inventory resolution + worn/attuned slot model
 model.js            THE data layer: stored-blob read/migration, viewModel,
                     builderMutate + materializeInto (DEG-1), getRules() probe
 panel.overview.js   ⚠ renders the CHARACTER SHEET tab (id `stats`) — entry.js appends
@@ -55,7 +57,7 @@ ui.js               shared render helpers — statTip/entityRef are THE hover+li
                     primitives; heroTile/abilityTile compose host classes; styleTag
 helpers.js          compendiumHref / firstPara / featureRecordFor
 rules/              the PURE engine (host-free, unit-tested): engine.js + api.js
-tests/              smoke.mjs + rules.mjs (+ fake-phb.mjs fixture data)
+tests/              smoke/rules plus focused pure-module tests
 ```
 The Overview tab has no module — it is the host's own wiki profile folded in
 via the `characters:body` takeover.
@@ -63,8 +65,8 @@ via the `characters:body` takeover.
 The **Builder** is internally sub-tabbed: a **Character** tab (abilities, species,
 background, class roster, level-independent extra feats) + **one tab per class**,
 each a per-level **progression spine** whose rows expand in place (accordion) to
-edit that level's choices. Sub-tab / open-row are in-memory (`ctx.builderState`,
-not persisted). A sheet-wide toolbar offers Print / Export / Import (B4.6).
+edit that level's choices. Sub-tab / open-row state is session-only and not
+persisted. A sheet-wide toolbar offers Print / Export / Import (B4.6).
 
 ## Layering rules (where new code goes)
 
@@ -74,6 +76,9 @@ not persisted). A sheet-wide toolbar offers Print / Export / Import (B4.6).
   from `entry.js`. Domain-local timers/state must have a disposer returned to
   the composition root. The host lifecycle removes registrations; domain
   disposers clear only their owned resources.
+- **`ui-state.js` owns UI state.** Tabs and layout are the only persisted
+  preferences. Modal, wizard, selection, and Builder state stays in memory and
+  is cleared on disposal.
 - **`model.js` owns the pipeline + every mutator.** Any new engine-affecting
   mutation MUST route through `builderMutate`/`materializeInto` — that is the
   **DEG-1 obligation**: every Builder edit materializes computed values into

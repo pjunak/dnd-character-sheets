@@ -15,13 +15,7 @@
 //    Gear / Packs → flat (the records carry no subtype)
 //  Book-absent (no PHB addon) degrades to the custom-item field only.
 //
-//  State lives in localStorage (keyed by character id), like the other overlays,
-//  because every action re-renders the whole fragment:
-//    dse-additem:<cid>       'open'
-//    dse-additem-path:<cid>  '' | '<kind>' | '<kind>/<v1>' | '<kind>/<v1>/<v2>'
-//    dse-additem-q:<cid>     current search query (non-empty ⇒ flat search mode)
-//    dse-additem-cart:<cid>  JSON [{ key, kind, ref, name, qty, custom }]
-//  The render is pure (reads that state); the actions in entry.js mutate it.
+//  Session state is keyed by character id and discarded when the add-on unloads.
 // ═══════════════════════════════════════════════════════════════
 
 // The category tree. Each kind lists its facet fields, outer → inner; an empty
@@ -37,7 +31,7 @@ export const ADDITEM_TREE = [
 const ITEM_CAP = 80;   // max item rows shown at once (search / a tree leaf)
 
 export function makeAddItemPanel(ctx) {
-  const { host, t, num, titleize, ui } = ctx;
+  const { host, t, num, titleize, ui, uiState } = ctx;
   const { esc, dataAction, dataOn } = host.h;
 
   const norm = (x) => String(x == null ? '' : x).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
@@ -45,8 +39,7 @@ export function makeAddItemPanel(ctx) {
   const facetLabel = (v) => titleize(String(v));
   const recsOf = (engine, kind) => (engine && engine.getRecords ? (engine.getRecords(kind) || []) : []);
 
-  const lsGet = (k) => { try { return localStorage.getItem(k); } catch (_) { return null; } };
-  const readCart = (cid) => { try { return JSON.parse(lsGet('dse-additem-cart:' + cid) || '[]') || []; } catch (_) { return []; } };
+  const stateFor = cid => uiState.get(cid, 'addItem', { path: '', query: '', cart: [] });
 
   // A clickable folder row (drill down / breadcrumb target).
   function folderRow(cid, path, label, count) {
@@ -145,7 +138,7 @@ export function makeAddItemPanel(ctx) {
 
   // The batch tray: staged items, each with a typeable quantity, then commit.
   function cartRail(cid) {
-    const cart = readCart(cid);
+    const cart = stateFor(cid).cart;
     const total = cart.reduce((n, it) => n + num(it.qty, 1), 0);
     const rows = cart.length
       ? cart.map((it) => `<div class="dse-aiw-ci">
@@ -168,8 +161,9 @@ export function makeAddItemPanel(ctx) {
   // The whole overlay. Rendered at the fragment root by entry.js when the flag is set.
   function addItemModal(c, s, engine) {
     const cid = c.id;
-    const q = lsGet('dse-additem-q:' + cid) || '';
-    const path = lsGet('dse-additem-path:' + cid) || '';
+    const state = stateFor(cid);
+    const q = state.query || '';
+    const path = state.path || '';
     const hasBook = !!(engine && engine.getRecords);
 
     const search = `<div class="dse-aiw-search">

@@ -13,7 +13,7 @@ export function addInventoryItems(sheet, items, deps) {
 }
 
 export function registerInventoryActions(deps) {
-  const { host, num, uid, mutate, getRules, LOCATIONS } = deps;
+  const { host, num, uid, mutate, getRules, LOCATIONS, uiState } = deps;
   const register = (name, fn) => host.registerAction(name, fn);
   // Backpack.
   register('invDel', (cid, iid) => {
@@ -81,35 +81,38 @@ export function registerInventoryActions(deps) {
     mutate(cid, (s) => { s.inventory = (s.inventory || []).map((it) => (it.id === iid ? { ...it, attuned: false } : it)); return s; });
   });
 
-  // ── Add-item wizard (floating overlay) — search + drill-down tree + batch tray.
-  //    All state is in localStorage (the fragment re-renders on every action):
-  //    open flag / current tree path / search query / the staged-items cart.
-  //    Commit adds every staged item at once (quantity + a sensible location per
-  //    kind), then closes. See panel.additem.js for the render. ──
-  const aiwCartKey = (cid) => 'dse-additem-cart:' + cid;
-  const aiwKeys = (cid) => ['dse-additem:' + cid, 'dse-additem-path:' + cid, 'dse-additem-q:' + cid, aiwCartKey(cid)];
-  const aiwReadCart = (cid) => { try { return JSON.parse(localStorage.getItem(aiwCartKey(cid)) || '[]') || []; } catch (_) { return []; } };
-  const aiwWriteCart = (cid, cart) => { try { localStorage.setItem(aiwCartKey(cid), JSON.stringify(cart)); } catch (_) {} };
-  const aiwClear = (cid) => { try { aiwKeys(cid).forEach((k) => localStorage.removeItem(k)); } catch (_) {} };
-  // Weapons ready to draw, armor worn, everything else stored in the pack.
+  const aiwState = cid => uiState.get(cid, 'addItem', { path: '', query: '', cart: [] });
+  const aiwWrite = (cid, state) => uiState.set(cid, 'addItem', state);
+  const aiwReadCart = cid => aiwState(cid).cart || [];
   const aiwLocation = (kind) => (kind === 'armor' ? 'equipped' : kind === 'weapon' ? 'ready' : 'pack');
   const aiwStage = (cid, item) => {
-    const cart = aiwReadCart(cid);
+    const state = aiwState(cid);
+    const cart = state.cart.map(entry => ({ ...entry }));
     const ex = cart.find((it) => it.key === item.key);
     if (ex) ex.qty = num(ex.qty, 1) + 1; else cart.push(item);
-    aiwWriteCart(cid, cart);
+    aiwWrite(cid, { ...state, cart });
     host.ui.rerender();
   };
-  register('addItemOpen', (cid) => { aiwClear(cid); try { localStorage.setItem('dse-additem:' + cid, 'open'); } catch (_) {} host.ui.rerender(); });
-  register('addItemClose', (cid) => { aiwClear(cid); host.ui.rerender(); });
+  register('addItemOpen', (cid) => {
+    aiwWrite(cid, { path: '', query: '', cart: [] });
+    host.ui.rerender();
+  });
+  register('addItemClose', (cid) => {
+    uiState.remove(cid, 'addItem');
+    host.ui.rerender();
+  });
   register('addItemNav', (cid, path) => {
-    try { localStorage.setItem('dse-additem-path:' + cid, String(path == null ? '' : path)); localStorage.removeItem('dse-additem-q:' + cid); } catch (_) {}
+    aiwWrite(cid, {
+      ...aiwState(cid),
+      path: String(path == null ? '' : path),
+      query: '',
+    });
     host.ui.rerender();
   });
   register('addItemSearch', (cid) => {
     let q = '';
     try { q = (document.getElementById('dse-additem-q-' + cid) || {}).value || ''; } catch (_) {}
-    try { if (String(q).trim()) localStorage.setItem('dse-additem-q:' + cid, String(q)); else localStorage.removeItem('dse-additem-q:' + cid); } catch (_) {}
+    aiwWrite(cid, { ...aiwState(cid), query: String(q).trim() });
     host.ui.rerender();
   });
   register('addItemStage', (cid, kind, ref) => {
@@ -125,20 +128,28 @@ export function registerInventoryActions(deps) {
     aiwStage(cid, { key: 'custom:' + name.toLowerCase(), kind: '', ref: '', name, qty: 1, custom: true });
   });
   register('addItemQty', (cid, key, value) => {
-    const cart = aiwReadCart(cid);
+    const state = aiwState(cid);
+    const cart = state.cart.map(item => ({ ...item }));
     const it = cart.find((x) => x.key === key);
     if (it) it.qty = Math.max(1, num(value, 1));
-    aiwWriteCart(cid, cart);
+    aiwWrite(cid, { ...state, cart });
     host.ui.rerender();
   });
-  register('addItemUnstage', (cid, key) => { aiwWriteCart(cid, aiwReadCart(cid).filter((x) => x.key !== key)); host.ui.rerender(); });
-  register('addItemClear', (cid) => { aiwWriteCart(cid, []); host.ui.rerender(); });
+  register('addItemUnstage', (cid, key) => {
+    const state = aiwState(cid);
+    aiwWrite(cid, { ...state, cart: state.cart.filter(item => item.key !== key) });
+    host.ui.rerender();
+  });
+  register('addItemClear', (cid) => {
+    aiwWrite(cid, { ...aiwState(cid), cart: [] });
+    host.ui.rerender();
+  });
   register('addItemCommit', (cid) => {
     const cart = aiwReadCart(cid);
     if (cart.length) {
       mutate(cid, (s) => addInventoryItems(s, cart, { uid, num, location: aiwLocation }));
     }
-    aiwClear(cid);
+    uiState.remove(cid, 'addItem');
     host.ui.rerender();
   });
 

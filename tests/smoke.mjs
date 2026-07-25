@@ -38,12 +38,17 @@ import { TRANSFER_ACTIONS } from '../actions.transfer.js';
 const EN_CATALOG = JSON.parse(readFileSync(new URL('../locales/en.json', import.meta.url), 'utf8'));
 
 function mockLocalStorage(tab) {
-  globalThis.localStorage = {
+  const storage = {
     getItem: (k) => (String(k).startsWith('dse-tab:') ? (tab || null) : null),
     setItem() {}, removeItem() {},
   };
+  globalThis.localStorage = storage;
+  globalThis.window = { localStorage: storage };
 }
-function clearLocalStorage() { delete globalThis.localStorage; }
+function clearLocalStorage() {
+  delete globalThis.localStorage;
+  delete globalThis.window;
+}
 
 // Invoke the body-fragment render (the whole sheet). `lore` stands in for the
 // host's rendered description; defaults to a marked block so the Overview tab can
@@ -657,7 +662,6 @@ test('sheets: a Wizard prepares from the learned spellbook, not the full class l
 });
 
 test('sheets: Spellbook management — two buttons, copy mode + other-source mode (B4.2c)', () => {
-  const modeLS = (mode) => ({ getItem: (k) => { k = String(k); if (k.startsWith('dse-tab:')) return 'spellbook'; if (k.startsWith('dse-spellmgr:')) return mode; return null; }, setItem() {}, removeItem() {} });
   const char = { id: 'cmgr', name: 'Mage', addonData: { 'dnd-sheets': {
     classes: [{ classId: 'wizard', level: 5, subclass: '' }], abilities: { INT: 16 },
     currency: { gp: 500 },
@@ -681,9 +685,10 @@ test('sheets: Spellbook management — two buttons, copy mode + other-source mod
   } finally { clearLocalStorage(); }
 
   // COPY mode — scroll + gp form (titles/costs are modal-only, so mode is unambiguous).
-  globalThis.localStorage = modeLS('copy');
+  mockLocalStorage('spellbook');
   try {
     const { rec } = dryRun(PHB());
+    rec.actions.find(action => action.name === 'spellMgrOpen').fn('cmgr', 'copy');
     const out = renderBody(rec, char);
     assert.match(out, /Copy a spell into your Wizard spellbook/, 'copy modal title');
     assert.match(out, /Fireball — 150 gp/, 'a copyable spell shows its 50-gp-per-level cost');
@@ -694,9 +699,10 @@ test('sheets: Spellbook management — two buttons, copy mode + other-source mod
   } finally { clearLocalStorage(); }
 
   // OTHER-SOURCE mode — homebrew form with the cast-with-slots option (SP-10).
-  globalThis.localStorage = modeLS('other');
+  mockLocalStorage('spellbook');
   try {
     const { rec } = dryRun(PHB());
+    rec.actions.find(action => action.name === 'spellMgrOpen').fn('cmgr', 'other');
     const out = renderBody(rec, char);
     assert.match(out, /Add a spell from another source/, 'other-source modal title');
     assert.match(out, /dse-custom-slots-cmgr/, 'a caster gets the "cast with spell slots" checkbox');
@@ -707,7 +713,6 @@ test('sheets: Spellbook management — two buttons, copy mode + other-source mod
 });
 
 test('sheets: scroll-copy offers only scrolls of the picked spell + never consumes a mismatch', () => {
-  const modeLS = (mode, sel) => ({ getItem: (k) => { k = String(k); if (k.startsWith('dse-tab:')) return 'spellbook'; if (k.startsWith('dse-spellmgr:')) return mode; if (k.startsWith('dse-copysel:')) return sel || null; return null; }, setItem() {}, removeItem() {} });
   const blob = () => ({
     classes: [{ classId: 'wizard', level: 5, subclass: '' }], abilities: { INT: 16 }, currency: { gp: 500 },
     inventory: [
@@ -721,18 +726,24 @@ test('sheets: scroll-copy offers only scrolls of the picked spell + never consum
   // so whole-page matching would false-positive on it.
   const scrollSelect = (out) => { const m = /<select[^>]*id="dse-copy-scroll-cscr"[\s\S]*?<\/select>/.exec(out); return m ? m[0] : ''; };
   // Picked spell = Fireball: only the Fireball scroll is offered (ROADMAP 5b).
-  globalThis.localStorage = modeLS('copy', 'fireball');
+  mockLocalStorage('spellbook');
   try {
     const { rec } = dryRun(PHB());
+    const act = (name, ...args) => rec.actions.find(action => action.name === name).fn(...args);
+    act('spellMgrOpen', 'cscr', 'copy');
+    act('spellCopyPick', 'cscr', 'fireball');
     const out = renderBody(rec, char);
     assert.match(scrollSelect(out), /Spell Scroll of Fireball/, 'the scroll holding the picked spell is offered');
     assert.doesNotMatch(scrollSelect(out), /Scroll of Healing Word/, 'a scroll of a DIFFERENT spell is never offered');
     assert.match(out, /spellCopyPick/, 'changing the picked spell re-filters (wired to spellCopyPick)');
   } finally { clearLocalStorage(); }
   // Picked spell = Detect Magic: no matching scroll → disabled message, wrong scrolls hidden.
-  globalThis.localStorage = modeLS('copy', 'detect-magic');
+  mockLocalStorage('spellbook');
   try {
     const { rec } = dryRun(PHB());
+    const act = (name, ...args) => rec.actions.find(action => action.name === name).fn(...args);
+    act('spellMgrOpen', 'cscr', 'copy');
+    act('spellCopyPick', 'cscr', 'detect-magic');
     const out = renderBody(rec, char);
     assert.match(out, /No scroll of this spell/, 'a no-match state instead of wrong scrolls');
     assert.doesNotMatch(scrollSelect(out), /Scroll of Healing Word/, 'wrong scrolls stay hidden in the no-match state');
@@ -916,9 +927,10 @@ test('sheets: exportSheet serializes the character to JSON (B4.6)', () => {
 });
 
 test('sheets: the import modal renders a paste area (B4.6)', () => {
-  globalThis.localStorage = { getItem: (k) => (String(k).startsWith('dse-import:') ? 'open' : null), setItem() {}, removeItem() {} };
+  mockLocalStorage('settings');
   try {
     const { rec } = dryRun(PHB());
+    rec.actions.find(action => action.name === 'importOpen').fn('cim');
     const out = renderBody(rec, { id: 'cim', name: 'Sam', addonData: { 'dnd-sheets': { className: 'Fighter' } } });
     assert.match(out, /Import character/, 'the import modal title');
     assert.match(out, /dse-import-cim/, 'the paste textarea');
@@ -1392,23 +1404,25 @@ test('sheets: Backpack add-item + attune actions do not throw', () => {
   } finally { clearLocalStorage(); }
 });
 
-// A Map-backed localStorage (the top stub is a no-op setItem, so the wizard's
-// open flag / cart can't round-trip through it).
 function mapLocalStorage(initial) {
   const m = new Map(Object.entries(initial || {}));
-  globalThis.localStorage = {
+  const storage = {
     getItem: (k) => (m.has(String(k)) ? m.get(String(k)) : null),
     setItem: (k, v) => m.set(String(k), String(v)),
     removeItem: (k) => m.delete(String(k)),
   };
+  globalThis.localStorage = storage;
+  globalThis.window = { localStorage: storage };
   return m;
 }
 
 test('sheets: add-item wizard — search box, category tree, batch tray with typed quantity', () => {
-  const ls = mapLocalStorage({ 'dse-tab:cw': 'stats', 'dse-additem:cw': 'open' });
+  mapLocalStorage({ 'dse-tab:cw': 'stats' });
   try {
     const { rec } = dryRun(PHB());
+    const act = (name, ...args) => rec.actions.find(action => action.name === name).fn(...args);
     const char = { id: 'cw', name: 'Mage', addonData: { 'dnd-sheets': { className: 'Wizard' } } };
+    act('addItemOpen', 'cw');
     const out = renderBody(rec, char);
     assert.match(out, /Add to Backpack/, 'the wizard overlay is open');
     assert.match(out, /Search all items/, 'a search box');
@@ -1417,7 +1431,8 @@ test('sheets: add-item wizard — search box, category tree, batch tray with typ
     assert.match(out, /Nothing selected yet/, 'the batch tray starts empty');
     assert.match(out, /addItemStageCustom/, 'a custom-item field is offered');
     // With items staged, the tray shows each with a quantity stepper + a commit total.
-    ls.set('dse-additem-cart:cw', JSON.stringify([{ key: 'weapon:dagger', kind: 'weapon', ref: 'dagger', name: 'Dagger', qty: 2 }]));
+    act('addItemStage', 'cw', 'weapon', 'dagger');
+    act('addItemQty', 'cw', 'weapon:dagger', 2);
     const out2 = renderBody(rec, char);
     assert.match(out2, /Dagger/, 'a staged item shows in the tray');
     assert.match(out2, /codex-stepper/, 'each staged item gets a quantity stepper (type the count)');
@@ -1446,8 +1461,8 @@ test('sheets: add-item wizard stages with a quantity + commits the batch to the 
     assert.equal(stored.inventory[0].kind, 'weapon', 'the kind rides along');
     assert.equal(stored.inventory[0].ref, 'longsword');
     assert.equal(stored.inventory[0].location, 'ready', 'a weapon lands in Ready');
-    // The cart cleared on commit.
-    assert.equal(globalThis.localStorage.getItem('dse-additem-cart:cX'), null, 'the tray is emptied after commit');
+    const after = renderBody(rec, { id: 'cX', name: 'Fighter', addonData: { 'dnd-sheets': stored } });
+    assert.doesNotMatch(after, /Add to Backpack/, 'commit closes and clears the wizard');
   } finally { clearLocalStorage(); }
 });
 

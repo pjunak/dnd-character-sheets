@@ -1,7 +1,7 @@
 export const SPELL_ACTIONS = Object.freeze(['spellAdd','spellDel','learnCantrip','unlearnCantrip','prepSpell','unprepSpell','spellbookLearn','spellbookForget','spellMgrOpen','spellMgrClose','spellCopyPick','spellCopy','spellCustomAdd','spellSwapOpen','spellSwapClose','spellSwapApply','spellSwapForget','spellDragStart','spellDrop','grantPick','grantUnpick','spellSet']);
 
 export function registerSpellActions(deps) {
-  const { host, num, uid, mutate, getRules, safeHydrate, decisionsOf, scrollCopyCost } = deps;
+  const { host, num, uid, mutate, getRules, safeHydrate, decisionsOf, scrollCopyCost, uiState } = deps;
   const register = (name, fn) => host.registerAction(name, fn);
   const hydrateFor = (sheet) => { const engine = getRules(); const result = engine ? safeHydrate(engine, decisionsOf(sheet, engine)) : null; return result && result.sheet; };
   // Spellbook — manual/extra entries (s.spells).
@@ -22,18 +22,19 @@ export function registerSpellActions(deps) {
   // spell also unprepares it (you can't prepare a spell that's no longer in your book).
   register('spellbookLearn', (cid, classId, ref) => { mutate(cid, (s) => { addRef(s, 'spellbook', classId, ref); return s; }); });
   register('spellbookForget', (cid, classId, ref) => { mutate(cid, (s) => { delRef(s, 'spellbook', classId, ref); delRef(s, 'preparedSpells', classId, ref); return s; }); });
-  // Spellbook management popup (unified add/remove) — a floating overlay to COPY a
-  // spell into the book (scroll + gp; spellbook casters only) or add a CUSTOM
-  // homebrew spell, and to remove either. Flag in localStorage like the swap modal.
-  // The flag VALUE is the mode: 'copy' (scroll → book, spellbook casters) or
-  // 'other' (a spell from a feat / item / homebrew). Two buttons, one modal.
-  const spellMgrKey = (cid) => 'dse-spellmgr:' + cid;
-  // The copy form's CURRENT spell pick, persisted so the scroll list can be
-  // filtered to scrolls of THAT spell across the change→re-render cycle.
-  const copySelKey = (cid) => 'dse-copysel:' + cid;
-  register('spellMgrOpen', (cid, mode) => { try { localStorage.setItem(spellMgrKey(cid), mode || 'other'); } catch (_) {} host.ui.rerender(); });
-  register('spellMgrClose', (cid) => { try { localStorage.removeItem(spellMgrKey(cid)); localStorage.removeItem(copySelKey(cid)); } catch (_) {} host.ui.rerender(); });
-  register('spellCopyPick', (cid, ref) => { try { localStorage.setItem(copySelKey(cid), String(ref || '')); } catch (_) {} host.ui.rerender(); });
+  register('spellMgrOpen', (cid, mode) => {
+    uiState.set(cid, 'spellManagerMode', mode || 'other');
+    host.ui.rerender();
+  });
+  register('spellMgrClose', (cid) => {
+    uiState.remove(cid, 'spellManagerMode');
+    uiState.remove(cid, 'spellCopySelection');
+    host.ui.rerender();
+  });
+  register('spellCopyPick', (cid, ref) => {
+    uiState.set(cid, 'spellCopySelection', String(ref || ''));
+    host.ui.rerender();
+  });
   // Copy a spell into the book: read the picked spell (+ optional scroll) at click
   // time, charge 50 gp × spell level (2024 copying cost), consume the scroll if one
   // was chosen, and add the ref to s.spellbook[classId] (→ preparable via B4.2b).
@@ -41,7 +42,7 @@ export function registerSpellActions(deps) {
     let ref = '', scrollId = '';
     try { const sp = document.getElementById('dse-copy-spell-' + cid); const sc = document.getElementById('dse-copy-scroll-' + cid); ref = sp && sp.value; scrollId = sc && sc.value; } catch (_) {}
     if (!ref) { host.ui.rerender(); return; }
-    try { localStorage.removeItem(copySelKey(cid)); } catch (_) {}
+    uiState.remove(cid, 'spellCopySelection');
     const engine = getRules();
     const rec = engine && engine.getItem ? engine.getItem('spell', ref) : null;
     const cost = scrollCopyCost(rec && rec.level);   // 50 gp × spell level (rules/engine.js)
@@ -81,13 +82,18 @@ export function registerSpellActions(deps) {
   // Level-up spell swap (FE-4): open/close the floating picker (the flag stores the
   // classId); apply reads the two <select>s at click time (like hpApply) → records
   // {level,classId,out,in}, swaps `out`→`in` in prepared, then closes. Forget drops a row.
-  const swapKey = (cid) => 'dse-swap:' + cid;
-  register('spellSwapOpen', (cid, classId) => { try { localStorage.setItem(swapKey(cid), String(classId)); } catch (_) {} host.ui.rerender(); });
-  register('spellSwapClose', (cid) => { try { localStorage.removeItem(swapKey(cid)); } catch (_) {} host.ui.rerender(); });
+  register('spellSwapOpen', (cid, classId) => {
+    uiState.set(cid, 'spellSwapClass', String(classId));
+    host.ui.rerender();
+  });
+  register('spellSwapClose', (cid) => {
+    uiState.remove(cid, 'spellSwapClass');
+    host.ui.rerender();
+  });
   register('spellSwapApply', (cid, classId) => {
     let out = '', inRef = '';
     try { const o = document.getElementById('dse-swap-out-' + cid); const i = document.getElementById('dse-swap-in-' + cid); out = o && o.value; inRef = i && i.value; } catch (_) {}
-    try { localStorage.removeItem(swapKey(cid)); } catch (_) {}
+    uiState.remove(cid, 'spellSwapClass');
     if (!out || !inRef || out === inRef) { host.ui.rerender(); return; }
     mutate(cid, (s) => {
       delRef(s, 'preparedSpells', classId, out);

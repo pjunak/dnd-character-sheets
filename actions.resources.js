@@ -20,11 +20,10 @@ export function applyHpChange(sheet, delta, maxHp, num, clampHp) {
 }
 
 export function registerResourceActions(deps) {
-  const { host, num, uid, mutate, getRules, safeHydrate, decisionsOf, effectiveMaxHp, hitDieAvg } = deps;
+  const { host, num, uid, mutate, getRules, safeHydrate, decisionsOf, effectiveMaxHp, hitDieAvg, uiState } = deps;
   const clampResource = (current, max) => num(max, 0) > 0
     ? Math.max(0, Math.min(num(max, 0), num(current, 0)))
     : Math.max(0, num(current, 0));
-  const restKey = (cid) => 'dse-rest:' + cid;
   const hydrate = (sheet) => {
     const engine = getRules();
     const result = engine ? safeHydrate(engine, decisionsOf(sheet, engine)) : null;
@@ -84,11 +83,11 @@ export function registerResourceActions(deps) {
       });
     },
     restOpen(cid) {
-      try { localStorage.setItem(restKey(cid), 'open'); } catch (_) {}
+      uiState.set(cid, 'restOpen', true);
       host.ui.rerender();
     },
     restClose(cid) {
-      try { localStorage.removeItem(restKey(cid)); } catch (_) {}
+      uiState.remove(cid, 'restOpen');
       host.ui.rerender();
     },
     restSpendHitDie(cid, dieKey) {
@@ -106,7 +105,7 @@ export function registerResourceActions(deps) {
     },
     restApply(cid, kind) {
       const long = String(kind) === 'long';
-      try { localStorage.removeItem(restKey(cid)); } catch (_) {}
+      uiState.remove(cid, 'restOpen');
       mutate(cid, (sheet) => {
         const computed = hydrate(sheet);
         const resources = (computed && computed.resources) || [];

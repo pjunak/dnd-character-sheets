@@ -1,7 +1,7 @@
 export const BUILDER_ACTIONS = Object.freeze(['builderField','builderAbility','builderToggleManual','builderAbilitySet','builderClassSet','builderLevelSet','builderSubclassSet','builderAddClass','builderRemoveClass','builderTab','builderTabKey','builderToggleLevel','builderExtraFeatAdd','builderExtraFeatRemove','builderAsiSet','builderChoose']);
 
 export function registerBuilderActions(deps) {
-  const { host, plural, num, uid, ABILITIES, POINT_BUY, pointCost, pointsSpent, featAsiFrom, featAbilityCap, builderState, sheetOf, getRules } = deps;
+  const { host, plural, num, uid, ABILITIES, POINT_BUY, pointCost, pointsSpent, featAsiFrom, featAbilityCap, uiState, sheetOf, getRules } = deps;
   const { builderMutate, reconcile, builderModel } = deps.engine;
   const register = (name, fn) => host.registerAction(name, fn);
   const timers = new Set();
@@ -76,7 +76,14 @@ export function registerBuilderActions(deps) {
       }
       if (engine) reconcile(s, engine);
     });
-    if (grew && classId) { builderState[cid] = { ...(builderState[cid] || {}), tab: String(classId), open: classId + ':' + newLevel }; host.ui.rerender(); }
+    if (grew && classId) {
+      uiState.update(cid, 'builder', state => ({
+        ...state,
+        tab: String(classId),
+        open: `${classId}:${newLevel}`,
+      }), {});
+      host.ui.rerender();
+    }
   });
   register('builderSubclassSet', (cid, idx, subclass) => {
     builderMutate(cid, (s, engine) => { if (s.classes[idx]) s.classes[idx] = { ...s.classes[idx], subclass: String(subclass) }; if (engine) reconcile(s, engine); });
@@ -88,7 +95,10 @@ export function registerBuilderActions(deps) {
     builderMutate(cid, (s, engine) => { if (s.classes.length > 1) s.classes = s.classes.filter((_, i) => i !== idx); if (engine) reconcile(s, engine); });
   });
   // Builder sub-tab switch (Character | <classId>) — in-memory, clears any open level row.
-  register('builderTab', (cid, tab) => { builderState[cid] = { ...(builderState[cid] || {}), tab: String(tab), open: null }; host.ui.rerender(); });
+  register('builderTab', (cid, tab) => {
+    uiState.update(cid, 'builder', state => ({ ...state, tab: String(tab), open: null }), {});
+    host.ui.rerender();
+  });
   // Roving-tabindex keyboard nav across the Builder sub-tabs (Character + one per
   // class), mirroring the top tab bar's `tabKey`: Arrow keys move + focus follows.
   register('builderTabKey', (ev, cid, tabId) => {
@@ -107,7 +117,7 @@ export function registerBuilderActions(deps) {
     else if (key === 'ArrowRight') next = (cur + 1) % ids.length;
     else if (key === 'Home') next = 0;
     else if (key === 'End') next = ids.length - 1;
-    builderState[cid] = { ...(builderState[cid] || {}), tab: ids[next], open: null };
+    uiState.update(cid, 'builder', state => ({ ...state, tab: ids[next], open: null }), {});
     host.ui.rerender();
     // Move focus to the newly-active tab after the re-render (DOM only — guarded so
     // the async callback never throws in a headless/test env).
@@ -117,7 +127,13 @@ export function registerBuilderActions(deps) {
     }
   });
   // Expand/collapse one level row (accordion — one open at a time; click again to close).
-  register('builderToggleLevel', (cid, key) => { const st = builderState[cid] || {}; builderState[cid] = { ...st, open: st.open === String(key) ? null : String(key) }; host.ui.rerender(); });
+  register('builderToggleLevel', (cid, key) => {
+    uiState.update(cid, 'builder', state => ({
+      ...state,
+      open: state.open === String(key) ? null : String(key),
+    }), {});
+    host.ui.rerender();
+  });
   // Level-independent extra feats (B4.5b) — read the picker + optional custom name +
   // note at click time. A compendium featId feeds the engine (mechanics apply); a
   // free-text name is tracked. builderMutate so a real feat re-materializes the sheet.
@@ -196,5 +212,8 @@ export function registerBuilderActions(deps) {
     });
   });
 
-  return () => { for (const timer of timers) clearTimeout(timer); timers.clear(); for (const key of Object.keys(builderState)) delete builderState[key]; };
+  return () => {
+    for (const timer of timers) clearTimeout(timer);
+    timers.clear();
+  };
 }

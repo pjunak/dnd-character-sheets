@@ -8,7 +8,7 @@ export const BASE_ACTIONS = Object.freeze([
 export function registerBaseActions(deps) {
   const {
     host, ABILITIES, SKILLS, num, clampHp, sheetOf, mutate, effectiveMaxHp,
-    getRules, safeHydrate, decisionsOf, visibleTabs, hasSpellsOf, tabKey, tabBtnId,
+    getRules, safeHydrate, decisionsOf, visibleTabs, hasSpellsOf, tabBtnId, uiState,
   } = deps;
   const timers = new Set();
   const later = (fn) => {
@@ -22,7 +22,7 @@ export function registerBaseActions(deps) {
 
   registerActionMap(host, {
     tab(cid, tabId) {
-      try { localStorage.setItem(tabKey(cid), String(tabId)); } catch (_) {}
+      uiState.setTab(cid, tabId);
       host.ui.rerender();
     },
     tabKey(ev, cid, tabId) {
@@ -38,7 +38,7 @@ export function registerBaseActions(deps) {
       if (current < 0) return;
       const next = key === 'Home' ? 0 : key === 'End' ? ids.length - 1
         : key === 'ArrowLeft' ? (current - 1 + ids.length) % ids.length : (current + 1) % ids.length;
-      try { localStorage.setItem(tabKey(cid), String(ids[next])); } catch (_) {}
+      uiState.setTab(cid, ids[next]);
       host.ui.rerender();
       if (typeof document !== 'undefined') {
         later(() => { const el = document.getElementById(tabBtnId(cid, ids[next])); if (el) el.focus(); });
@@ -98,7 +98,7 @@ export function registerBaseActions(deps) {
       });
     },
     uiLayoutSet(cid, mode) {
-      try { localStorage.setItem('dse-ui:layout:' + cid, String(mode) === 'compact' ? 'compact' : 'classic'); } catch (_) {}
+      uiState.setLayout(cid, String(mode));
       host.ui.rerender();
     },
   });

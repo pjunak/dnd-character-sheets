@@ -78,6 +78,7 @@ import { registerInventoryActions } from './actions.inventory.js';
 import { registerResourceActions } from './actions.resources.js';
 import { registerBuilderActions } from './actions.builder.js';
 import { registerTransferActions } from './actions.transfer.js';
+import { createUiState } from './ui-state.js';
 
 export default function register(host) {
   const { esc } = host.h;
@@ -92,24 +93,8 @@ export default function register(host) {
     num, abilityMod, signed, titleize, clampHp, blank, uid, sheetOf, compendiumHref, firstPara, featureRecordFor,
     POINT_BUY, pointCost, pointsSpent, hitDieAvg, scrollCopyCost, ASI_RULES, featAsiFrom, featAbilityCap,
   };
-  // Builder UI state, per character id: { tab: 'character'|<classId>, open: '<classId>:<level>'|null }.
-  // In-memory (shared via ctx → the Builder panel reads it; actions below mutate it) — deliberately
-  // NOT persisted: the Builder is only opened to create/level a character, so it defaults to the
-  // Character tab each load, and this saves any localStorage plumbing (B4.5b).
-  ctx.builderState = {};
-  // UI layout preference (the sheet's own ⚙ Settings tab), PER SHEET + per
-  // browser: 'classic' keeps every stat tile in the vitals band; 'compact'
-  // docks the derived stats onto their ability cards (Init→DEX,
-  // passive→Perception row, Save DC / Spell Attack→the casting ability).
-  // Keyed by character id so every player picks their own favorite look for
-  // each character; the pre-per-sheet global key survives as a read fallback
-  // (a written per-sheet value always beats it); absent ⇒ classic.
-  ctx.uiLayout = (cid) => {
-    try {
-      const v = localStorage.getItem('dse-ui:layout:' + cid) || localStorage.getItem('dse-ui:layout');
-      return v === 'compact' ? 'compact' : 'classic';
-    } catch (_) { return 'classic'; }
-  };
+  ctx.uiState = createUiState();
+  ctx.uiLayout = ctx.uiState.getLayout;
   ctx.engine = makeEngine(ctx);
   ctx.viewModel = ctx.engine.viewModel;     // hot path — promote for panel destructuring
   ctx.ui = makeUI(ctx);
@@ -147,12 +132,6 @@ export default function register(host) {
     tabs.push({ id: 'settings', icon: '⚙️', label: t('tab.settings'), hint: t('tab.settingsHint'), tool: true });
     return tabs;
   };
-  const tabKey = (id) => 'dse-tab:' + id;
-  const currentTab = (cid, tabs) => {
-    let stored = null;
-    try { stored = localStorage.getItem(tabKey(cid)); } catch (_) {}
-    return tabs.some((tb) => tb.id === stored) ? stored : tabs[0].id;
-  };
   const panelId = (cid) => 'dse-panel-' + cid;
   const tabBtnId = (cid, tabId) => 'dse-tab-' + cid + '-' + tabId;
 
@@ -177,7 +156,7 @@ export default function register(host) {
       const comp = result && result.sheet;
       const warnings = (result && result.warnings) || [];
       const tabs = visibleTabs(engine, hasSpellsOf(engine, comp, s), editable);
-      const active = currentTab(c.id, tabs);
+      const active = ctx.uiState.getTab(c.id, tabs);
       const pid = panelId(c.id);
 
       // Tab bar — host `.codex-tab-strip` component (widgets.css); ARIA tablist.
@@ -207,34 +186,24 @@ export default function register(host) {
       // & Combat place it themselves (in their right column), so entry doesn't add it.
       const vitals = (active === 'spellbook') ? vitalsBar(c, s, comp, editable, engine) : '';
 
-      // Rest wizard — a floating overlay (host `.addon-wizard-overlay` classes),
-      // rendered at the fragment root so it floats over any tab. Open state is a
-      // localStorage flag toggled by restOpen/restClose; engine + editor only.
-      let restOpen = false;
-      try { restOpen = !!(engine && editable && restModal && localStorage.getItem('dse-rest:' + c.id) === 'open'); } catch (_) {}
+      const restOpen = !!(engine && editable && restModal && ctx.uiState.get(c.id, 'restOpen', false));
       const restOverlay = restOpen ? restModal(c, s, comp) : '';
-      // Level-up spell-swap modal (same floating-overlay pattern; the flag stores the
-      // classId being swapped). Engine + editor only.
-      let swapClass = null;
-      try { if (engine && editable && spellSwapModal) swapClass = localStorage.getItem('dse-swap:' + c.id) || null; } catch (_) {}
+      const swapClass = engine && editable && spellSwapModal
+        ? ctx.uiState.get(c.id, 'spellSwapClass')
+        : null;
       const swapOverlay = swapClass ? spellSwapModal(c, s, comp, engine, swapClass) : '';
-      // Spellbook-management modal — same floating pattern; the flag value is the
-      // mode ('copy' | 'other'), so each of the two buttons opens the right form.
-      let spellMgrMode = null;
-      try { if (engine && editable && spellbookMgrModal) spellMgrMode = localStorage.getItem('dse-spellmgr:' + c.id) || null; } catch (_) {}
+      const spellMgrMode = engine && editable && spellbookMgrModal
+        ? ctx.uiState.get(c.id, 'spellManagerMode')
+        : null;
       const spellMgrOverlay = (spellMgrMode === 'copy' || spellMgrMode === 'other') ? spellbookMgrModal(c, s, comp, engine, spellMgrMode) : '';
 
       // Print / Export / Import live on the ⚙ Settings tab (panel.settings.js)
       // — the old toolbar row above the tab strip is gone (vertical space).
 
-      // Import modal — floating overlay at the fragment root when its flag is set (editor only).
-      let importOpen = false;
-      try { importOpen = !!(editable && importModal && localStorage.getItem('dse-import:' + c.id) === 'open'); } catch (_) {}
+      const importOpen = !!(editable && importModal && ctx.uiState.get(c.id, 'importOpen', false));
       const importOverlay = importOpen ? importModal(c) : '';
 
-      // Add-item wizard — floating overlay (editor only) when its flag is set.
-      let addItemOpen = false;
-      try { addItemOpen = !!(editable && addItemModal && localStorage.getItem('dse-additem:' + c.id) === 'open'); } catch (_) {}
+      const addItemOpen = !!(editable && addItemModal && ctx.uiState.get(c.id, 'addItem'));
       const addItemOverlay = addItemOpen ? addItemModal(c, s, engine) : '';
 
       return `<div class="addon-dnd-sheets" style="display:flex;flex-direction:column">${ctx.ui.styleTag}${tabBar}
@@ -255,14 +224,17 @@ export default function register(host) {
 
 
   const disposers = [
-    registerBaseActions({ host, ABILITIES, SKILLS, num, clampHp, sheetOf, mutate, effectiveMaxHp, getRules, safeHydrate, decisionsOf, visibleTabs, hasSpellsOf, tabKey, tabBtnId }),
-    registerSpellActions({ host, num, uid, mutate, getRules, safeHydrate, decisionsOf, scrollCopyCost }),
-    registerInventoryActions({ host, num, uid, mutate, getRules, LOCATIONS }),
-    registerResourceActions({ host, num, uid, mutate, getRules, safeHydrate, decisionsOf, effectiveMaxHp, hitDieAvg }),
-    registerBuilderActions({ host, plural, num, uid, ABILITIES, POINT_BUY, pointCost, pointsSpent, featAsiFrom, featAbilityCap, builderState: ctx.builderState, sheetOf, getRules, engine: ctx.engine }),
-    registerTransferActions({ host, NS, sheetOf, getRules, safeHydrate, decisionsOf, buildPrintHtml, mutate }),
+    registerBaseActions({ host, ABILITIES, SKILLS, num, clampHp, sheetOf, mutate, effectiveMaxHp, getRules, safeHydrate, decisionsOf, visibleTabs, hasSpellsOf, tabBtnId, uiState: ctx.uiState }),
+    registerSpellActions({ host, num, uid, mutate, getRules, safeHydrate, decisionsOf, scrollCopyCost, uiState: ctx.uiState }),
+    registerInventoryActions({ host, num, uid, mutate, getRules, LOCATIONS, uiState: ctx.uiState }),
+    registerResourceActions({ host, num, uid, mutate, getRules, safeHydrate, decisionsOf, effectiveMaxHp, hitDieAvg, uiState: ctx.uiState }),
+    registerBuilderActions({ host, plural, num, uid, ABILITIES, POINT_BUY, pointCost, pointsSpent, featAsiFrom, featAbilityCap, uiState: ctx.uiState, sheetOf, getRules, engine: ctx.engine }),
+    registerTransferActions({ host, NS, sheetOf, getRules, safeHydrate, decisionsOf, buildPrintHtml, mutate, uiState: ctx.uiState }),
   ].filter(Boolean);
 
   host.provide(ctx.engine.rulesApi);
-  return () => { for (const dispose of disposers.slice().reverse()) dispose(); };
+  return () => {
+    for (const dispose of disposers.slice().reverse()) dispose();
+    ctx.uiState.clear();
+  };
 }
