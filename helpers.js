@@ -86,6 +86,7 @@ export const blank = () => ({
   spellSwaps: [],  // engine mode: [{level, classId, out, in}] recorded level-up spell swaps (FE-4)
   cantrips: {},       // engine mode: { <classId>: [spellRef,…] } cantrip picks (SP-7)
   grantChoices: {},   // engine mode: { '<src>:<id>:<grantId>': [spellRef,…] } resolved choose-grants (SP-10)
+  grantCastingAbilities: {},
   inventory: [],   // [{id, name, qty, location, notes}]
   resources: [],   // [{id, name, current, max}] manual play trackers (standalone / homebrew)
   resourceUses: {}, // engine mode: { <resourceKey>: current } — spend state for build-derived trackers; max/name/recharge come from the engine
@@ -148,6 +149,7 @@ export function makeHelpers(host) {
       spellSwaps: Array.isArray(s.spellSwaps) ? s.spellSwaps : [],
       cantrips:  { ...(s.cantrips || {}) },
       grantChoices: { ...(s.grantChoices || {}) },
+      grantCastingAbilities: { ...(s.grantCastingAbilities || {}) },
       inventory: Array.isArray(s.inventory) ? s.inventory : [],
       resources: Array.isArray(s.resources) ? s.resources : [],
       resourceUses: { ...(s.resourceUses || {}) },

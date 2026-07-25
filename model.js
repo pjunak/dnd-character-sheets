@@ -65,17 +65,20 @@ export function makeEngine(ctx) {
     // A ruleset without the weapon-mastery subsystem drops those
     // descriptors — the engine zeroes the slots too, this keeps the picker away.
     const noMastery = rulesApi.getRuleset().capabilities.weaponMastery === false;
-    for (const cl of classes) {
+    for (const [classIndex, cl] of classes.entries()) {
       const rec = cl.classId ? engine.getItem('class', cl.classId) : null;
       if (!rec) continue;
       const clvl = num(cl.level, 1);
-      const sk = rec.startingProficiencies && rec.startingProficiencies.skills;
+      const starting = rec.startingProficiencies || {};
+      const reduced = classIndex > 0 ? rec.multiclassProficiencies : null;
+      const sk = (reduced && reduced.skills) || starting.skills;
       if (sk && sk.choose) out.push({ id: 'skills:' + cl.classId, kind: 'skills', count: num(sk.choose, 1), from: sk.from || [], source: { type: 'class', id: cl.classId, level: 1 } });
       for (const ch of (rec.grants && rec.grants.choices) || []) {
         const srcLevel = num(String(ch.source || '').split(':')[1], 1);
         if (srcLevel > clvl) continue;
         let kind = 'enumerated';
         if (ch.type === 'expertise') kind = 'expertise';
+        else if (ch.type === 'toolProficiency') kind = 'tools';
         else if (ch.type === 'weaponMastery') { if (noMastery) continue; kind = 'weaponMastery'; }
         else if (!Array.isArray(ch.from) && (ch.type === 'feat' || ch.category)) kind = 'feat';
         out.push({ id: ch.id, kind, count: num(ch.count, 1), from: ch.from, category: ch.category, prompt: ch.prompt, source: { type: 'class', id: cl.classId, level: srcLevel } });
@@ -98,6 +101,7 @@ export function makeEngine(ctx) {
             if (!from && ch.fromCategory) from = engine.listFeatures({ category: ch.fromCategory }).map((o) => o.id);
             let kind = 'enumerated';
             if (ch.type === 'expertise') kind = 'expertise';
+            else if (ch.type === 'toolProficiency') kind = 'tools';
             else if (ch.type === 'weaponMastery') { if (noMastery) continue; kind = 'weaponMastery'; }
             else if (!Array.isArray(from) && (ch.type === 'feat' || ch.category)) kind = 'feat';
             // Pool size grows with level: `countByLevel` maps a level → total known;
@@ -126,12 +130,49 @@ export function makeEngine(ctx) {
     return out.filter((c) => (c.id ? (seen.has(c.id) ? false : (seen.add(c.id), true)) : true));
   };
 
+  const collectCreationChoices = (s, engine) => {
+    const out = [];
+    const background = s.background
+      ? (engine.getItemByName('background', s.background) || engine.getItem('background', s.background))
+      : null;
+    if (background && background.toolProficiencyChoice) {
+      const choice = background.toolProficiencyChoice;
+      out.push({
+        id: `background:${background.id}:tool`,
+        kind: 'tools',
+        count: num(choice.count, 1),
+        from: Array.isArray(choice.from) ? choice.from : [],
+        prompt: choice.prompt,
+        source: { type: 'background', id: background.id, level: 1 },
+      });
+    }
+    const speciesId = s.species || s.race;
+    const species = speciesId
+      ? (engine.getItemByName('species', speciesId) || engine.getItem('species', speciesId))
+      : null;
+    for (const choice of (species && species.grants && species.grants.choices) || []) {
+      let kind = 'enumerated';
+      if (choice.type === 'skillProficiency') kind = 'skills';
+      else if (choice.type === 'toolProficiency') kind = 'tools';
+      else if (choice.type === 'proficiency') kind = 'proficiencies';
+      out.push({
+        id: `species:${species.id}:${choice.id}`,
+        kind,
+        count: num(choice.count, 1),
+        from: Array.isArray(choice.from) ? choice.from : [],
+        prompt: choice.prompt,
+        source: { type: 'species', id: species.id, level: 1 },
+      });
+    }
+    return out;
+  };
+
   /** Map featureChoices resolutions → the canonical input fields the engine
    *  reads (skill proficiencies, expertise, feats, weapon-mastery picks). The
    *  background ASI is already an abilityGrant; ASI-level "+2" picks too. */
   const resolveChoices = (s, classes, engine) => {
     const fc = s.featureChoices || {};
-    const skillProficiencies = [], feats = [], weaponMasteryChoices = [];
+    const skillProficiencies = [], toolProficiencies = [], feats = [], weaponMasteryChoices = [];
     const skillExpertise = {};
     const valsOf = (ch) => {
       // Dedup across boxes (FE-7): a value picked twice counts once, so duplicate
@@ -144,15 +185,28 @@ export function makeEngine(ctx) {
     // Level-independent extra feats from a custom source: a compendium featId
     // applies its mechanics via the engine; free-text (no featId) is tracked only.
     for (const ef of (Array.isArray(s.extraFeats) ? s.extraFeats : [])) if (ef && ef.featId) feats.push(ef.featId);
-    for (const ch of collectChoices(classes, engine)) {
+    for (const ch of collectChoices(classes, engine).concat(collectCreationChoices(s, engine))) {
       const vals = valsOf(ch);
       if (ch.kind === 'skills') skillProficiencies.push(...vals);
+      else if (ch.kind === 'tools') toolProficiencies.push(...vals);
+      else if (ch.kind === 'proficiencies') {
+        for (const value of vals) {
+          if (value.startsWith('skill:')) skillProficiencies.push(value.slice(6));
+          else if (value.startsWith('tool:')) toolProficiencies.push(value.slice(5));
+        }
+      }
       else if (ch.kind === 'expertise') vals.forEach((v) => { skillExpertise[v] = true; });
       else if (ch.kind === 'weaponMastery') weaponMasteryChoices.push(...vals);
       else if (ch.kind === 'feat') feats.push(...vals);
       else if (ch.kind === 'asiMode') { if (fc[ch.id] === 'feat' && fc[ch.id + ':feat']) feats.push(fc[ch.id + ':feat']); }
     }
-    return { skillProficiencies, skillExpertise, feats: feats.map((f) => ({ featId: f })), weaponMasteryChoices };
+    return {
+      skillProficiencies: [...new Set(skillProficiencies)],
+      toolProficiencies: [...new Set(toolProficiencies)],
+      skillExpertise,
+      feats: feats.map((f) => ({ featId: f })),
+      weaponMasteryChoices,
+    };
   };
 
   /** Prune orphaned decisions after a structural change (class/subclass/level/
@@ -164,7 +218,11 @@ export function makeEngine(ctx) {
   const reconcile = (s, engine) => {
     if (!engine || !s) return;
     const classes = Array.isArray(s.classes) ? s.classes : [];
-    const valid = new Set(collectChoices(classes, engine).map((c) => c.id));
+    const valid = new Set(
+      collectChoices(classes, engine)
+        .concat(collectCreationChoices(s, engine))
+        .map((c) => c.id)
+    );
     const bgRec = s.background ? (engine.getItemByName('background', s.background) || engine.getItem('background', s.background)) : null;
     if (bgRec && Array.isArray(bgRec.abilityScores) && bgRec.abilityScores.length) valid.add('bgasi');
     const baseOf = (k) => String(k).replace(/#\d+$/, '').replace(/:(ability|feat|featability)$/, '');
@@ -457,7 +515,7 @@ export function makeEngine(ctx) {
   };
 
   return {
-    builderModel, collectChoices, resolveChoices, reconcile, decisionsOf,
+    builderModel, collectChoices, collectCreationChoices, resolveChoices, reconcile, decisionsOf,
     safeHydrate, materializeInto, getRules, rulesApi, viewModel, mutate, builderMutate,
     effectiveMaxHp, providerState, resolveProvider, prepareSheetExport,
   };

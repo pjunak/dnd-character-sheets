@@ -94,6 +94,9 @@ through `host.provide()`.
   2014 provider). If computed flat values were edited while the provider was
   unavailable, that character stays hand-filled until the user explicitly
   keeps manual mode or resumes the rulebook; other characters are unaffected.
+  Supplement records can add reduced multiclass proficiencies, species/tool
+  choices, expanded spell lists, granted-spell casting abilities, resource
+  schedules, and class-specific attunement limits without book-specific code.
 - **Rules API for other addons:** the addon `provide()`s the same rules api the panels
   consume (`hydrate` / `derive.*` / `list*` passthroughs), so another addon can
   declare a dependency on `dnd-sheets` and reuse the engine.

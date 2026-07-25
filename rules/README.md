@@ -69,9 +69,10 @@ engine out of this addon.
 `hydrate(decisions)` runs the whole sequence — abilities (with
 ability grants, capped per the ruleset; 2024: 20) → classes + proficiency bonus → species/lineage
 (speed, senses, resistances, per-level HP) → background → HP → AC → initiative →
-saves → skills (proficiency + expertise) → spellcasting (per-class DC/attack,
-prepared limits, slot pool, provenance-tagged granted spells + pending choices) →
-weapon mastery → weapon attacks + attunement → collected features. Every step is
+saves → skills and armor/tool proficiencies → spellcasting (per-class DC/attack,
+expanded class lists, prepared limits, slot pool, provenance-tagged grants,
+spell choices, and casting-ability choices) → weapon mastery → weapon attacks
+and class-aware attunement → collected features → resource trackers. Every step is
 error-isolated, so a bad content record degrades to a `warning` rather than
 throwing, and the sheet is always returned. `derive.*` exposes granular helpers
 (`abilityMod`, `proficiencyBonus`, `multiclassSlots`, `initiative`, `maxHp`,
@@ -89,6 +90,12 @@ first character level gets the maximum of its hit die and later levels use the
 average. Other class levels also use the average. Reordering entries changes
 origin-class saves and starting proficiency semantics even when the HP total is
 unchanged.
+
+**Generic supplement mechanics:** provider records may declare reduced
+multiclass proficiency payloads, feat-expanded spell lists, fixed or selectable
+grant casting abilities, exact/maximum-level spell choices, class-specific
+attunement limits, level-gated recharge entries, and species choices/resources.
+These are data contracts; the engine contains no sourcebook-id checks.
 
 **Collected features:** class features grant from the per-class `feature`
 records (`listFeatures({classId})`, record level ≤ class level) — the

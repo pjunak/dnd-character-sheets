@@ -61,6 +61,8 @@ renders Combat. Preserve this naming unless doing a deliberate, tested rename.
   edition-dependent tables belong there, not in panels.
 - Rulebook records belong in a compendium addon. Tests use `tests/fake-phb.mjs`
   instead of embedding production book data.
+- Add supplement mechanics through generic documented record fields. Do not
+  branch on sourcebook IDs in the engine, model, panels, or actions.
 - `ui-state.js` owns transient navigation, modal, wizard, and selection state.
   Persist only intentional view preferences.
 - Domain controllers dispose their own timers, URLs, listeners, and other

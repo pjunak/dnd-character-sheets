@@ -1071,6 +1071,7 @@ test('sheets: choose-grant picker renders a filtered pool + pick/unpick actions'
   const act = (name, ...args) => rec.actions.find((a) => a.name === name).fn(...args);
   assert.doesNotThrow(() => act('grantPick', 'c1', 'feat:magic-initiate:mi-cantrips', 'fire-bolt'));
   assert.doesNotThrow(() => act('grantUnpick', 'c1', 'feat:magic-initiate:mi-cantrips', 'fire-bolt'));
+  assert.doesNotThrow(() => act('grantCastingAbilitySet', 'c1', 'feat:magic-initiate:casting', 'INT'));
 });
 
 test('sheets: spellbook prepare/cantrip/manager + drag-drop actions do not throw', () => {
@@ -1136,6 +1137,10 @@ test('sheets: spellDrop validates class list / level / capacity / book membershi
   assert.deepEqual(stored.spellbook.wizard, ['mage-armor'], 'an L3 spell above the L1 wizard cap is rejected');
   drop('bless', 'spellbook');
   assert.deepEqual(stored.spellbook.wizard, ['mage-armor'], 'a spell outside the class list is rejected');
+  assert.doesNotThrow(() => {
+    act('spellDragStart', { dataTransfer: { setData() {} } }, 'mage-armor');
+    act('spellDrop', 'c1', 'missing-class', 'prepared');
+  }, 'a stale or removed class target is rejected without throwing');
   // Capacity: L1 wizard knows 3 cantrips — a 4th valid cantrip drop is rejected.
   stored.cantrips = { wizard: ['a', 'b', 'c'] };
   drop('fire-bolt', 'cantrip');

@@ -283,6 +283,211 @@ test('rules: species grants senses, resistances, and a per-level HP bonus', () =
   assert.equal(sheet.derived.maxHp, 37, '32 base + Dwarven Toughness (+1/level × 5)'); // HP-3
 });
 
+test('rules: supplement proficiency choices distinguish origin, multiclass, background, and species sources', () => {
+  const fake = makeFake();
+  const baseGet = fake.getItem;
+  const records = {
+    class: {
+      artificer: {
+        id: 'artificer',
+        startingProficiencies: {
+          armor: ['light', 'medium'],
+          tools: ['thieves-tools'],
+          skills: { choose: 2, from: ['arcana', 'history'] },
+        },
+        multiclassProficiencies: {
+          armor: ['light'],
+          tools: ['tinkers-tools'],
+          skills: { choose: 1, from: ['arcana', 'history'] },
+        },
+        grants: {
+          choices: [{
+            id: 'artificer-tool',
+            type: 'toolProficiency',
+            count: 1,
+            from: ['alchemists-supplies', 'smiths-tools'],
+          }],
+        },
+        progression: [],
+      },
+    },
+    background: {
+      'choice-bg': {
+        id: 'choice-bg',
+        toolProficiency: 'Choose one kind of Gaming Set',
+        toolProficiencyChoice: { count: 1, from: ['gaming-set'] },
+      },
+      'fixed-bg': {
+        id: 'fixed-bg',
+        name: 'Fixed Background',
+        toolProficiency: 'Disguise Kit',
+      },
+    },
+    tool: {
+      'disguise-kit': { id: 'disguise-kit', name: 'Disguise Kit' },
+    },
+    species: {
+      warforged: {
+        id: 'warforged',
+        grants: {
+          choices: [
+            { id: 'design-skill', type: 'skillProficiency', count: 1, from: ['perception'] },
+            { id: 'design-tool', type: 'toolProficiency', count: 1, from: ['smiths-tools'] },
+          ],
+        },
+      },
+    },
+  };
+  fake.getItem = (kind, id) => (records[kind] && records[kind][id]) || baseGet(kind, id);
+  const baseByName = fake.getItemByName;
+  fake.getItemByName = (kind, name) =>
+    (records[kind] && Object.values(records[kind]).find((record) => record.name === name))
+    || baseByName(kind, name);
+  const num = (value, fallback = 0) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  };
+  const model = makeEngine({ num, host: {}, NS: 'x', ABILITIES: [], SKILLS: [], abilityMod: () => 0, sheetOf: () => ({}) });
+  const classes = [{ classId: 'fighter', level: 1 }, { classId: 'artificer', level: 1 }];
+  const classChoices = model.collectChoices(classes, fake);
+  assert.equal(classChoices.find((choice) => choice.id === 'skills:artificer').count, 1);
+  assert.equal(classChoices.find((choice) => choice.id === 'artificer-tool').kind, 'tools');
+
+  const sheet = {
+    classes,
+    background: 'choice-bg',
+    race: 'warforged',
+    featureChoices: {
+      'skills:artificer': 'arcana',
+      'artificer-tool': 'alchemists-supplies',
+      'background:choice-bg:tool': 'gaming-set',
+      'species:warforged:design-skill': 'perception',
+      'species:warforged:design-tool': 'smiths-tools',
+    },
+  };
+  assert.equal(model.collectCreationChoices(sheet, fake).length, 3);
+  const resolved = model.resolveChoices(sheet, classes, fake);
+  assert.deepEqual(resolved.skillProficiencies.sort(), ['arcana', 'perception']);
+  assert.deepEqual(resolved.toolProficiencies.sort(), ['alchemists-supplies', 'gaming-set', 'smiths-tools']);
+  const hydrated = Engine.hydrate({
+    ...sheet,
+    ...resolved,
+    baseStats: { STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10 },
+  }, fake).sheet;
+  assert.deepEqual(
+    hydrated.proficiencies.tools.sort(),
+    ['alchemists-supplies', 'gaming-set', 'smiths-tools', 'tinkers-tools'],
+  );
+  const fixedBackground = Engine.hydrate({
+    classes: [{ classId: 'fighter', level: 1 }],
+    background: 'Fixed Background',
+    baseStats: { STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10 },
+  }, fake).sheet;
+  assert.deepEqual(fixedBackground.proficiencies.tools, ['disguise-kit']);
+});
+
+test('rules: supplement mechanics hydrate without sourcebook-specific branches', () => {
+  const fake = makeFake();
+  const baseGet = fake.getItem;
+  const baseByName = fake.getItemByName;
+  const artificer = {
+    id: 'artificer',
+    name: 'Artificer',
+    hitDie: 'd8',
+    savingThrows: ['CON', 'INT'],
+    spellcasting: { ability: 'INT', type: 'half', prepares: 'list' },
+    progression: [{ level: 14, preparedSpells: 10 }],
+    attunementLimit: [{ level: 1, max: 3 }, { level: 14, max: 5 }],
+    classResources: [{
+      key: 'flash-of-genius',
+      abilityMod: 'INT',
+      min: 1,
+      recharge: [
+        { on: 'short', amount: 1, minLevel: 14 },
+        { on: 'long', amount: 'full' },
+      ],
+    }],
+  };
+  const warforged = {
+    id: 'warforged',
+    name: 'Warforged',
+    speeds: { walk: 30 },
+    senses: {},
+    resistances: ['Poison'],
+    grants: {
+      acBonus: 1,
+      resources: [{ key: 'integrated-reserve', proficiencyBonus: true, recharge: 'long' }],
+    },
+  };
+  const mark = {
+    id: 'mark-test',
+    name: 'Mark Test',
+    category: 'dragonmark',
+    grants: {
+      castingAbility: { id: 'mark-casting', choose: ['INT', 'WIS', 'CHA'] },
+      spellList: ['detect-magic'],
+      spellSlot: {
+        count: 1,
+        level: { divisor: 2, round: 'up', min: 1, max: 5 },
+        recharge: [{ on: 'short' }, { on: 'long' }],
+        restriction: 'dragonmark',
+      },
+      spells: [{
+        id: 'mark-pick',
+        choose: 1,
+        maxSpellLevel: 3,
+        from: { class: ['wizard'], ids: ['fireball'] },
+        alwaysPrepared: true,
+        free: '1/shortOrLong',
+      }],
+    },
+  };
+  fake.getItem = (kind, id) => {
+    if (kind === 'class' && id === 'artificer') return artificer;
+    if (kind === 'species' && id === 'warforged') return warforged;
+    if (kind === 'feat' && id === 'mark-test') return mark;
+    return baseGet(kind, id);
+  };
+  fake.getItemByName = (kind, name) => {
+    if (kind === 'class' && String(name).toLowerCase() === 'artificer') return artificer;
+    if (kind === 'species' && String(name).toLowerCase() === 'warforged') return warforged;
+    return baseByName(kind, name);
+  };
+
+  const sheet = Engine.hydrate({
+    classes: [{ classId: 'artificer', level: 14 }],
+    race: 'warforged',
+    baseStats: { INT: 18, DEX: 10 },
+    feats: [{ featId: 'mark-test' }],
+    grantChoices: { 'feat:mark-test:mark-pick': ['fireball'] },
+    grantCastingAbilities: { 'feat:mark-test:mark-casting': 'INT' },
+    inventory: Array.from({ length: 4 }, (_, index) => ({ id: `item-${index}`, attuned: true })),
+  }, fake).sheet;
+
+  assert.deepEqual(sheet.spellcasting.perClass[0].expandedSpellIds, ['detect-magic']);
+  const granted = sheet.spellcasting.granted.find((spell) => spell.ref === 'fireball');
+  assert.equal(granted.castingAbility, 'INT');
+  assert.equal(sheet.spellcasting.pendingChoices[0].maxSpellLevel, 3);
+  assert.equal(sheet.spellcasting.castingAbilityChoices[0].selected, 'INT');
+  assert.equal(sheet.attunement.limit, 5);
+  assert.equal(sheet.attunement.over, false);
+  assert.equal(sheet.derived.armorClass, 11);
+  assert.deepEqual(
+    sheet.resources.find((resource) => resource.key === 'flash-of-genius').recharge,
+    [{ on: 'short', amount: 1 }, { on: 'long', amount: 'full' }]
+  );
+  assert.equal(sheet.resources.find((resource) => resource.key === 'integrated-reserve').max, 5);
+  const featSlot = sheet.resources.find((resource) => resource.key === 'feat-slot-mark-test');
+  assert.deepEqual(
+    { max: featSlot.max, level: featSlot.level, restriction: featSlot.restriction },
+    { max: 1, level: 5, restriction: 'dragonmark' }
+  );
+  assert.deepEqual(
+    sheet.resources.find((resource) => resource.key === 'charge-fireball').recharge,
+    [{ on: 'short', amount: 'full' }, { on: 'long', amount: 'full' }]
+  );
+});
+
 test('rules: caster surfaces per-level cantrips-known + prepared', () => {
   const { rec } = withFake();
   const { sheet } = rec.provided.hydrate({ abilities: { INT: 16 }, className: 'Wizard', level: 5 });

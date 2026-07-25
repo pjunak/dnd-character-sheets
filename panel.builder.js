@@ -13,7 +13,7 @@ export function makeBuilderPanel(ctx) {
   const { host, t, plural, ABILITIES, SKILLS, num, signed, abilityMod, titleize, firstPara, featureRecordFor, ui, engine: E, POINT_BUY, pointCost, pointsSpent, featAsiFrom, uiState } = ctx;
   const { esc, dataAction, dataOn } = host.h;
   const { section, miniStat, selectBox, fieldRow, choiceBlock, warningsBlock, numField, entityRef } = ui;
-  const { builderModel, collectChoices } = E;
+  const { builderModel, collectChoices, collectCreationChoices } = E;
 
   function panelBuilder(c, s, editable, comp, warnings, engine) {
     if (!engine) return panelBuilderStub();
@@ -156,6 +156,12 @@ export function makeBuilderPanel(ctx) {
   // Human label for a resolved choice value (skill / feature-pool / weapon / feat).
   function labelValue(ch, v, engine) {
     if (ch.kind === 'skills' || ch.kind === 'expertise') return t('skill.' + v) || titleize(v);
+    if (ch.kind === 'tools') return (engine.getItem('tool', v) || {}).name || titleize(v);
+    if (ch.kind === 'proficiencies') {
+      const [kind, id] = String(v).split(':', 2);
+      if (kind === 'skill') return t('skill.' + id) || titleize(id);
+      if (kind === 'tool') return (engine.getItem('tool', id) || {}).name || titleize(id);
+    }
     const fr = engine.getFeature && engine.getFeature(v); if (fr && fr.name) return fr.name;
     if (ch.kind === 'weaponMastery') { const w = engine.getItem && engine.getItem('weapon', v); if (w) return w.name; }
     if (ch.kind === 'feat') { const f = engine.getItem && engine.getItem('feat', v); if (f) return f.name; }
@@ -318,16 +324,22 @@ export function makeBuilderPanel(ctx) {
   // now live in each class tab's spine (bucketed by source.level), not a flat list.
   function builderCreationChoices(c, s, engine, ro) {
     const bgRec = s.background ? (engine.getItemByName('background', s.background) || engine.getItem('background', s.background)) : null;
-    if (!(bgRec && Array.isArray(bgRec.abilityScores) && bgRec.abilityScores.length)) return '';
-    // Background ASI budgets come from the ruleset; 2024 distributes 3
-    // points across the background's abilities (+2/+1 or +1/+1/+1, max +2 to any
-    // one); a ruleset with bgBudget 0 (2014 — backgrounds grant no ASI) hides the
-    // block entirely, even if a record carries a stray abilityScores field.
+    const blocks = [];
     const asiRules = engine.getRuleset().constants.asi;
-    if (!(num(asiRules.bgBudget, 0) > 0)) return '';
-    const pickers = abilityBudgetPickers(c, 'bgasi', bgRec.abilityScores, assignOf(s, 'bgasi'), asiRules.bgBudget, asiRules.bgPerMax, ro);
-    const blocks = [choiceBlock(t('builder.bgAsi', { bg: bgRec.name }), pickers)];
-    if (bgRec.originFeat) blocks.push(`<div style="color:var(--text-muted);font-size:var(--text-xs)">${esc(t('builder.originFeat', { feat: titleize(bgRec.originFeat) }))}</div>`);
+    if (
+      bgRec
+      && Array.isArray(bgRec.abilityScores)
+      && bgRec.abilityScores.length
+      && num(asiRules.bgBudget, 0) > 0
+    ) {
+      const pickers = abilityBudgetPickers(c, 'bgasi', bgRec.abilityScores, assignOf(s, 'bgasi'), asiRules.bgBudget, asiRules.bgPerMax, ro);
+      blocks.push(choiceBlock(t('builder.bgAsi', { bg: bgRec.name }), pickers));
+    }
+    if (bgRec && bgRec.originFeat) blocks.push(`<div style="color:var(--text-muted);font-size:var(--text-xs)">${esc(t('builder.originFeat', { feat: titleize(bgRec.originFeat) }))}</div>`);
+    for (const choice of collectCreationChoices(s, engine)) {
+      blocks.push(renderDescriptor(c, s, choice, engine, ro));
+    }
+    if (!blocks.length) return '';
     return section(t('builder.choices'), `<div style="display:flex;flex-direction:column;gap:var(--space-2)">${blocks.join('')}</div>`);
   }
 
@@ -406,6 +418,12 @@ export function makeBuilderPanel(ctx) {
       const pool = (ch.kind === 'skills' && Array.isArray(ch.from) && ch.from.length) ? ch.from : SKILLS.map((sk) => sk.id);
       options = pool.map((id) => ({ value: id, label: t('skill.' + id) }));
       label = ch.kind === 'skills' ? t('builder.skillProfs') : t('builder.expertise');
+    } else if (ch.kind === 'tools') {
+      options = (ch.from || []).map((id) => ({ value: id, label: (engine.getItem('tool', id) || {}).name || titleize(id) }));
+      label = ch.prompt || t('builder.toolProfs');
+    } else if (ch.kind === 'proficiencies') {
+      options = (ch.from || []).map((value) => ({ value, label: labelValue(ch, value, engine) }));
+      label = ch.prompt || t('builder.proficiencyChoice');
     } else if (Array.isArray(ch.from)) {
       // Values may be feature ids (option pools like Metamagic/maneuvers) — label
       // them by the feature's name rather than a titleized id when resolvable.

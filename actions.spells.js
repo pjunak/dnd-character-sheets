@@ -1,4 +1,4 @@
-export const SPELL_ACTIONS = Object.freeze(['spellAdd','spellDel','learnCantrip','unlearnCantrip','prepSpell','unprepSpell','spellbookLearn','spellbookForget','spellMgrOpen','spellMgrClose','spellCopyPick','spellCopy','spellCustomAdd','spellSwapOpen','spellSwapClose','spellSwapApply','spellSwapForget','spellDragStart','spellDrop','grantPick','grantUnpick','spellSet']);
+export const SPELL_ACTIONS = Object.freeze(['spellAdd','spellDel','learnCantrip','unlearnCantrip','prepSpell','unprepSpell','spellbookLearn','spellbookForget','spellMgrOpen','spellMgrClose','spellCopyPick','spellCopy','spellCustomAdd','spellSwapOpen','spellSwapClose','spellSwapApply','spellSwapForget','spellDragStart','spellDrop','grantPick','grantUnpick','grantCastingAbilitySet','spellSet']);
 
 export function registerSpellActions(deps) {
   const { host, num, uid, mutate, getRules, safeHydrate, decisionsOf, scrollCopyCost, uiState } = deps;
@@ -128,8 +128,12 @@ export function registerSpellActions(deps) {
         const comp = hydrateFor(s);
         const p = comp && comp.spellcasting && (comp.spellcasting.perClass || []).find((x) => x.classId === String(classId));
         const rec = engine.getItem ? engine.getItem('spell', ref) : null;
-        const inClassList = engine.listSpells ? (engine.listSpells({ class: String(classId) }) || []).some((sp) => sp.id === ref) : true;
-        if (!p || !rec || !inClassList) return s;
+        if (!p || !rec) return s;
+        const inClassList = engine.listSpells
+          ? (engine.listSpells({ class: String(classId) }) || []).some((sp) => sp.id === ref)
+            || (p.expandedSpellIds || []).includes(ref)
+          : true;
+        if (!inClassList) return s;
         const lvl = num(rec.level, 0);
         const chosen = (s[bag] && s[bag][classId]) || [];
         if (chosen.includes(ref)) return s;
@@ -159,6 +163,15 @@ export function registerSpellActions(deps) {
   });
   register('grantUnpick', (cid, key, ref) => {
     mutate(cid, (s) => { s.grantChoices = { ...s.grantChoices, [key]: (s.grantChoices[key] || []).filter((r) => r !== ref) }; return s; });
+  });
+  register('grantCastingAbilitySet', (cid, key, ability) => {
+    mutate(cid, (s) => {
+      const next = { ...(s.grantCastingAbilities || {}) };
+      if (ability) next[key] = String(ability);
+      else delete next[key];
+      s.grantCastingAbilities = next;
+      return s;
+    });
   });
   register('spellSet', (cid, sid, field, value) => {
     mutate(cid, (s) => {

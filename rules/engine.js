@@ -420,6 +420,11 @@ export function hydrate(decisions, api, ruleset) {
   // AC (AC-1).
   step(() => {
     const ac = computeArmorClass(cd, mods, classes, api);
+    const speciesBonus = num(species && species.grants && species.grants.acBonus);
+    if (speciesBonus) {
+      ac.value += speciesBonus;
+      ac.speciesBonus = speciesBonus;
+    }
     sheet.ac = ac;
     sheet.derived.armorClass = ac.value;
   });
@@ -466,11 +471,14 @@ export function hydrate(decisions, api, ruleset) {
       ? cd.skillProficiencies
       : Object.keys(manual).filter((k) => manual[k]);
     const bgSkills = (background && background.skillProficiencies) || [];
+    const speciesSkills = Array.isArray(cd.speciesSkillProficiencies)
+      ? cd.speciesSkillProficiencies
+      : [];
     const expertise = cd.skillExpertise || {};
     sheet.skills = {};
     for (const id of Object.keys(SKILL_ABILITY)) {
       const ab = SKILL_ABILITY[id];
-      const proficient = resolved.includes(id) || bgSkills.includes(id);
+      const proficient = resolved.includes(id) || bgSkills.includes(id) || speciesSkills.includes(id);
       const exp = !!expertise[id] && proficient;
       sheet.proficiencies.skills[id] = exp ? 'expertise' : proficient ? 'proficient' : 'none';
       const bonus = (exp ? 2 : proficient ? 1 : 0) * pb;
@@ -478,6 +486,36 @@ export function hydrate(decisions, api, ruleset) {
     }
     sheet.passives = { perception: 10 + sheet.skills.perception.total };
     sheet.derived.passivePerception = sheet.passives.perception;
+  });
+
+  // Armor and tool proficiencies use the origin class's full starting grants
+  // and each later class's reduced multiclass grants. Background, species, and
+  // resolved generic choices are additive.
+  step(() => {
+    const armor = new Set();
+    const tools = new Set();
+    classes.forEach((c, index) => {
+      const rec = c.record;
+      if (!rec) return;
+      const source = index > 0 && rec.multiclassProficiencies
+        ? rec.multiclassProficiencies
+        : rec.startingProficiencies;
+      for (const id of (source && source.armor) || []) armor.add(id);
+      for (const id of (source && source.tools) || []) tools.add(id);
+    });
+    if (background && background.toolProficiency && !background.toolProficiencyChoice) {
+      const declared = background.toolProficiency;
+      const tool = api && (
+        (api.getItem && api.getItem('tool', declared))
+        || (api.getItemByName && api.getItemByName('tool', declared))
+      );
+      if (tool && tool.id) tools.add(tool.id);
+    }
+    if (cd.backgroundToolProficiency) tools.add(cd.backgroundToolProficiency);
+    for (const id of Array.isArray(cd.toolProficiencies) ? cd.toolProficiencies : []) tools.add(id);
+    for (const id of Array.isArray(cd.speciesToolProficiencies) ? cd.speciesToolProficiencies : []) tools.add(id);
+    sheet.proficiencies.armor = [...armor];
+    sheet.proficiencies.tools = [...tools];
   });
 
   // Highest spell level a class can prepare/cast on its OWN progression — the cap
@@ -530,6 +568,15 @@ export function hydrate(decisions, api, ruleset) {
       });
     }
 
+    const featRecords = (Array.isArray(cd.feats) ? cd.feats : [])
+      .map((f) => f && (f.featId || f.id || f))
+      .filter(Boolean)
+      .map((id) => ({ id, record: api && api.getItem ? api.getItem('feat', id) : null }))
+      .filter((entry) => entry.record);
+    const expandedSpellIds = [...new Set(featRecords.flatMap(({ record }) =>
+      (record.grants && record.grants.spellList) || []))];
+    for (const caster of per) caster.expandedSpellIds = expandedSpellIds.slice();
+
     // Slot pool (MC-2/MC-3). Two distinct rules:
     //  • SINGLE caster class → use the class's OWN printed per-level slot
     //    progression (`prog.spellSlots`) verbatim when the content provides it.
@@ -568,12 +615,40 @@ export function hydrate(decisions, api, ruleset) {
     const granted = [];
     const pendingChoices = [];
     const grantChoices = (cd && cd.grantChoices) || {};
+    const grantCastingAbilities = (cd && cd.grantCastingAbilities) || {};
+    const castingAbilityChoices = [];
+    const castingChoiceKeys = new Set();
+    const castingAbilityFor = (source) => {
+      let grants = null;
+      if (source.type === 'feat') {
+        const entry = featRecords.find((candidate) => candidate.id === source.id);
+        grants = entry && entry.record && entry.record.grants;
+      } else if (source.type === 'species') {
+        grants = species && species.grants;
+      }
+      const declaration = grants && grants.castingAbility;
+      if (!declaration) return null;
+      if (declaration.fixed) return declaration.fixed;
+      const options = Array.isArray(declaration.choose) ? declaration.choose : [];
+      const key = `${source.type}:${source.id}:${declaration.id || 'casting-ability'}`;
+      const selected = options.includes(grantCastingAbilities[key])
+        ? grantCastingAbilities[key]
+        : null;
+      if (!castingChoiceKeys.has(key)) {
+        castingChoiceKeys.add(key);
+        castingAbilityChoices.push({ key, source, options: options.slice(), selected });
+      }
+      return selected;
+    };
     const addGrant = (ref, source, opts) => {
       if (!ref) return;
       const rec = api && api.getItem ? api.getItem('spell', ref) : null;
       granted.push({
         ref, name: rec ? rec.name : ref, level: rec ? num(rec.level) : null, school: rec ? rec.school : '',
-        source, alwaysPrepared: !!(opts && opts.alwaysPrepared), free: (opts && opts.free) || null,
+        source,
+        alwaysPrepared: !!(opts && opts.alwaysPrepared),
+        free: (opts && opts.free) || null,
+        castingAbility: (opts && opts.castingAbility) || null,
       });
     };
     // One grant entry: either FIXED (`ids`) or a CHOICE (`choose` + `from`). A
@@ -583,13 +658,23 @@ export function hydrate(decisions, api, ruleset) {
     // High Elf's wizard cantrip). `unlocked` gates by the source's level.
     const addGrantEntry = (sp, source, unlocked) => {
       if (!unlocked) return;
+      const castingAbility = castingAbilityFor(source);
       if (Array.isArray(sp.ids) && sp.ids.length) {
-        for (const ref of sp.ids) addGrant(ref, source, { alwaysPrepared: sp.alwaysPrepared, free: sp.free });
+        for (const ref of sp.ids) addGrant(ref, source, { alwaysPrepared: sp.alwaysPrepared, free: sp.free, castingAbility });
       } else if (num(sp.choose) > 0 && sp.id) {
         const key = source.type + ':' + source.id + ':' + sp.id;
         const picked = Array.isArray(grantChoices[key]) ? grantChoices[key].slice(0, num(sp.choose)) : [];
-        for (const ref of picked) addGrant(ref, source, { alwaysPrepared: sp.alwaysPrepared, free: sp.free });
-        pendingChoices.push({ key, source, choose: num(sp.choose), spellLevel: num(sp.spellLevel), from: sp.from || {}, alwaysPrepared: !!sp.alwaysPrepared, picked: picked.slice() });
+        for (const ref of picked) addGrant(ref, source, { alwaysPrepared: sp.alwaysPrepared, free: sp.free, castingAbility });
+        pendingChoices.push({
+          key,
+          source,
+          choose: num(sp.choose),
+          spellLevel: sp.spellLevel == null ? null : num(sp.spellLevel),
+          maxSpellLevel: sp.maxSpellLevel == null ? null : num(sp.maxSpellLevel),
+          from: sp.from || {},
+          alwaysPrepared: !!sp.alwaysPrepared,
+          picked: picked.slice(),
+        });
       }
     };
     const unlockLevel = (sp) => num(sp.atLevel != null ? sp.atLevel : sp.level);
@@ -597,13 +682,29 @@ export function hydrate(decisions, api, ruleset) {
       const subRec = c.subclass && api && api.getItem ? api.getItem('subclass', c.subclass) : null;
       for (const sp of (subRec && subRec.spells) || []) addGrantEntry(sp, { type: 'subclass', id: c.subclass }, unlockLevel(sp) <= c.level);
     }
-    for (const f of Array.isArray(cd.feats) ? cd.feats : []) {
-      const fid = f && (f.featId || f.id || f);
-      const frec = fid && api && api.getItem ? api.getItem('feat', fid) : null;
+    for (const { id: fid, record: frec } of featRecords) {
       for (const sp of (frec && frec.grants && frec.grants.spells) || []) addGrantEntry(sp, { type: 'feat', id: fid }, true);
+    }
+    if (species && species.grants && species.grants.spells) {
+      for (const sp of species.grants.spells) {
+        addGrantEntry(sp, { type: 'species', id: species.id }, unlockLevel(sp) <= totalLevel);
+      }
     }
     if (lineage && lineage.grants && lineage.grants.spells) {
       for (const sp of lineage.grants.spells) addGrantEntry(sp, { type: 'species', id: species.id }, unlockLevel(sp) <= totalLevel);
+    }
+    for (const { id: fid, record: frec } of featRecords) {
+      const target = frec.grants && frec.grants.prepareSpellListOf;
+      if (!target) continue;
+      for (const { id: sourceId, record: sourceFeat } of featRecords) {
+        if (target !== sourceFeat.category) continue;
+        for (const ref of (sourceFeat.grants && sourceFeat.grants.spellList) || []) {
+          addGrant(ref, { type: 'feat', id: sourceId }, {
+            alwaysPrepared: true,
+            castingAbility: castingAbilityFor({ type: 'feat', id: sourceId }),
+          });
+        }
+      }
     }
 
     sheet.spellcasting = {
@@ -612,6 +713,7 @@ export function hydrate(decisions, api, ruleset) {
       slots,
       granted,
       pendingChoices,
+      castingAbilityChoices,
     };
   });
 
@@ -645,7 +747,12 @@ export function hydrate(decisions, api, ruleset) {
       if (rec) weapons.push(computeWeaponAttack(rec, mods, pb, profW, masterySet));
     }
     sheet.weapons = weapons;
-    const attuneLimit = num(rs.constants.attunementLimit, 3);   // EQ-3
+    let attuneLimit = num(rs.constants.attunementLimit, 3);
+    for (const c of classes) {
+      for (const row of (c.record && c.record.attunementLimit) || []) {
+        if (num(row.level, 1) <= c.level) attuneLimit = Math.max(attuneLimit, num(row.max, attuneLimit));
+      }
+    }
     sheet.attunement = { count: attuned, limit: attuneLimit, over: attuned > attuneLimit };
     if (attuned > attuneLimit) warn('Attuned to more than ' + attuneLimit + ' magic items (limit ' + attuneLimit + ')');
   });
@@ -718,15 +825,20 @@ export function hydrate(decisions, api, ruleset) {
         return m;
       }
       if (res.perLevel != null) return Math.max(0, Math.floor(num(res.perLevel) * lvl));
+      if (res.proficiencyBonus) return pb;
       if (res.abilityMod) return Math.max(num(res.min, 1), abilMod(res.abilityMod));
       if (res.fixed != null) return Math.max(0, num(res.fixed));
       return 0;
     };
     // Normalize recharge into [{on, amount}]. A bare string ('long') means
     // "resets to full on that rest"; an array is taken as-is (defaulting amount).
-    const normRecharge = (r) => {
+    const normRecharge = (r, level = Infinity) => {
       if (typeof r === 'string') return [{ on: r, amount: 'full' }];
-      if (Array.isArray(r)) return r.filter((x) => x && x.on).map((x) => ({ on: String(x.on), amount: x.amount == null ? 'full' : x.amount }));
+      if (Array.isArray(r)) {
+        return r
+          .filter((x) => x && x.on && num(x.minLevel, 1) <= level)
+          .map((x) => ({ on: String(x.on), amount: x.amount == null ? 'full' : x.amount }));
+      }
       return [{ on: 'long', amount: 'full' }];
     };
     const ORD = ['1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th'];
@@ -745,9 +857,22 @@ export function hydrate(decisions, api, ruleset) {
         if (max <= 0) continue;
         resources.push({
           key: String(res.key), name: res.name || String(res.key), max, kind: 'pool',
-          recharge: normRecharge(res.recharge), source,
+          recharge: normRecharge(res.recharge, c.level), source,
         });
       }
+    }
+    for (const res of (species && species.grants && species.grants.resources) || []) {
+      if (!res || !res.key || num(res.minLevel, 1) > totalLevel) continue;
+      const max = resolveMax(res, totalLevel);
+      if (max <= 0) continue;
+      resources.push({
+        key: String(res.key),
+        name: res.name || String(res.key),
+        max,
+        kind: 'pool',
+        recharge: normRecharge(res.recharge, totalLevel),
+        source: { type: 'species', id: species.id, level: totalLevel },
+      });
     }
     // 2. Hit Dice — aggregate by die size. 2024 Long Rest: "You regain all
     // lost Hit Points and all spent Hit Point Dice" — ALL of them; a 2014
@@ -770,6 +895,27 @@ export function hydrate(decisions, api, ruleset) {
         recharge: [{ on: 'long', amount: 'full' }], source: { type: 'spellcasting' },
       });
     });
+    for (const selected of Array.isArray(cd.feats) ? cd.feats : []) {
+      const featId = selected && (selected.featId || selected.id || selected);
+      const feat = featId && api && api.getItem ? api.getItem('feat', featId) : null;
+      const slot = feat && feat.grants && feat.grants.spellSlot;
+      if (!slot) continue;
+      const levelRule = slot.level || {};
+      const divisor = Math.max(1, num(levelRule.divisor, 1));
+      const rawLevel = totalLevel / divisor;
+      const rounded = levelRule.round === 'down' ? Math.floor(rawLevel) : Math.ceil(rawLevel);
+      const level = Math.max(num(levelRule.min, 1), Math.min(num(levelRule.max, 9), rounded));
+      resources.push({
+        key: `feat-slot-${featId}`,
+        name: `${feat.name || featId} (${ORD[level - 1] || `${level}th`})`,
+        max: Math.max(1, num(slot.count, 1)),
+        kind: 'slot',
+        level,
+        restriction: slot.restriction || null,
+        recharge: normRecharge(slot.recharge, totalLevel),
+        source: { type: 'feat', id: featId },
+      });
+    }
     // Pact Magic slots (Warlock): a small pool ALL at one level, SHORT-rest recharge.
     for (const p of (sheet.spellcasting && sheet.spellcasting.perClass) || []) {
       if (p.pact && num(p.pact.slots) > 0) resources.push({
@@ -778,13 +924,21 @@ export function hydrate(decisions, api, ruleset) {
       });
     }
     // 4. Granted free/limited casts (feat / species / subclass) → charges.
-    const parseFreq = (f) => { const m = /(\d+)\s*\/\s*(short|long)/i.exec(String(f || '')); return m ? { max: num(m[1], 1), on: m[2].toLowerCase() } : { max: 1, on: 'long' }; };
+    const parseFreq = (frequency) => {
+      const match = /(\d+)\s*\/\s*(shortOrLong|short|long)/i.exec(String(frequency || ''));
+      if (!match) return { max: 1, on: ['long'] };
+      const rest = match[2].toLowerCase();
+      return {
+        max: num(match[1], 1),
+        on: rest === 'shortorlong' ? ['short', 'long'] : [rest],
+      };
+    };
     for (const g of (sheet.spellcasting && sheet.spellcasting.granted) || []) {
       if (!g.free) continue;
       const fq = parseFreq(g.free);
       resources.push({
         key: 'charge-' + (g.ref || g.name), name: (g.name || g.ref) + ' (free cast)', max: fq.max, kind: 'charge',
-        recharge: [{ on: fq.on, amount: 'full' }], source: g.source || { type: 'spell' },
+        recharge: fq.on.map((on) => ({ on, amount: 'full' })), source: g.source || { type: 'spell' },
       });
     }
     sheet.resources = resources;

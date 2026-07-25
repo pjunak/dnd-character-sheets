@@ -26,8 +26,8 @@ gaps live in `dnd55e-compendium/data/SCHEMA.md` and `data/GAPS.md`.
 ## Stored decisions and materialized fields
 
 The builder decision spine includes `classes`, `baseStats`, `abilityGrants`,
-`featureChoices`, `grantChoices`, spell selections, equipment state, and
-`overrides`. On hydration, the engine derives rules-owned values and the addon
+`featureChoices`, `grantChoices`, `grantCastingAbilities`, spell selections,
+equipment state, and `overrides`. On hydration, the engine derives rules-owned values and the addon
 materializes the result into the ordinary character fields used by the host.
 The view model applies explicit overrides over the derived result; overrides
 are never folded into provider data.
@@ -58,7 +58,7 @@ order:
 1. ability scores and caps;
 2. ordered classes, total level, and proficiency bonus;
 3. species, lineage, background, hit points, Armor Class, and initiative;
-4. saving throws and skills;
+4. saving throws, skills, armor proficiencies, and tool proficiencies;
 5. spellcasting, granted spells, and pending spell choices;
 6. weapon mastery, equipped weapon attacks, and attunement;
 7. record-first collected features; and
@@ -78,10 +78,10 @@ inputs rather than display-only metadata.
   for identity and level. `progression[].features` supplies printed ordering
   and a label fallback only when no record exists at all; a same-name record at
   another level is not granted early.
-- The engine already reads `multiclassProficiencies.weapons` for later classes.
-  The current compendium payloads are empty, armor/tools are not consumed, and
-  the builder still gathers full starting skill choices per class. This is a
-  known cross-repository gap, not a supported reduced-proficiency result.
+- The origin class uses `startingProficiencies`; later classes use
+  `multiclassProficiencies` when present. Reduced skill choices and armor,
+  weapon, and tool grants are all consumed. A provider that omits the reduced
+  object falls back to starting proficiencies for compatibility.
 
 ## Abilities, feats, and choices
 
@@ -90,12 +90,15 @@ inputs rather than display-only metadata.
   warnings rather than destructive choice cleanup.
 - Every repeatable or ambiguous choice needs a stable id. `grantChoices` uses
   that id so selections survive rehydration.
-- Fixed spell grants and filtered `choose` grants are supported for feats and
-  lineages. The engine caps chosen ids, reports incomplete selections through
-  `pendingChoices`, and records source provenance.
-- The current 2024 records do not structure a granted spell's casting-ability
-  choice, and the engine does not resolve or preserve one. Consumers must not
-  infer a chosen ability from the grant result.
+- Fixed spell grants and filtered `choose` grants are supported for feats,
+  species, and lineages. Filters support exact or maximum spell level and a
+  union of class-list, school, and explicit-id sources.
+- A feat's `spellList` expands each caster's selectable pool.
+  `prepareSpellListOf` can make the lists of owned feats in a named category
+  always prepared.
+- Granted spells carry fixed or selected casting abilities. Unresolved
+  selections appear in `castingAbilityChoices`; chosen values are stored in
+  `grantCastingAbilities` and copied into grant provenance.
 
 ## Spellcasting
 
@@ -117,6 +120,12 @@ inputs rather than display-only metadata.
 - Granted spells preserve their source and distinguish always-prepared and
   free-use semantics. Choice grants use the same stable choice machinery as
   other builder decisions.
+- Class-specific attunement-limit schedules override the ruleset baseline at
+  the relevant class level. Resource recharge entries may similarly use
+  `minLevel`; species may grant proficiency-bonus-sized resource pools.
+- A feat may grant a separately tracked, restricted spell slot with a bounded
+  level rule and structured Short/Long Rest recharge. It never merges into the
+  ordinary multiclass slot table.
 - Eldritch Knight and Arcane Trickster have third-caster descriptors but no
   shipped subclass progression rows, so the provider currently yields no
   prepared-spell or cantrip limit for them. This is a known provider defect.

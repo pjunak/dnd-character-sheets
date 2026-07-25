@@ -16,6 +16,14 @@ export function makeSpellbookPanel(ctx) {
   const { section, card, subLabel, spellChip, spellInfo, spellLegend, numField, entityRef } = ui;
 
   function lvlLabel(level) { return level === 0 ? t('spellbook.cantrip') : level == null ? '' : t('spellbook.lvlN', { n: level }); }
+  function classSpellPool(engine, caster) {
+    const byId = new Map((engine.listSpells({ class: caster.classId }) || []).map((spell) => [spell.id, spell]));
+    for (const id of caster.expandedSpellIds || []) {
+      const spell = engine.getItem('spell', id);
+      if (spell) byId.set(id, spell);
+    }
+    return [...byId.values()];
+  }
 
   function panelSpellbook(c, s, edit, comp, engine) {
     const sc = comp && comp.spellcasting;
@@ -27,6 +35,8 @@ export function makeSpellbookPanel(ctx) {
     for (const p of (sc.perClass || [])) blocks.push(classSpellSection(c, s, p, comp, engine, edit, alwaysSet));
     const pending = sc.pendingChoices || [];
     if (pending.length) blocks.push(grantChoicesSection(c, s, pending, engine, edit));
+    const castingChoices = sc.castingAbilityChoices || [];
+    if (castingChoices.length) blocks.push(castingAbilityChoicesSection(c, castingChoices, edit));
     if (granted.length) blocks.push(grantedSection(granted, engine));
     blocks.push(extraSection(c, s, edit, granted, comp));
 
@@ -71,7 +81,7 @@ export function makeSpellbookPanel(ctx) {
   function classSpellSection(c, s, p, comp, engine, edit, alwaysSet) {
     const cid = p.classId;
     const clsName = (engine.getItem('class', cid) || {}).name || titleize(cid);
-    const pool = engine.listSpells ? (engine.listSpells({ class: cid }) || []) : [];
+    const pool = engine.listSpells ? classSpellPool(engine, p) : [];
     // Per-class cap: the highest spell level THIS class can prepare — a multiclass
     // low-level caster can't prepare high-level spells off the combined slot pool.
     const maxLvl = num(p.maxSpellLevel, (comp.spellcasting.slots || []).length);
@@ -204,23 +214,43 @@ export function makeSpellbookPanel(ctx) {
       }).join('');
       let adder = '';
       if (edit && picked.length < pc.choose) {
-        const pool = (engine.listSpells ? (engine.listSpells({ level: pc.spellLevel }) || []) : []).filter((sp) => {
-          if (num(sp.level) !== num(pc.spellLevel)) return false;   // re-assert the level filter ourselves
+        const pool = (engine.listSpells ? (engine.listSpells() || []) : []).filter((sp) => {
+          if (pc.spellLevel != null && num(sp.level) !== num(pc.spellLevel)) return false;
+          if (pc.maxSpellLevel != null && num(sp.level) > num(pc.maxSpellLevel)) return false;
           if (picked.includes(sp.id)) return false;
-          if (pc.from.class && pc.from.class.length) return (sp.classes || []).some((cl) => pc.from.class.includes(cl));
-          if (pc.from.school && pc.from.school.length) return pc.from.school.map((x) => String(x).toLowerCase()).includes(String(sp.school || '').toLowerCase());
-          return true;
+          const filters = [];
+          if (pc.from.class && pc.from.class.length) filters.push((sp.classes || []).some((cl) => pc.from.class.includes(cl)));
+          if (pc.from.school && pc.from.school.length) filters.push(pc.from.school.map((x) => String(x).toLowerCase()).includes(String(sp.school || '').toLowerCase()));
+          if (pc.from.ids && pc.from.ids.length) filters.push(pc.from.ids.includes(sp.id));
+          return !filters.length || filters.some(Boolean);
         });
         adder = pool.length
           ? `<select class="edit-input" style="max-width:13rem"${dataOn('change', host.action('grantPick'), c.id, pc.key, '$value')}><option value="">${esc(t('builder.choose'))}</option>${pool.map((sp) => `<option value="${esc(sp.id)}">${esc(sp.name)}</option>`).join('')}</select>`
           : `<span style="color:var(--text-muted);font-size:var(--text-xs)">${esc(t('builder.contentPending'))}</span>`;
       }
       const fromLabel = (pc.from.class || pc.from.school || []).map(titleize).join('/');
-      const what = (pc.spellLevel === 0 ? t('spellbook.cantrip') : t('spellbook.lvlN', { n: pc.spellLevel })) + (fromLabel ? ' · ' + fromLabel : '');
+      const levelLabel = pc.spellLevel === 0
+        ? t('spellbook.cantrip')
+        : pc.spellLevel != null
+          ? t('spellbook.lvlN', { n: pc.spellLevel })
+          : t('spellbook.upToLvlN', { n: pc.maxSpellLevel });
+      const what = levelLabel + (fromLabel ? ' · ' + fromLabel : '');
       const label = t('spell.chooseGrant', { src: titleize((pc.source && pc.source.id) || ''), n: pc.choose, what });
       return `<div>${subLabel(label)}<div style="display:flex;flex-wrap:wrap;gap:var(--space-1);align-items:center">${chips}${adder}</div></div>`;
     }).join('');
     return card(`${subLabel(t('spell.grantChoicesHdr'))}<div style="display:flex;flex-direction:column;gap:var(--space-3)">${blocks}</div>`);
+  }
+
+  function castingAbilityChoicesSection(c, choices, edit) {
+    const rows = choices.map((choice) => {
+      const label = t('spell.castingAbilityFor', { src: titleize((choice.source && choice.source.id) || '') });
+      if (!edit) {
+        return `<div>${subLabel(label)}<strong>${esc(choice.selected ? t('ability.' + choice.selected) : t('builder.unresolved'))}</strong></div>`;
+      }
+      const options = choice.options.map((ability) => `<option value="${esc(ability)}"${choice.selected === ability ? ' selected' : ''}>${esc(t('ability.' + ability))}</option>`).join('');
+      return `<label style="display:flex;flex-direction:column;gap:var(--space-1)">${subLabel(label)}<select class="edit-input" style="max-width:13rem"${dataOn('change', host.action('grantCastingAbilitySet'), c.id, choice.key, '$value')}><option value="">${esc(t('builder.choose'))}</option>${options}</select></label>`;
+    }).join('');
+    return card(`${subLabel(t('spell.castingAbilityChoicesHdr'))}<div style="display:flex;flex-direction:column;gap:var(--space-3)">${rows}</div>`);
   }
 
   // Extra (manual) + copied + other-source spells, separate from the granted set
@@ -285,7 +315,7 @@ export function makeSpellbookPanel(ctx) {
     const clsName = (engine.getItem('class', classId) || {}).name || titleize(classId);
     const prepared = (s.preparedSpells && s.preparedSpells[classId]) || [];
     const maxLvl = num(p.maxSpellLevel, 9);
-    const pool = engine.listSpells ? (engine.listSpells({ class: classId }) || []) : [];
+    const pool = engine.listSpells ? classSpellPool(engine, p) : [];
     // A spellbook caster can only swap IN a spell already learned into the book (SP-5).
     const bookMode = p.prepares === 'spellbook';
     const bookSet = bookMode ? new Set((s.spellbook && s.spellbook[classId]) || []) : null;
@@ -329,7 +359,7 @@ export function makeSpellbookPanel(ctx) {
       title = t('spell.copyHdr', { cls: clsNameOf(bid) });
       const book = new Set((s.spellbook && s.spellbook[bid]) || []);
       const maxLvl = num(bookP.maxSpellLevel, 9);
-      const pool = engine.listSpells ? (engine.listSpells({ class: bid }) || []) : [];
+      const pool = engine.listSpells ? classSpellPool(engine, bookP) : [];
       const copyable = pool.filter((sp) => num(sp.level) >= 1 && num(sp.level) <= Math.max(1, maxLvl) && !book.has(sp.id));
       // The spell pick persists across the change→re-render cycle (spellCopyPick
       // stores it), so the scroll list can be filtered to scrolls of THAT spell.
