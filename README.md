@@ -127,3 +127,8 @@ node --test tests/smoke.mjs tests/rules.mjs tests/ui-state.mjs tests/equipment-m
 See [`rules/README.md`](rules/README.md) for the provided API and
 [`docs/RULES_EDGE_CASES.md`](docs/RULES_EDGE_CASES.md) for the canonical
 runtime semantics. [`AGENTS.md`](AGENTS.md) contains the repository contract.
+
+## License
+
+The original software and documentation in this repository are licensed under
+the [MIT License](LICENSE).
