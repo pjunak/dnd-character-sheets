@@ -28,8 +28,10 @@ above it). The D&D tabs follow:
 - **Spellbook** — prepared/cantrip slots, granted & choose-grant sections; a Wizard prepares from a **learned
   spellbook** (copy from a scroll for gp) and any class can **add a spell from another source** (feat/item/homebrew,
   slot-castable for casters); level-up spell **swaps** are recorded with history.
-- **Builder** — guided per-level progression; internally **tabbed** (a **Character** tab + **one tab per class**), each
-  class tab a per-level spine whose rows **expand in place** to resolve that level's choices; level via **+/-**.
+- **Builder** — a responsive **build-progress rail** links every unresolved
+  foundation, class, subclass, feat, proficiency, and granted-spell decision
+  to its editor. A **Character** tab owns creation choices; each class gets a
+  per-level progression spine whose rows expand in place.
   Only with the rules engine and only for editors.
 - **Settings** — per-sheet tools, rightmost: the vitals-layout switch (compact /
   classic), plus **🖨 Print / PDF** (a self-contained printable sheet), **⬇ Export**
@@ -66,6 +68,8 @@ and collects domain disposers. Controller actions live in focused modules:
 - `actions.inventory.js` — inventory/equipment and the add-item wizard.
 - `actions.resources.js` — resources and rests.
 - `actions.builder.js` — guided Builder decisions.
+- `builder-progress.js` — pure completion model and navigation targets for the
+  Builder progress rail.
 - `actions.transfer.js` — print, JSON export, and import.
 - `ui-state.js` — isolated per-character session state, with persistence limited
   to tab and layout preferences.
@@ -121,7 +125,7 @@ node scripts/dev-install-addon.cjs ../dnd-character-sheets   # from the ttrpg-co
 Run the complete test suite (assume the host repo is a sibling directory):
 
 ```sh
-node --test tests/smoke.mjs tests/rules.mjs tests/ui-state.mjs tests/equipment-model.mjs tests/sheet-transfer.mjs tests/provider-state.mjs
+node --test tests/*.mjs
 ```
 
 See [`rules/README.md`](rules/README.md) for the provided API and

@@ -146,6 +146,38 @@ export function makeUI(ctx) {
       .addon-dnd-sheets .dse-aiw { grid-template-columns:1fr }
       .addon-dnd-sheets .dse-aiw-cart { border-left:0; padding-left:0; border-top:1px solid var(--border-subtle); padding-top:var(--space-2) }
     }
+    .addon-dnd-sheets .dse-builder { display:flex; flex-direction:column; gap:var(--space-3) }
+    .addon-dnd-sheets .dse-builder-summary { display:flex; flex-wrap:wrap; gap:var(--space-2) }
+    .addon-dnd-sheets .dse-builder-shell { display:grid; grid-template-columns:minmax(15rem,19rem) minmax(0,1fr); gap:var(--space-4); align-items:start }
+    .addon-dnd-sheets .dse-builder-main { min-width:0; display:flex; flex-direction:column; gap:var(--space-4) }
+    .addon-dnd-sheets .dse-build-rail { position:sticky; top:var(--space-3); overflow:hidden; background:linear-gradient(155deg,var(--bg-surface),var(--bg-raised)); border:1px solid rgba(var(--accent-gold-rgb),.32); border-radius:var(--radius-lg); box-shadow:var(--shadow-sm) }
+    .addon-dnd-sheets .dse-build-progress-head { padding:var(--space-4); border-bottom:1px solid var(--border-subtle) }
+    .addon-dnd-sheets .dse-build-progress-head p { margin:0 0 var(--space-1); color:var(--accent-gold); font-size:var(--text-xs); font-weight:700; letter-spacing:.1em; text-transform:uppercase }
+    .addon-dnd-sheets .dse-build-progress-head h2 { margin:0 0 var(--space-3); color:var(--text-parchment); font-size:var(--text-xl); line-height:1.15 }
+    .addon-dnd-sheets .dse-build-progress-head > strong { display:block; margin-top:var(--space-2); color:var(--text-light); font-size:var(--text-sm) }
+    .addon-dnd-sheets .dse-build-meter { height:.45rem; overflow:hidden; background:var(--bg-base); border:1px solid var(--border-subtle); border-radius:var(--radius-pill) }
+    .addon-dnd-sheets .dse-build-meter span { display:block; height:100%; background:linear-gradient(90deg,var(--accent-gold),var(--text-parchment)); transition:width var(--dur-base) var(--ease-out) }
+    .addon-dnd-sheets .dse-build-step { padding:var(--space-3) var(--space-4); border-bottom:1px solid var(--border-subtle) }
+    .addon-dnd-sheets .dse-build-step:last-child { border-bottom:0 }
+    .addon-dnd-sheets .dse-build-step-head { display:grid; grid-template-columns:auto minmax(0,1fr) auto; align-items:center; gap:var(--space-2); color:var(--text-muted); font-size:var(--text-xs) }
+    .addon-dnd-sheets .dse-build-step-head strong { color:var(--text-light); font-size:var(--text-sm) }
+    .addon-dnd-sheets .dse-build-step.is-complete .dse-build-step-head > span:first-child { color:var(--color-success) }
+    .addon-dnd-sheets .dse-build-issues { display:flex; flex-direction:column; gap:var(--space-1); margin-top:var(--space-2) }
+    .addon-dnd-sheets .dse-build-issues button { min-height:44px; display:flex; align-items:center; justify-content:space-between; gap:var(--space-2); width:100%; padding:var(--space-2); color:var(--text-light); background:rgba(var(--accent-gold-rgb),.06); border:1px solid transparent; border-radius:var(--radius-sm); font:inherit; font-size:var(--text-sm); text-align:left; cursor:pointer }
+    .addon-dnd-sheets .dse-build-issues button:hover { color:var(--text-parchment); background:rgba(var(--accent-gold-rgb),.12); border-color:rgba(var(--accent-gold-rgb),.28) }
+    @media (max-width:1100px){
+      .addon-dnd-sheets .dse-builder-shell { grid-template-columns:1fr }
+      .addon-dnd-sheets .dse-build-rail { position:static }
+      .addon-dnd-sheets .dse-build-step { display:inline-block; vertical-align:top; width:33.333%; min-width:15rem; border-bottom:0; border-right:1px solid var(--border-subtle) }
+      .addon-dnd-sheets .dse-build-step:last-child { border-right:0 }
+    }
+    @media (max-width:768px){
+      .addon-dnd-sheets .dse-build-step { display:block; width:auto; min-width:0; border-right:0; border-bottom:1px solid var(--border-subtle) }
+      .addon-dnd-sheets .dse-build-step:last-child { border-bottom:0 }
+    }
+    @media (prefers-reduced-motion:reduce){
+      .addon-dnd-sheets .dse-build-meter span { transition:none }
+    }
     /* Progression spine row — the full-row overlay toggle. A hover/focus tint makes
        the whole-row click target discoverable; focus-visible draws a keyboard ring. */
     .addon-dnd-sheets .dse-spine-toggle { border-radius:var(--radius-sm); transition:background var(--dur-fast) var(--ease-out); }

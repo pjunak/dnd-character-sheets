@@ -31,6 +31,7 @@ actions.shared.js       action-map registration helper
 model.js                stored-blob migration, view model, builder mutations
 provider-state.js       provider detection and per-character materialization
 ui-state.js             session UI state and persisted view preferences
+builder-progress.js     pure Builder completion and navigation model
 equipment-model.js      pure inventory/equipment resolution
 sheet-transfer.js       bounded, versioned JSON import/export
 panel.*.js              rendering only
@@ -49,6 +50,9 @@ renders Combat. Preserve this naming unless doing a deliberate, tested rename.
 - `entry.js` composes modules. Register each action in exactly one domain
   controller and pass dependencies explicitly.
 - Panels render. They do not mutate stored blobs or implement rules math.
+- `builder-progress.js` is the single completion model for the progress rail.
+  Keep it pure and derive navigation targets from normalized choice
+  descriptors rather than duplicating rulebook-specific checks in the panel.
 - `model.js` owns migrations and mutations. Builder changes flow through
   `builderMutate()` and `materializeInto()` so computed state is copied into
   flat fallback fields.
@@ -94,7 +98,7 @@ renders Combat. Preserve this naming unless doing a deliberate, tested rename.
 Run from this repository in PowerShell:
 
 ```text
-node --test tests/smoke.mjs tests/rules.mjs tests/ui-state.mjs tests/equipment-model.mjs tests/sheet-transfer.mjs tests/provider-state.mjs
+node --test tests/*.mjs
 ```
 
 Use relative test paths on Windows. From the host repository, install the

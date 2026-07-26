@@ -1,3 +1,5 @@
+import { createBuilderProgress, descriptorCompletion } from './builder-progress.js';
+
 // ═══════════════════════════════════════════════════════════════
 //  panel.builder.js — the Builder (guided progression + edit surface, engine mode).
 //
@@ -23,6 +25,20 @@ export function makeBuilderPanel(ctx) {
     const base = model.baseStats;
     const totalLevel = classes.reduce((n, cl) => n + Math.max(1, num(cl.level, 1)), 0);
     const d = (comp && comp.derived) || {};
+    const classChoices = collectChoices(classes, engine);
+    const creationChoices = collectCreationChoices(s, engine);
+    const pointBuyRemaining = s.manualScores
+      ? 0
+      : POINT_BUY.budget - pointsSpent(base);
+    const progress = createBuilderProgress({
+      sheet: s,
+      classes,
+      classChoices,
+      creationChoices,
+      engine,
+      computed: comp,
+      pointBuyRemaining,
+    });
 
     const summary = [
       miniStat(t('stat.hp'), num(d.maxHp, 0)),
@@ -45,12 +61,81 @@ export function makeBuilderPanel(ctx) {
       : builderClassTab(c, s, active, classes, engine, comp, ro);
 
     return `
-      <div style="display:flex;flex-direction:column;gap:var(--space-5)">
+      <div class="dse-builder">
         ${warningsBlock(warnings)}
-        <div style="display:flex;flex-wrap:wrap;gap:var(--space-2)">${summary}</div>
-        ${builderTabStrip(c, classTabs, active, engine)}
-        ${body}
+        <div class="dse-builder-summary">${summary}</div>
+        <div class="dse-builder-shell">
+          ${builderProgressRail(c, progress, engine)}
+          <div class="dse-builder-main">
+            ${builderTabStrip(c, classTabs, active, engine)}
+            ${body}
+          </div>
+        </div>
       </div>`;
+  }
+
+  function progressIssueLabel(value, engine) {
+    if (value.code === 'choice') {
+      const choice = value.choice;
+      if (choice.kind === 'asiMode') {
+        const record = engine.getItem('class', choice.classId);
+        return t('builder.asiLevel', {
+          cls: record?.name || choice.classId,
+          lvl: choice.level,
+        });
+      }
+      return choice.prompt || t(`builder.progress.choice.${choice.kind}`);
+    }
+    if (value.code === 'spellChoice') {
+      return t('builder.progress.spellChoice', {
+        source: titleize(value.spellChoice?.source?.id || ''),
+      });
+    }
+    if (value.code === 'castingAbility') {
+      return t('builder.progress.castingAbility', {
+        source: titleize(value.castingChoice?.source?.id || ''),
+      });
+    }
+    return t(`builder.progress.issue.${value.code}`);
+  }
+
+  function builderProgressRail(c, progress, engine) {
+    const percent = progress.total
+      ? Math.round(progress.complete / progress.total * 100)
+      : 100;
+    const status = progress.ready
+      ? t('builder.progress.ready')
+      : plural('builder.progress.remaining', progress.issues.length);
+    const sections = progress.sections.map(value => {
+      const complete = value.issues.length === 0;
+      return `<section class="dse-build-step${complete ? ' is-complete' : ''}">
+        <div class="dse-build-step-head">
+          <span aria-hidden="true">${complete ? '✓' : '◇'}</span>
+          <strong>${esc(t(`builder.progress.section.${value.id}`))}</strong>
+          <span>${esc(`${value.complete}/${value.total}`)}</span>
+        </div>
+        ${value.issues.length ? `<div class="dse-build-issues">${value.issues.map(entry => (
+          `<button type="button"${dataAction(
+            host.action('builderNavigate'),
+            c.id,
+            entry.target.tab,
+            entry.target.classId || '',
+            entry.target.level || 0,
+          )}>${esc(progressIssueLabel(entry, engine))}<span aria-hidden="true">→</span></button>`
+        )).join('')}</div>` : ''}
+      </section>`;
+    }).join('');
+    return `<aside class="dse-build-rail" aria-label="${esc(t('builder.progress.title'))}">
+      <div class="dse-build-progress-head">
+        <p>${esc(t('builder.progress.eyebrow'))}</p>
+        <h2>${esc(t('builder.progress.title'))}</h2>
+        <div class="dse-build-meter" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percent}" aria-label="${esc(status)}">
+          <span style="width:${percent}%"></span>
+        </div>
+        <strong>${esc(status)}</strong>
+      </div>
+      ${sections}
+    </aside>`;
   }
 
   // Sub-tab strip: Character + one tab per (set) class. Switching is a plain action
@@ -176,14 +261,14 @@ export function makeBuilderPanel(ctx) {
   // resolved (drives the "needs choices" flag). asiMode: mode + its ability/feat pick.
   function choiceSummary(ch, s, engine) {
     const fc = s.featureChoices || {};
+    const completion = descriptorCompletion(s, ch, engine);
     if (ch.kind === 'asiMode') {
       const mode = fc[ch.id];
-      if (mode === 'feat') { const f = fc[ch.id + ':feat']; return { text: f ? ((engine.getItem('feat', f) || {}).name || titleize(f)) : t('builder.featOption'), done: !!f }; }
+      if (mode === 'feat') { const f = fc[ch.id + ':feat']; return { text: f ? ((engine.getItem('feat', f) || {}).name || titleize(f)) : t('builder.featOption'), done: completion.done }; }
       if (mode === 'asi') {
         const assign = assignOf(s, ch.id + ':ability');
         const parts = ABILITIES.filter((a) => num(assign[a], 0) > 0).map((a) => '+' + num(assign[a]) + ' ' + t('ability.' + a));
-        const total = ABILITIES.reduce((n, a) => n + num(assign[a], 0), 0);
-        return { text: parts.length ? parts.join(', ') : t('builder.asiOption'), done: total >= 2 };
+        return { text: parts.length ? parts.join(', ') : t('builder.asiOption'), done: completion.done };
       }
       return { text: null, done: false };
     }
@@ -193,7 +278,7 @@ export function makeBuilderPanel(ctx) {
       const v = fc[count > 1 ? ch.id + '#' + i : ch.id] || (i === 0 ? ch.default : '');
       if (v && !vals.includes(v)) vals.push(v);
     }
-    return { text: vals.length ? vals.map((v) => labelValue(ch, v, engine)).join(', ') : null, done: vals.length >= count };
+    return { text: vals.length ? vals.map((v) => labelValue(ch, v, engine)).join(', ') : null, done: completion.done };
   }
 
   // One spine row: the level label (with a ▸/▾ caret when the level has choices), the
@@ -433,15 +518,22 @@ export function makeBuilderPanel(ctx) {
       label = ch.prompt || t('builder.proficiencyChoice');
     } else if (['languages', 'savingThrows', 'weapons', 'armor', 'resistances', 'immunities'].includes(ch.kind)) {
       options = (ch.from || []).map((value) => ({ value, label: labelValue(ch, value, engine) }));
-    } else if (Array.isArray(ch.from)) {
-      // Values may be feature ids (option pools like Metamagic/maneuvers) — label
-      // them by the feature's name rather than a titleized id when resolvable.
-      options = ch.from.map((v) => { const fr = engine.getFeature && engine.getFeature(v); return { value: v, label: fr ? fr.name : titleize(v) }; });
     } else if (ch.kind === 'weaponMastery') {
-      options = engine.listWeapons().map((w) => ({ value: w.id, label: w.name }));
+      const weapons = Array.isArray(ch.from)
+        ? ch.from.map(id => engine.getItem('weapon', id)).filter(Boolean)
+        : engine.listWeapons();
+      options = weapons.map((w) => ({ value: w.id, label: w.name }));
       label = t('builder.weaponMastery');
     } else if (ch.kind === 'feat') {
-      options = engine.listFeats(ch.category ? { category: ch.category } : undefined).map((f) => ({ value: f.id, label: f.name }));
+      const feats = Array.isArray(ch.from)
+        ? ch.from.map(id => engine.getItem('feat', id)).filter(Boolean)
+        : engine.listFeats(ch.category ? { category: ch.category } : undefined);
+      options = feats.map((f) => ({ value: f.id, label: f.name }));
+    } else if (Array.isArray(ch.from)) {
+      options = ch.from.map((v) => {
+        const feature = engine.getFeature && engine.getFeature(v);
+        return { value: v, label: feature ? feature.name : titleize(v) };
+      });
     }
     if (!options || !options.length) {
       return choiceBlock(label, `<span style="color:var(--text-muted);font-size:var(--text-xs)">${esc(t('builder.contentPending'))}</span>`);
@@ -465,7 +557,14 @@ export function makeBuilderPanel(ctx) {
       const opts = options.filter((o) => o.value === mine || !taken.has(o.value));
       pickers.push(`<div style="min-width:9rem">${selectBox(mine, opts, dataOn('change', host.action('builderChoose'), c.id, key, '$value'), t('builder.choose'), ro)}</div>`);
     }
-    return choiceBlock(count > 1 ? label + ' (' + count + ')' : label, `<div style="display:flex;flex-wrap:wrap;gap:var(--space-1)">${pickers.join('')}</div>`);
+    const changeHint = ch.changeOn
+      ? t(`builder.changeOn.${ch.changeOn}`)
+      : undefined;
+    return choiceBlock(
+      count > 1 ? label + ' (' + count + ')' : label,
+      `<div style="display:flex;flex-wrap:wrap;gap:var(--space-1)">${pickers.join('')}</div>`,
+      changeHint,
+    );
   }
 
   // ASI-vs-Feat at an ability-score-improvement level (descriptor kind asiMode).

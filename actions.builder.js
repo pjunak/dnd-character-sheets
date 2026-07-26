@@ -1,4 +1,4 @@
-export const BUILDER_ACTIONS = Object.freeze(['builderField','builderAbility','builderToggleManual','builderAbilitySet','builderClassSet','builderLevelSet','builderSubclassSet','builderAddClass','builderRemoveClass','builderTab','builderTabKey','builderToggleLevel','builderExtraFeatAdd','builderExtraFeatRemove','builderAsiSet','builderChoose']);
+export const BUILDER_ACTIONS = Object.freeze(['builderField','builderAbility','builderToggleManual','builderAbilitySet','builderClassSet','builderLevelSet','builderSubclassSet','builderAddClass','builderRemoveClass','builderTab','builderTabKey','builderNavigate','builderToggleLevel','builderExtraFeatAdd','builderExtraFeatRemove','builderAsiSet','builderChoose']);
 
 export function registerBuilderActions(deps) {
   const { host, plural, num, uid, ABILITIES, POINT_BUY, pointCost, pointsSpent, featAsiFrom, featAbilityCap, uiState, sheetOf, getRules } = deps;
@@ -97,6 +97,20 @@ export function registerBuilderActions(deps) {
   // Builder sub-tab switch (Character | <classId>) — in-memory, clears any open level row.
   register('builderTab', (cid, tab) => {
     uiState.update(cid, 'builder', state => ({ ...state, tab: String(tab), open: null }), {});
+    host.ui.rerender();
+  });
+  register('builderNavigate', (cid, tab, classId, level) => {
+    if (tab === 'spellbook') {
+      uiState.setTab(cid, 'spellbook');
+    } else {
+      uiState.setTab(cid, 'builder');
+      const selectedClass = String(classId || '');
+      const selectedLevel = Math.max(0, num(level));
+      uiState.set(cid, 'builder', {
+        tab: selectedClass || 'character',
+        open: selectedClass && selectedLevel ? `${selectedClass}:${selectedLevel}` : null,
+      });
+    }
     host.ui.rerender();
   });
   // Roving-tabindex keyboard nav across the Builder sub-tabs (Character + one per

@@ -90,13 +90,13 @@ export function makeEngine(ctx) {
       const starting = rec.startingProficiencies || {};
       const reduced = classIndex > 0 ? rec.multiclassProficiencies : null;
       const sk = (reduced && reduced.skills) || starting.skills;
-      if (sk && sk.choose) out.push({ id: 'skills:' + cl.classId, kind: 'skills', count: num(sk.choose, 1), from: sk.from || [], source: { type: 'class', id: cl.classId, level: 1 } });
+      if (sk && sk.choose) out.push({ id: 'skills:' + cl.classId, kind: 'skills', count: num(sk.choose, 1), from: sk.from || [], classId: cl.classId, source: { type: 'class', id: cl.classId, level: 1 } });
       for (const ch of (rec.grants && rec.grants.choices) || []) {
         const srcLevel = num(String(ch.source || '').split(':')[1], 1);
         if (srcLevel > clvl) continue;
         const kind = choiceKind(ch, ch.from);
         if (kind === 'weaponMastery' && noMastery) continue;
-        out.push({ id: ch.id, kind, count: num(ch.count, 1), from: ch.from, category: ch.category, prompt: ch.prompt, default: ch.default, changeOn: ch.changeOn, source: { type: 'class', id: cl.classId, level: srcLevel } });
+        out.push({ id: ch.id, kind, count: num(ch.count, 1), from: ch.from, category: ch.category, prompt: ch.prompt, default: ch.default, changeOn: ch.changeOn, classId: cl.classId, source: { type: 'class', id: cl.classId, level: srcLevel } });
       }
       const subclass = cl.subclass ? engine.getItem('subclass', cl.subclass) : null;
       for (const ch of (subclass && subclass.grants && subclass.grants.choices) || []) {
@@ -113,6 +113,7 @@ export function makeEngine(ctx) {
           prompt: ch.prompt,
           default: ch.default,
           changeOn: ch.changeOn,
+          classId: cl.classId,
           source: { type: 'subclass', id: cl.subclass, level: srcLevel },
         });
       }
@@ -142,7 +143,7 @@ export function makeEngine(ctx) {
               let best = -1;
               for (const k of Object.keys(ch.countByLevel)) { const lv = num(k); if (lv <= clvl && lv > best) { best = lv; count = num(ch.countByLevel[k], count); } }
             }
-            out.push({ id: ch.id, kind, count, from, category: ch.category, prompt: ch.prompt, default: ch.default, changeOn: ch.changeOn, source: { type: 'feature', id: fslim.id, level: srcLevel } });
+            out.push({ id: ch.id, kind, count, from, category: ch.category, prompt: ch.prompt, default: ch.default, changeOn: ch.changeOn, classId: cl.classId, source: { type: 'feature', id: fslim.id, level: srcLevel } });
           }
         }
       }

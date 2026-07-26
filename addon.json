@@ -1,7 +1,7 @@
 {
   "id": "dnd-sheets",
   "name": "D&D Character Sheets",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "apiVersion": 2,
   "hostVersion": ">=1.0.0",
   "capabilities": {
@@ -28,6 +28,7 @@
     "client": [
       "tests/smoke.mjs",
       "tests/rules.mjs",
+      "tests/builder-progress.mjs",
       "tests/sheet-transfer.mjs",
       "tests/provider-state.mjs"
     ]
