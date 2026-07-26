@@ -9,6 +9,7 @@ const MATERIALIZED_FIELDS = Object.freeze([
   'initiative',
   'speed',
   'profBonus',
+  'manualSaveProf',
   'saveProf',
   'skillProf',
   'skillExpertise',

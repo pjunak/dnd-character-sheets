@@ -62,7 +62,7 @@ function renderBody(rec, char, lore) {
 
 const META = {
   id: 'dnd-sheets',
-  version: '0.7.0',
+  version: '0.9.0',
   apiVersion: 2,
   hostVersion: '>=1.0.0',
   capabilities: { required: ['lifecycle.dispose', 'i18n.catalogs'] },

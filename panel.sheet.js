@@ -226,6 +226,40 @@ export function makeSheetPanel(ctx) {
     return section(t('sheet.features'), groups, { icon: '🎯' });
   }
 
+  function traitsSummary(c, s, comp, editable) {
+    const snapshot = s.traitSnapshot || {};
+    const source = comp || snapshot;
+    const proficiencies = comp && comp.proficiencies ? comp.proficiencies : snapshot;
+    const groups = [
+      [t('traits.languages'), source.languages || []],
+      [t('traits.senses'), Object.entries(source.senses || {}).map(([id, value]) => `${titleize(id)} ${value} ft.`)],
+      [t('traits.resistances'), source.resistances || []],
+      [t('traits.damageImmunities'), source.damageImmunities || []],
+      [t('traits.immunities'), source.conditionImmunities || []],
+      [t('traits.armor'), proficiencies.armor || []],
+      [t('traits.weapons'), proficiencies.weapons || []],
+      [t('traits.tools'), proficiencies.tools || []],
+    ].filter(([, values]) => values.length);
+    const activations = (comp && comp.activations) || [];
+    if (!groups.length && !activations.length) return '';
+    const rows = groups.map(([label, values]) =>
+      `<div class="dse-trait-row">
+        <span class="dse-trait-label">${esc(label)}</span>
+        <span class="dse-trait-value">${esc(values.map(titleize).join(', '))}</span>
+      </div>`).join('');
+    const modes = activations.map((activation) => {
+      const state = !activation.available
+        ? t('traits.unavailable')
+        : activation.active ? t('traits.active') : t('traits.inactive');
+      const button = editable
+        ? `<button class="inline-create-btn"${activation.available ? '' : ' disabled'}${dataAction(host.action('featureToggle'), c.id, activation.key)}>${esc(state)}</button>`
+        : `<span class="dse-mode-state">${esc(state)}</span>`;
+      return `<div class="dse-mode-row">
+        <span class="dse-mode-name">${esc(activation.name)}</span>${button}</div>`;
+    }).join('');
+    return section(t('traits.title'), rows + modes, { icon: '🧭' });
+  }
+
   function panelSheet(c, s, edit, comp, engine) {
     const engineAttacks = attacksBlock(comp);   // '' when no comp.weapons
     const attacks = engineAttacks
@@ -239,6 +273,7 @@ export function makeSheetPanel(ctx) {
       ${attacks}
       ${combatSpells(c, s, comp, engine)}
       ${trackers(c, s, edit, comp, engine)}
+      ${traitsSummary(c, s, comp, edit)}
       ${featuresSummary(comp, engine)}
     </div>`;
 

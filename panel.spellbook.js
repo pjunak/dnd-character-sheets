@@ -17,7 +17,8 @@ export function makeSpellbookPanel(ctx) {
 
   function lvlLabel(level) { return level === 0 ? t('spellbook.cantrip') : level == null ? '' : t('spellbook.lvlN', { n: level }); }
   function classSpellPool(engine, caster) {
-    const byId = new Map((engine.listSpells({ class: caster.classId }) || []).map((spell) => [spell.id, spell]));
+    const classId = caster.spellListClassId || caster.classId;
+    const byId = new Map((engine.listSpells({ class: classId }) || []).map((spell) => [spell.id, spell]));
     for (const id of caster.expandedSpellIds || []) {
       const spell = engine.getItem('spell', id);
       if (spell) byId.set(id, spell);
@@ -207,13 +208,17 @@ export function makeSpellbookPanel(ctx) {
   // a filter" (Magic Initiate, Fey Touched's choose-1, High Elf's wizard cantrip).
   function grantChoicesSection(c, s, pending, engine, edit) {
     const blocks = pending.map((pc) => {
-      const picked = (s.grantChoices && s.grantChoices[pc.key]) || [];
+      const explicit = (s.grantChoices && s.grantChoices[pc.key]) || [];
+      const picked = explicit.length ? explicit : (pc.picked || []);
       const chips = picked.map((ref) => {
         const info = spellInfo(engine, ref);
-        return spellChip(info.name, lvlLabel(info.level), { link: { kind: 'spell', id: ref }, legend: spellLegend(engine, ref), removeAttr: edit ? dataAction(host.action('grantUnpick'), c.id, pc.key, ref) : null });
+        const removeAttr = edit && explicit.includes(ref)
+          ? dataAction(host.action('grantUnpick'), c.id, pc.key, ref)
+          : null;
+        return spellChip(info.name, lvlLabel(info.level), { link: { kind: 'spell', id: ref }, legend: spellLegend(engine, ref), removeAttr });
       }).join('');
       let adder = '';
-      if (edit && picked.length < pc.choose) {
+      if (edit && explicit.length < pc.choose) {
         const pool = (engine.listSpells ? (engine.listSpells() || []) : []).filter((sp) => {
           if (pc.spellLevel != null && num(sp.level) !== num(pc.spellLevel)) return false;
           if (pc.maxSpellLevel != null && num(sp.level) > num(pc.maxSpellLevel)) return false;
@@ -222,7 +227,12 @@ export function makeSpellbookPanel(ctx) {
           if (pc.from.class && pc.from.class.length) filters.push((sp.classes || []).some((cl) => pc.from.class.includes(cl)));
           if (pc.from.school && pc.from.school.length) filters.push(pc.from.school.map((x) => String(x).toLowerCase()).includes(String(sp.school || '').toLowerCase()));
           if (pc.from.ids && pc.from.ids.length) filters.push(pc.from.ids.includes(sp.id));
-          return !filters.length || filters.some(Boolean);
+          if (filters.length && !filters.some(Boolean)) return false;
+          if (pc.from.castingTime && pc.from.castingTime.length) {
+            const allowed = pc.from.castingTime.map((value) => String(value).toLowerCase());
+            if (!allowed.includes(String(sp.castingTime || '').toLowerCase())) return false;
+          }
+          return true;
         });
         adder = pool.length
           ? `<select class="edit-input" style="max-width:13rem"${dataOn('change', host.action('grantPick'), c.id, pc.key, '$value')}><option value="">${esc(t('builder.choose'))}</option>${pool.map((sp) => `<option value="${esc(sp.id)}">${esc(sp.name)}</option>`).join('')}</select>`

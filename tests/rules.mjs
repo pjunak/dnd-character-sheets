@@ -301,12 +301,27 @@ test('rules: supplement proficiency choices distinguish origin, multiclass, back
           skills: { choose: 1, from: ['arcana', 'history'] },
         },
         grants: {
-          choices: [{
-            id: 'artificer-tool',
-            type: 'toolProficiency',
-            count: 1,
-            from: ['alchemists-supplies', 'smiths-tools'],
-          }],
+          choices: [
+            {
+              id: 'artificer-tool',
+              type: 'toolProficiency',
+              count: 1,
+              from: ['alchemists-supplies', 'smiths-tools'],
+            },
+            {
+              id: 'artificer-default-save',
+              type: 'savingThrowProficiency',
+              count: 1,
+              from: ['INT', 'WIS', 'CHA'],
+              default: 'INT',
+            },
+            {
+              id: 'artificer-skilled-expert',
+              type: 'skillExpertise',
+              count: 1,
+              from: ['history'],
+            },
+          ],
         },
         progression: [],
       },
@@ -352,6 +367,7 @@ test('rules: supplement proficiency choices distinguish origin, multiclass, back
   const classChoices = model.collectChoices(classes, fake);
   assert.equal(classChoices.find((choice) => choice.id === 'skills:artificer').count, 1);
   assert.equal(classChoices.find((choice) => choice.id === 'artificer-tool').kind, 'tools');
+  assert.equal(classChoices.find((choice) => choice.id === 'artificer-default-save').default, 'INT');
 
   const sheet = {
     classes,
@@ -360,6 +376,7 @@ test('rules: supplement proficiency choices distinguish origin, multiclass, back
     featureChoices: {
       'skills:artificer': 'arcana',
       'artificer-tool': 'alchemists-supplies',
+      'artificer-skilled-expert': 'history',
       'background:choice-bg:tool': 'gaming-set',
       'species:warforged:design-skill': 'perception',
       'species:warforged:design-tool': 'smiths-tools',
@@ -367,8 +384,10 @@ test('rules: supplement proficiency choices distinguish origin, multiclass, back
   };
   assert.equal(model.collectCreationChoices(sheet, fake).length, 3);
   const resolved = model.resolveChoices(sheet, classes, fake);
-  assert.deepEqual(resolved.skillProficiencies.sort(), ['arcana', 'perception']);
+  assert.deepEqual(resolved.skillProficiencies.sort(), ['arcana', 'history', 'perception']);
+  assert.equal(resolved.skillExpertise.history, true);
   assert.deepEqual(resolved.toolProficiencies.sort(), ['alchemists-supplies', 'gaming-set', 'smiths-tools']);
+  assert.deepEqual(resolved.saveProficiencies, ['INT']);
   const hydrated = Engine.hydrate({
     ...sheet,
     ...resolved,
@@ -486,6 +505,226 @@ test('rules: supplement mechanics hydrate without sourcebook-specific branches',
     sheet.resources.find((resource) => resource.key === 'charge-fireball').recharge,
     [{ on: 'short', amount: 'full' }, { on: 'long', amount: 'full' }]
   );
+});
+
+test('rules: optional-book grants, choices, resources, and active self-effects are source-generic', () => {
+  const fake = makeFake();
+  const baseGet = fake.getItem;
+  const supplement = {
+    id: 'test-path',
+    name: 'Test Path',
+    classId: 'sorcerer',
+    acFormulas: [{ id: 'test-defense', name: 'Test Defense', base: 10, addAbilities: ['DEX', 'CHA'] }],
+    grants: {
+      languages: ['draconic'],
+      savingThrows: ['WIS'],
+      weapons: ['longsword'],
+      resistances: ['cold'],
+      conditionImmunities: ['frightened'],
+      resources: [{ key: 'test-pool', name: 'Test Pool', proficiencyBonus: true, recharge: 'long' }],
+      choices: [{ id: 'test-language', type: 'language', count: 1, from: ['elvish', 'giant'] }],
+    },
+    activations: [{
+      id: 'focus',
+      name: 'Focus',
+      restrictions: { noArmor: true },
+      modifiers: [
+        { target: 'armorClass', addAbility: 'CHA' },
+        { target: 'speed', add: 10 },
+        { target: 'weaponAbility', ability: 'CHA' },
+        { target: 'conditionImmunity', value: 'charmed' },
+        { target: 'flySpeed', value: 'speed' },
+      ],
+    }],
+  };
+  fake.getItem = (kind, id) => kind === 'subclass' && id === supplement.id
+    ? supplement
+    : baseGet(kind, id);
+  const provider = makeRulesApi(() => fake);
+  const model = makeEngine({
+    num: (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback,
+    host: {},
+    NS: 'x',
+    ABILITIES: Engine.ABILITIES,
+    SKILLS: [],
+    abilityMod: () => 0,
+    sheetOf: () => ({}),
+    clampHp: (hp) => Number(hp) || 0,
+  });
+  const decisions = {
+    classes: [{ classId: 'sorcerer', level: 3, subclass: 'test-path' }],
+    baseStats: { STR: 8, DEX: 14, CON: 10, INT: 10, WIS: 10, CHA: 16 },
+    abilities: { STR: 8, DEX: 14, CON: 10, INT: 10, WIS: 10, CHA: 16 },
+    featureChoices: { 'test-language': 'elvish' },
+    manualSaveProf: {},
+    activeFeatures: { 'subclass:test-path:focus': true },
+    inventory: [
+      { ref: 'longsword', location: 'equipped' },
+      { ref: 'greatsword', location: 'equipped' },
+    ],
+  };
+  const choices = model.collectChoices(decisions.classes, provider);
+  assert.equal(choices.find((choice) => choice.id === 'test-language').kind, 'languages');
+
+  const sheet = provider.hydrate(model.decisionsOf(decisions, provider)).sheet;
+  assert.deepEqual(sheet.languages.sort(), ['draconic', 'elvish']);
+  assert.equal(sheet.saves.WIS.proficient, true);
+  assert.deepEqual(sheet.resistances, ['cold']);
+  assert.deepEqual(sheet.conditionImmunities.sort(), ['charmed', 'frightened']);
+  assert.equal(sheet.resources.find((resource) => resource.key === 'test-pool').max, 2);
+  assert.equal(sheet.derived.armorClass, 18);
+  assert.equal(sheet.derived.speed, 40);
+  assert.equal(sheet.flySpeed, 40);
+  assert.equal(sheet.weapons.find((weapon) => weapon.ref === 'longsword').attackBonus, 5);
+  assert.equal(
+    sheet.weapons.find((weapon) => weapon.ref === 'greatsword').attackBonus,
+    -1,
+    'an active weapon-ability substitution does not apply without proficiency'
+  );
+
+  const armored = provider.hydrate(model.decisionsOf({
+    ...decisions,
+    inventory: decisions.inventory.concat([{ ref: 'breastplate', location: 'equipped' }]),
+  }, provider)).sheet;
+  assert.equal(armored.activations[0].available, false);
+  assert.equal(armored.activations[0].active, false);
+  assert.equal(armored.derived.speed, 30);
+
+  model.materializeInto(decisions, provider);
+  assert.equal(decisions.saveProf.WIS, true, 'materialized fallback includes the active book grant');
+
+  fake.getItem = baseGet;
+  const withoutBook = provider.hydrate(model.decisionsOf(decisions, provider)).sheet;
+  assert.deepEqual(withoutBook.languages, []);
+  assert.equal(withoutBook.saves.WIS.proficient, false);
+  assert.deepEqual(withoutBook.resistances, []);
+  assert.deepEqual(withoutBook.conditionImmunities, []);
+  assert.equal(withoutBook.resources.some((resource) => resource.key === 'test-pool'), false);
+  assert.equal(withoutBook.activations.length, 0);
+  model.materializeInto(decisions, provider);
+  assert.equal(decisions.saveProf.WIS, false, 'a removed book grant cannot become a manual saving-throw choice');
+});
+
+test('rules: feat spell grants can inherit their half-feat ability and cast-level schedule', () => {
+  const fake = makeFake();
+  const baseGet = fake.getItem;
+  const feat = {
+    id: 'scheduled-spell',
+    name: 'Scheduled Spell',
+    category: 'general',
+    grants: {
+      castingAbility: { fromAbilityScoreIncrease: true },
+      choices: [{ id: 'element', type: 'enumerated', count: 1, from: ['fire'] }],
+      choicePackages: [{
+        choiceId: 'element',
+        options: {
+          fire: { resistances: ['fire'] },
+          water: { resistances: ['cold'] },
+        },
+      }],
+      spells: [{
+        id: 'scheduled-pick',
+        choose: 1,
+         spellLevel: 1,
+         from: { class: ['sorcerer'], castingTime: ['action'] },
+         default: 'test-spell',
+         alwaysPrepared: true,
+        free: '1/long',
+        castAtLevelByLevel: [
+          { level: 1, castAtLevel: 1 },
+          { level: 11, castAtLevel: 2 },
+          { level: 17, castAtLevel: 3 },
+        ],
+      }],
+    },
+  };
+  const spell = {
+    id: 'test-spell',
+    name: 'Test Spell',
+    level: 1,
+    school: 'Evocation',
+    classes: ['sorcerer'],
+    castingTime: 'action',
+  };
+  fake.getItem = (kind, id) => {
+    if (kind === 'feat' && id === feat.id) return feat;
+    if (kind === 'spell' && id === spell.id) return spell;
+    return baseGet(kind, id);
+  };
+
+  const sheet = Engine.hydrate({
+    className: 'Fighter',
+    level: 11,
+    feats: [{ featId: feat.id }],
+    featureChoices: {
+      'asi:fighter:4:feat': feat.id,
+      element: 'water',
+      'feat:scheduled-spell:element': 'fire',
+    },
+    abilityGrants: [{
+      id: 'asi:fighter:4:featability',
+      source: { type: 'feat' },
+      assign: { CHA: 1 },
+    }],
+    grantChoices: { 'feat:scheduled-spell:scheduled-pick': [spell.id] },
+  }, fake).sheet;
+
+  const granted = sheet.spellcasting.granted.find((entry) => entry.ref === spell.id);
+  assert.equal(granted.castingAbility, 'CHA');
+  assert.equal(granted.castAtLevel, 2);
+  assert.deepEqual(sheet.spellcasting.pendingChoices[0].from, {
+    class: ['sorcerer'],
+    castingTime: ['action'],
+  });
+  assert.equal(sheet.spellcasting.pendingChoices[0].default, spell.id);
+  assert.ok(sheet.resources.some((resource) => resource.key === 'charge-test-spell'));
+  assert.deepEqual(sheet.resistances, ['fire']);
+
+  const defaulted = Engine.hydrate({
+    className: 'Fighter',
+    level: 11,
+    feats: [{ featId: feat.id }],
+  }, fake).sheet;
+  assert.deepEqual(
+    defaulted.spellcasting.granted.map((entry) => entry.ref),
+    [spell.id],
+  );
+  assert.deepEqual(defaulted.spellcasting.pendingChoices[0].picked, [spell.id]);
+});
+
+test('rules: eligible feature records resolve from slim lists before applying activations', () => {
+  const fake = makeFake();
+  const baseGet = fake.getItem;
+  const baseList = fake.listFeatures;
+  const feature = {
+    id: 'fighter-test-mode',
+    name: 'Test Mode',
+    classId: 'fighter',
+    level: 2,
+    activations: [{
+      id: 'test-mode',
+      name: 'Test Mode',
+      modifiers: [{ target: 'speed', add: 5 }],
+    }],
+  };
+  fake.listFeatures = (filter) => baseList(filter).concat([{
+    id: feature.id,
+    name: feature.name,
+    kind: 'feature',
+    classId: feature.classId,
+    level: feature.level,
+  }]);
+  fake.getItem = (kind, id) => kind === 'feature' && id === feature.id
+    ? feature
+    : baseGet(kind, id);
+
+  const sheet = Engine.hydrate({
+    className: 'Fighter',
+    level: 2,
+    activeFeatures: { 'feature:fighter-test-mode:test-mode': true },
+  }, fake).sheet;
+  assert.equal(sheet.derived.speed, 35);
+  assert.equal(sheet.activations[0].active, true);
 });
 
 test('rules: caster surfaces per-level cantrips-known + prepared', () => {
@@ -682,6 +921,61 @@ test('rules: a non-origin class grants only its multiclassProficiencies weapons 
   assert.equal(mc.weapons[0].proficient, false, 'a MULTICLASSED-INTO fighter grants only its reduced set (no martial)');
   const origin = r2.provided.hydrate({ abilities, classes: [{ classId: 'fighter', level: 1 }, { classId: 'wizard', level: 3 }], inventory: inv }).sheet;
   assert.equal(origin.weapons[0].proficient, true, 'the ORIGIN fighter still grants its full starting set');
+});
+
+test('rules: equipped armor exposes and applies its Strength and Stealth restrictions', () => {
+  const api = makeFake();
+  const chainMail = {
+    id: 'chain-mail', name: 'Chain Mail', armorType: 'heavy',
+    baseAC: 16, dexCap: 0, strReq: 'Str 13', stealthDisadvantage: true,
+  };
+  const getItem = api.getItem;
+  const getItemByName = api.getItemByName;
+  api.getItem = (kind, id) => kind === 'armor' && id === chainMail.id
+    ? chainMail
+    : getItem(kind, id);
+  api.getItemByName = (kind, name) => kind === 'armor' && name === chainMail.name
+    ? chainMail
+    : getItemByName(kind, name);
+  const low = Engine.hydrate({
+    classes: [{ classId: 'fighter', level: 1 }],
+    abilities: { STR: 10, DEX: 10 },
+    inventory: [{ ref: 'chain-mail', location: 'equipped' }],
+  }, api).sheet;
+  assert.equal(low.ac.value, 16);
+  assert.deepEqual(low.armorRestrictions, {
+    armorId: 'chain-mail',
+    strengthRequirement: 13,
+    meetsStrength: false,
+    speedPenalty: 10,
+    stealthDisadvantage: true,
+  });
+  assert.equal(low.speed, 20);
+
+  const strong = Engine.hydrate({
+    classes: [{ classId: 'fighter', level: 1 }],
+    abilities: { STR: 14, DEX: 10 },
+    inventory: [{ ref: 'chain-mail', location: 'equipped' }],
+  }, api).sheet;
+  assert.equal(strong.armorRestrictions.meetsStrength, true);
+  assert.equal(strong.speed, 30);
+});
+
+test('rules: nested generic proficiency grants are applied without source-specific logic', () => {
+  const api = makeFake();
+  const getItem = api.getItem;
+  api.getItem = (kind, id) => kind === 'feat' && id === 'trained'
+    ? {
+        id: 'trained', name: 'Trained',
+        grants: { proficiencies: { skills: ['perception'] } },
+      }
+    : getItem(kind, id);
+  const sheet = Engine.hydrate({
+    classes: [{ classId: 'fighter', level: 1 }],
+    feats: [{ featId: 'trained' }],
+    abilities: { WIS: 12 },
+  }, api).sheet;
+  assert.equal(sheet.skills.perception.proficient, true);
 });
 
 test('rules: saveProf manually unions extra saving-throw proficiencies (PR-4)', () => {

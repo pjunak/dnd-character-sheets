@@ -63,6 +63,9 @@ renders Combat. Preserve this naming unless doing a deliberate, tested rename.
   instead of embedding production book data.
 - Add supplement mechanics through generic documented record fields. Do not
   branch on sourcebook IDs in the engine, model, panels, or actions.
+- Fixed grants, runtime choice packages, resources, and self-effect
+  activations are collected through `rules/grants.js`. Keep book provenance in
+  the provider; absent records must contribute no derived mechanics.
 - `ui-state.js` owns transient navigation, modal, wizard, and selection state.
   Persist only intentional view preferences.
 - Domain controllers dispose their own timers, URLs, listeners, and other

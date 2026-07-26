@@ -91,11 +91,26 @@ average. Other class levels also use the average. Reordering entries changes
 origin-class saves and starting proficiency semantics even when the HP total is
 unchanged.
 
-**Generic supplement mechanics:** provider records may declare reduced
-multiclass proficiency payloads, feat-expanded spell lists, fixed or selectable
-grant casting abilities, exact/maximum-level spell choices, class-specific
-attunement limits, level-gated recharge entries, and species choices/resources.
-These are data contracts; the engine contains no sourcebook-id checks.
+**Generic supplement mechanics:** `rules/grants.js` collects class, subclass,
+eligible feature, species/lineage, background, and selected-feat records.
+Those sources may declare fixed languages, saves, skills/expertise, armor,
+weapons, tools, resistances, immunities, spells, resource pools, runtime choice
+packages, AC formulas, and selected self-effect activations. Spell grants
+support exact/maximum levels, class/school/id unions, a casting-time
+intersection, fixed/selectable/feat-ASI casting abilities, and fixed upcast
+schedules. These are data contracts; the engine contains no sourcebook-id
+checks, and an absent or disabled record contributes nothing.
+
+Nested `grants.proficiencies` uses the same skill/armor/weapon/tool vocabulary
+as direct grants. Senses merge by their greatest granted distance.
+`exclusiveGroup` makes self-effect activations mutually exclusive, and a Long
+Rest clears active temporary modes.
+
+Equipped armor produces an `armorRestrictions` summary. An unmet printed
+Strength requirement reduces derived Speed by 10 feet; printed Stealth
+Disadvantage remains available to the sheet without attempting encounter
+automation. A casting source can use `spellListClassId` to delegate its
+selectable list while retaining its own class/subclass identity.
 
 **Collected features:** class features grant from the per-class `feature`
 records (`listFeatures({classId})`, record level ≤ class level) — the

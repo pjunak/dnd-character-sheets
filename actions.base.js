@@ -68,7 +68,12 @@ export function registerBaseActions(deps) {
     toggleSave(cid, ability) {
       if (!ABILITIES.includes(ability)) return;
       mutate(cid, (sheet) => {
-        sheet.saveProf = { ...sheet.saveProf, [ability]: !sheet.saveProf[ability] };
+        const manual = { ...(sheet.manualSaveProf || {}) };
+        manual[ability] = !manual[ability];
+        sheet.manualSaveProf = manual;
+        if (!getRules(sheet)) {
+          sheet.saveProf = { ...(sheet.saveProf || {}), [ability]: manual[ability] };
+        }
         return sheet;
       });
     },

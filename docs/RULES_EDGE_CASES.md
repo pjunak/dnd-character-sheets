@@ -26,7 +26,8 @@ gaps live in `dnd55e-compendium/data/SCHEMA.md` and `data/GAPS.md`.
 ## Stored decisions and materialized fields
 
 The builder decision spine includes `classes`, `baseStats`, `abilityGrants`,
-`featureChoices`, `grantChoices`, `grantCastingAbilities`, spell selections,
+`featureChoices`, `grantChoices`, `grantCastingAbilities`, `manualSaveProf`,
+spell selections,
 equipment state, and `overrides`. On hydration, the engine derives rules-owned values and the addon
 materializes the result into the ordinary character fields used by the host.
 The view model applies explicit overrides over the derived result; overrides
@@ -58,7 +59,7 @@ order:
 1. ability scores and caps;
 2. ordered classes, total level, and proficiency bonus;
 3. species, lineage, background, hit points, Armor Class, and initiative;
-4. saving throws, skills, armor proficiencies, and tool proficiencies;
+4. saving throws, skills, languages, defenses, and equipment proficiencies;
 5. spellcasting, granted spells, and pending spell choices;
 6. weapon mastery, equipped weapon attacks, and attunement;
 7. record-first collected features; and
@@ -90,15 +91,43 @@ inputs rather than display-only metadata.
   warnings rather than destructive choice cleanup.
 - Every repeatable or ambiguous choice needs a stable id. `grantChoices` uses
   that id so selections survive rehydration.
+- Generic record choices can grant skills, expertise, tools, languages, saving
+  throws, weapons, armor, damage resistance, condition immunity, feats, or
+  enumerated values. `choicePackages` lets one enumerated value add a coherent
+  bundle of grants. A choice may declare a `default` from its option pool; that
+  value applies until the player explicitly selects a replacement.
+  `skillExpertise` applies a coupled skill-proficiency-and-Expertise choice.
 - Fixed spell grants and filtered `choose` grants are supported for feats,
-  species, and lineages. Filters support exact or maximum spell level and a
-  union of class-list, school, and explicit-id sources.
+  species, lineages, backgrounds, classes, subclasses, and feature records.
+  Filters support exact or maximum spell level and a union of class-list,
+  school, and explicit-id sources; `from.castingTime` intersects that pool.
+  A single spell choice may provide a default that remains active until the
+  player selects a replacement.
 - A feat's `spellList` expands each caster's selectable pool.
   `prepareSpellListOf` can make the lists of owned feats in a named category
   always prepared.
 - Granted spells carry fixed or selected casting abilities. Unresolved
   selections appear in `castingAbilityChoices`; chosen values are stored in
-  `grantCastingAbilities` and copied into grant provenance.
+  `grantCastingAbilities` and copied into grant provenance. A feat may instead
+  bind casting to its selected Ability Score Increase. `castAtLevelByLevel`
+  publishes the highest unlocked fixed upcast level.
+
+## Supplement grants and active modes
+
+- Fixed grants and choices are collected from the selected class, subclass,
+  eligible feature records, species/lineage, background, and feats. No
+  sourcebook ID is interpreted by the engine.
+- Resources from any source use the same bounded tracker and rest-recharge
+  contract as class resources.
+- A selected activation can add AC, speed, a weapon ability, Concentration
+  save bonuses, resistances, immunities, or a fly speed. Armor/shield
+  restrictions are checked before modifiers apply.
+- Activations represent explicit self states. They do not target creatures or
+  automate attacks, saving throws, areas, damage, or encounter timing.
+- Materialized saving-throw results live in `saveProf`; manual additions live
+  separately in `manualSaveProf`. Consequently a provider or book removed
+  from the active content tree cannot leave a derived proficiency behind as a
+  manual decision.
 
 ## Spellcasting
 
@@ -110,9 +139,11 @@ inputs rather than display-only metadata.
   for a single caster. Otherwise the resolved ruleset table is used. Current
   2024 class records omit printed `spellSlots`, so their real slot pools use
   the ruleset; pact slots use `constants.pactMagic`.
-- The engine consumes `ability`, `type`, `prepares`, and `ritual` from the
-  spellcasting descriptor. Provider fields such as `prepared` and `startLevel`
-  are not currently independent engine inputs.
+- The engine consumes `ability`, `type`, `prepares`, `ritual`, and an optional
+  `spellListClassId` from the spellcasting descriptor. A subclass such as
+  Eldritch Knight or Arcane Trickster can therefore use the Wizard list while
+  keeping its own casting source identity. Provider fields such as `prepared`
+  and `startLevel` are not independent engine inputs.
 - Prepared and cantrip limits are tracked per casting source. Over-limit lists
   remain visible and produce warnings.
 - Wizard spellbooks are character-owned learned-spell references. Provider
@@ -126,9 +157,8 @@ inputs rather than display-only metadata.
 - A feat may grant a separately tracked, restricted spell slot with a bounded
   level rule and structured Short/Long Rest recharge. It never merges into the
   ordinary multiclass slot table.
-- Eldritch Knight and Arcane Trickster have third-caster descriptors but no
-  shipped subclass progression rows, so the provider currently yields no
-  prepared-spell or cantrip limit for them. This is a known provider defect.
+- Eldritch Knight and Arcane Trickster ship all twenty subclass progression
+  rows, including cantrip, prepared-spell, and printed slot limits.
 
 ## Equipment and Armor Class
 
@@ -136,9 +166,10 @@ inputs rather than display-only metadata.
   quantity and state stay in the sheet blob.
 - Armor Class uses `armorType`, `baseAC`, `dexCap`, and `acBonus`, with the
   selected/equipped items and explicit overrides.
-- Provider armor records already include `strReq` and
-  `stealthDisadvantage`. The current engine does not apply either field, so no
-  speed-penalty warning or derived Stealth-disadvantage flag is promised yet.
+- The selected base armor exposes `armorRestrictions`. An unmet numeric
+  `strReq` reduces derived Speed by 10 feet; `stealthDisadvantage` is preserved
+  as a derived flag for consumers. Armor Class itself is unchanged by either
+  restriction.
 
 ## Ruleset authority and compatibility
 

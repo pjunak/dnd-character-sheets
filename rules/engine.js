@@ -16,6 +16,12 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { DEFAULT_RULESET, resolveRuleset } from './ruleset.js';
+import {
+  activationKey,
+  applyChoicePackages,
+  collectGrantSources,
+  selectedFeatRecords,
+} from './grants.js';
 export { DEFAULT_RULESET, resolveRuleset };
 
 export const ABILITIES = ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'];
@@ -192,7 +198,7 @@ export function computeMaxHp(classes, conMod, hpPerLevel) {
 /** AC-1/AC-2/AC-3: collect every eligible base-AC formula (equipped armor with
  *  its dex cap, else each class Unarmored-Defense formula, else 10+DEX), take the
  *  BEST, then add a shield + any flat bonuses. Never stacks two bases. */
-export function computeArmorClass(cd, mods, classes, api) {
+export function computeArmorClass(cd, mods, classes, api, extraFormulas = [], abilities = {}) {
   const dex = mods.DEX;
   const inv = Array.isArray(cd.inventory) ? cd.inventory : [];
   const armorRec = (it) => {
@@ -212,12 +218,12 @@ export function computeArmorClass(cd, mods, classes, api) {
     const dexPart = bodyArmor.dexCap === 0 ? 0 : bodyArmor.dexCap == null ? dex : Math.min(dex, num(bodyArmor.dexCap));
     candidates.push({ id: 'armor:' + bodyArmor.id, label: bodyArmor.name, value: num(bodyArmor.baseAC, 10) + dexPart });
   } else {
-    for (const c of classes) {
-      for (const f of (c.record && c.record.acFormulas) || []) {
-        if (f.requires && f.requires.noShield && shield) continue;
-        const add = (f.addAbilities || []).reduce((s, ab) => s + num(mods[ab]), 0);
-        candidates.push({ id: f.id, label: f.id, value: num(f.base, 10) + add });
-      }
+    const formulas = classes.flatMap((c) => (c.record && c.record.acFormulas) || [])
+      .concat(extraFormulas || []);
+    for (const f of formulas) {
+      if (f.requires && f.requires.noShield && shield) continue;
+      const add = (f.addAbilities || []).reduce((s, ab) => s + num(mods[ab]), 0);
+      candidates.push({ id: f.id, label: f.name || f.id, value: num(f.base, 10) + add });
     }
   }
   // ALWAYS offer the unarmored 10+DEX candidate so the reducer floors there: a
@@ -226,20 +232,40 @@ export function computeArmorClass(cd, mods, classes, api) {
   candidates.push({ id: 'unarmored', label: 'Unarmored', value: 10 + dex });
   const best = candidates.reduce((a, b) => (b.value > a.value ? b : a), { value: -Infinity, label: '', id: '' });
   const shieldBonus = shield ? num(shield.acBonus, 2) : 0;
-  return { value: best.value + shieldBonus, base: best.label, shield: shieldBonus, candidates };
+  const strengthRequirement = bodyArmor
+    ? num(String(bodyArmor.strReq || '').match(/\d+/)?.[0], num(bodyArmor.strReq))
+    : 0;
+  const strengthScore = num(abilities.STR && abilities.STR.score, 10 + num(mods.STR) * 2);
+  const restrictions = bodyArmor ? {
+    armorId: bodyArmor.id,
+    strengthRequirement,
+    meetsStrength: !strengthRequirement || strengthScore >= strengthRequirement,
+    speedPenalty: strengthRequirement && strengthScore < strengthRequirement ? 10 : 0,
+    stealthDisadvantage: !!bodyArmor.stealthDisadvantage,
+  } : null;
+  return {
+    value: best.value + shieldBonus,
+    base: best.label,
+    shield: shieldBonus,
+    candidates,
+    restrictions,
+  };
 }
 
 // EQ-5: which ability a weapon uses — finesse takes the better of STR/DEX,
 // ranged uses DEX, everything else STR.
-export function weaponAbilityMod(rec, mods) {
+export function weaponAbilityMod(rec, mods, preferredAbility) {
   const str = num(mods.STR), dex = num(mods.DEX);
   const props = rec.properties || [];
-  if (props.includes('finesse')) return Math.max(str, dex);
-  if (rec.range === 'ranged') return dex;
-  return str;
+  let value = props.includes('finesse') ? Math.max(str, dex)
+    : rec.range === 'ranged' ? dex
+    : str;
+  if (preferredAbility) value = Math.max(value, num(mods[preferredAbility]));
+  return value;
 }
 
 /** Union of class weapon proficiencies (PR-5). Tokens: 'simple', 'martial',
+ *  'martial-light' (the 2024 Monk subset), and
  *  'martial-finesse-or-light' (the 2024 Rogue subset).
  *  Multiclassing grants only a REDUCED starting set: when a NON-origin class
  *  (index > 0) declares `multiclassProficiencies`, its `weapons` list is used
@@ -247,8 +273,14 @@ export function weaponAbilityMod(rec, mods) {
  *  declaring the field means "this is the complete multiclass grant").
  *  Records without the field keep today's behavior (full starting set), so
  *  books that don't ship it yet are unaffected. */
-export function classWeaponProf(classes) {
-  const p = { simple: false, martial: false, martialFinesseLight: false };
+export function classWeaponProf(classes, extra = []) {
+  const p = {
+    simple: false,
+    martial: false,
+    martialLight: false,
+    martialFinesseLight: false,
+    ids: new Set(),
+  };
   classes.forEach((c, i) => {
     const rec = c.record;
     if (!rec) return;
@@ -258,15 +290,26 @@ export function classWeaponProf(classes) {
     for (const tok of src || []) {
       if (tok === 'simple') p.simple = true;
       else if (tok === 'martial') p.martial = true;
+      else if (tok === 'martial-light') { p.simple = true; p.martialLight = true; }
       else if (tok === 'martial-finesse-or-light') { p.simple = true; p.martialFinesseLight = true; }
+      else p.ids.add(tok);
     }
   });
+  for (const tok of extra || []) {
+    if (tok === 'simple') p.simple = true;
+    else if (tok === 'martial') p.martial = true;
+    else if (tok === 'martial-light') { p.simple = true; p.martialLight = true; }
+    else if (tok === 'martial-finesse-or-light') { p.simple = true; p.martialFinesseLight = true; }
+    else p.ids.add(tok);
+  }
   return p;
 }
 function weaponProficient(rec, p) {
+  if (p.ids && p.ids.has(rec.id)) return true;
   if (rec.category === 'simple') return !!p.simple;
   if (rec.category === 'martial') {
     if (p.martial) return true;
+    if (p.martialLight && (rec.properties || []).includes('light')) return true;
     if (p.martialFinesseLight && ((rec.properties || []).includes('finesse') || (rec.properties || []).includes('light'))) return true;
   }
   return false;
@@ -275,9 +318,9 @@ function weaponProficient(rec, p) {
 /** EQ-5: attack bonus + damage for one weapon. attack = abilityMod +
  *  (proficient ? PB : 0); damage adds the ability modifier. Magic +N is 0 for
  *  now (no magic weapons in the seed). */
-export function computeWeaponAttack(rec, mods, pb, profW, masterySet) {
-  const abil = weaponAbilityMod(rec, mods);
+export function computeWeaponAttack(rec, mods, pb, profW, masterySet, preferredAbility) {
   const prof = weaponProficient(rec, profW);
+  const abil = weaponAbilityMod(rec, mods, prof ? preferredAbility : null);
   const dmgSuffix = abil ? ' ' + (abil > 0 ? '+' : '') + abil : '';
   return {
     ref: rec.id, name: rec.name,
@@ -307,7 +350,19 @@ export function hydrate(decisions, api, ruleset) {
   const warn = (m) => { if (m) warnings.push(String(m)); };
   const step = (fn) => { try { fn(); } catch (e) { warn('engine: ' + (e && e.message || e)); } };
 
-  const sheet = { abilities: {}, derived: {}, proficiencies: { saves: {}, skills: {}, armor: [], weapons: [], tools: [] }, features: [] };
+  const sheet = {
+    abilities: {},
+    derived: {},
+    proficiencies: {
+      saves: {},
+      skills: {},
+      armor: [],
+      weapons: [],
+      tools: [],
+      languages: [],
+    },
+    features: [],
+  };
   const mods = {};
 
   // Abilities (AB-1/AB-2/AB-4): final = base + Σ ability grants (background
@@ -393,14 +448,69 @@ export function hydrate(decisions, api, ruleset) {
     }
   });
 
+  const featRecords = selectedFeatRecords(cd, api);
+  const grantSources = applyChoicePackages(collectGrantSources({
+    classes,
+    species,
+    lineage,
+    background,
+    featRecords,
+    api,
+    totalLevel,
+  }), cd.featureChoices);
+  const grantValues = (field) => grantSources.flatMap(({ grants }) => []
+    .concat(Array.isArray(grants && grants[field]) ? grants[field] : [])
+    .concat(Array.isArray(grants && grants.proficiencies && grants.proficiencies[field])
+      ? grants.proficiencies[field]
+      : []));
+
+  const activeModifiers = [];
+  step(() => {
+    const active = cd.activeFeatures || {};
+    const activations = [];
+    let wearingArmor = false;
+    let usingShield = false;
+    for (const item of Array.isArray(cd.inventory) ? cd.inventory : []) {
+      if (item.location !== 'equipped' || !api) continue;
+      const armor = (item.ref && api.getItem && api.getItem('armor', item.ref))
+        || (item.name && api.getItemByName && api.getItemByName('armor', item.name));
+      if (!armor) continue;
+      if (armor.armorType === 'shield') usingShield = true;
+      else if (['light', 'medium', 'heavy'].includes(armor.armorType)) wearingArmor = true;
+    }
+    for (const source of grantSources) {
+      const declared = []
+        .concat(Array.isArray(source.record.activations) ? source.record.activations : [])
+        .concat(Array.isArray(source.grants.activations) ? source.grants.activations : []);
+      for (const activation of declared) {
+        if (!activation || !activation.id || num(activation.minLevel, 1) > source.level) continue;
+        const key = activationKey(source, activation);
+        const restrictions = activation.restrictions || {};
+        const allowed = !(restrictions.noArmor && wearingArmor)
+          && !(restrictions.noShield && usingShield);
+        const enabled = !!active[key] && allowed;
+        activations.push({
+          key,
+          id: activation.id,
+          name: activation.name || activation.id,
+          source: source.source,
+          resource: activation.resource || null,
+          exclusiveGroup: activation.exclusiveGroup || null,
+          active: enabled,
+          available: allowed,
+        });
+        if (enabled) activeModifiers.push(...(activation.modifiers || []));
+      }
+    }
+    sheet.activations = activations;
+  });
+
   // HP (HP-1/HP-2/HP-3) — per-level bonuses from species/lineage plus feats
   // (Tough = +2/level; the data carries grants.hpPerLevel).
   step(() => {
     let featHp = 0;
-    for (const f of Array.isArray(cd.feats) ? cd.feats : []) {
-      const fid = f && (f.featId || f.id || f);
-      const frec = fid && api && api.getItem ? api.getItem('feat', fid) : null;
-      if (frec && frec.grants && frec.grants.hpPerLevel) featHp += num(frec.grants.hpPerLevel);
+    for (const { record } of featRecords) {
+      if (record.grants && record.grants.hpPerLevel) featHp += num(record.grants.hpPerLevel);
     }
     const conMod = mods.CON || 0;
     const perLevelMisc = hpPerLevel + featHp;   // species + lineage + feats, per level
@@ -419,13 +529,29 @@ export function hydrate(decisions, api, ruleset) {
 
   // AC (AC-1).
   step(() => {
-    const ac = computeArmorClass(cd, mods, classes, api);
+    const extraFormulas = grantSources
+      .filter(({ source }) => source.type !== 'class')
+      .flatMap(({ record, grants }) => []
+        .concat(Array.isArray(record.acFormulas) ? record.acFormulas : [])
+        .concat(Array.isArray(grants.acFormulas) ? grants.acFormulas : []));
+    const ac = computeArmorClass(cd, mods, classes, api, extraFormulas, sheet.abilities);
     const speciesBonus = num(species && species.grants && species.grants.acBonus);
-    if (speciesBonus) {
-      ac.value += speciesBonus;
-      ac.speciesBonus = speciesBonus;
+    const activeBonus = activeModifiers
+      .filter((modifier) => modifier && modifier.target === 'armorClass')
+      .reduce((sum, modifier) => sum
+        + num(modifier.add)
+        + num(mods[modifier.addAbility]), 0);
+    if (speciesBonus || activeBonus) {
+      ac.value += speciesBonus + activeBonus;
+      if (speciesBonus) ac.speciesBonus = speciesBonus;
+      if (activeBonus) ac.activeBonus = activeBonus;
     }
     sheet.ac = ac;
+    sheet.armorRestrictions = ac.restrictions;
+    if (ac.restrictions && ac.restrictions.speedPenalty) {
+      sheet.speed = Math.max(0, sheet.speed - ac.restrictions.speedPenalty);
+      sheet.derived.speed = sheet.speed;
+    }
     sheet.derived.armorClass = ac.value;
   });
 
@@ -453,9 +579,10 @@ export function hydrate(decisions, api, ruleset) {
   step(() => {
     const firstSaves = (classes[0] && classes[0].record && classes[0].record.savingThrows) || [];
     const manual = cd.saveProf || {};
+    const granted = new Set(grantValues('savingThrows').concat(cd.saveProficiencies || []));
     sheet.saves = {};
     for (const a of ABILITIES) {
-      const proficient = firstSaves.includes(a) || !!manual[a];
+      const proficient = firstSaves.includes(a) || granted.has(a) || !!manual[a];
       sheet.proficiencies.saves[a] = proficient;
       sheet.saves[a] = { mod: num(mods[a]), proficient, total: num(mods[a]) + (proficient ? pb : 0) };
     }
@@ -474,11 +601,16 @@ export function hydrate(decisions, api, ruleset) {
     const speciesSkills = Array.isArray(cd.speciesSkillProficiencies)
       ? cd.speciesSkillProficiencies
       : [];
-    const expertise = cd.skillExpertise || {};
+    const grantedSkills = new Set(grantValues('skills'));
+    const expertise = {
+      ...(cd.skillExpertise || {}),
+      ...Object.fromEntries(grantValues('expertise').map((id) => [id, true])),
+    };
     sheet.skills = {};
     for (const id of Object.keys(SKILL_ABILITY)) {
       const ab = SKILL_ABILITY[id];
-      const proficient = resolved.includes(id) || bgSkills.includes(id) || speciesSkills.includes(id);
+      const proficient = resolved.includes(id) || bgSkills.includes(id)
+        || speciesSkills.includes(id) || grantedSkills.has(id);
       const exp = !!expertise[id] && proficient;
       sheet.proficiencies.skills[id] = exp ? 'expertise' : proficient ? 'proficient' : 'none';
       const bonus = (exp ? 2 : proficient ? 1 : 0) * pb;
@@ -494,6 +626,7 @@ export function hydrate(decisions, api, ruleset) {
   step(() => {
     const armor = new Set();
     const tools = new Set();
+    const weapons = new Set(grantValues('weapons').concat(cd.weaponProficiencies || []));
     classes.forEach((c, index) => {
       const rec = c.record;
       if (!rec) return;
@@ -514,8 +647,55 @@ export function hydrate(decisions, api, ruleset) {
     if (cd.backgroundToolProficiency) tools.add(cd.backgroundToolProficiency);
     for (const id of Array.isArray(cd.toolProficiencies) ? cd.toolProficiencies : []) tools.add(id);
     for (const id of Array.isArray(cd.speciesToolProficiencies) ? cd.speciesToolProficiencies : []) tools.add(id);
+    for (const id of grantValues('armor').concat(cd.armorProficiencies || [])) armor.add(id);
+    for (const id of grantValues('tools')) tools.add(id);
     sheet.proficiencies.armor = [...armor];
+    sheet.proficiencies.weapons = [...weapons];
     sheet.proficiencies.tools = [...tools];
+  });
+
+  step(() => {
+    const languages = new Set(grantValues('languages').concat(cd.languageProficiencies || []));
+    const resistances = new Set((sheet.resistances || [])
+      .concat(grantValues('resistances'))
+      .concat(cd.damageResistances || []));
+    const conditionImmunities = new Set(grantValues('conditionImmunities')
+      .concat(cd.conditionImmunities || []));
+    const damageImmunities = new Set(grantValues('damageImmunities'));
+    for (const modifier of activeModifiers) {
+      if (!modifier) continue;
+      if (modifier.target === 'resistance' && modifier.value) resistances.add(modifier.value);
+      if (modifier.target === 'conditionImmunity' && modifier.value) conditionImmunities.add(modifier.value);
+      if (modifier.target === 'damageImmunity' && modifier.value) damageImmunities.add(modifier.value);
+    }
+    sheet.proficiencies.languages = [...languages];
+    sheet.languages = [...languages];
+    sheet.resistances = [...resistances];
+    sheet.conditionImmunities = [...conditionImmunities];
+    sheet.damageImmunities = [...damageImmunities];
+    const senses = { ...(sheet.senses || {}) };
+    for (const { grants } of grantSources) {
+      for (const [id, distance] of Object.entries((grants && grants.senses) || {})) {
+        senses[id] = Math.max(num(senses[id]), num(distance));
+      }
+    }
+    sheet.senses = senses;
+    const speedBonus = activeModifiers
+      .filter((modifier) => modifier && modifier.target === 'speed')
+      .reduce((sum, modifier) => sum + num(modifier.add), 0);
+    if (speedBonus) {
+      sheet.speed += speedBonus;
+      sheet.derived.speed = sheet.speed;
+    }
+    sheet.flySpeed = activeModifiers
+      .filter((modifier) => modifier && modifier.target === 'flySpeed')
+      .reduce((max, modifier) => Math.max(
+        max,
+        modifier.value === 'speed' ? sheet.speed : num(modifier.value),
+      ), 0);
+    sheet.concentrationSaveBonus = activeModifiers
+      .filter((modifier) => modifier && modifier.target === 'concentrationSave')
+      .reduce((sum, modifier) => sum + num(modifier.add) + num(mods[modifier.addAbility]), 0);
   });
 
   // Highest spell level a class can prepare/cast on its OWN progression — the cap
@@ -559,6 +739,7 @@ export function hydrate(decisions, api, ruleset) {
       const spellbookKnown = prepares === 'spellbook' ? num(sb.baseKnown, 6) + num(sb.knownPerLevel, 2) * (num(c.level, 1) - 1) : 0;
       per.push({
         classId: c.classId, level: num(c.level), ability, type: eff.type, prepares, ritual: !!eff.ritual,
+        spellListClassId: eff.spellListClassId || c.classId,
         saveDC: 8 + pb + mod, spellAttack: pb + mod,
         preparedLimit: prog ? num(prog.preparedSpells, 0) : 0,
         cantripsKnown: prog ? num(prog.cantripsKnown, 0) : 0,
@@ -568,11 +749,6 @@ export function hydrate(decisions, api, ruleset) {
       });
     }
 
-    const featRecords = (Array.isArray(cd.feats) ? cd.feats : [])
-      .map((f) => f && (f.featId || f.id || f))
-      .filter(Boolean)
-      .map((id) => ({ id, record: api && api.getItem ? api.getItem('feat', id) : null }))
-      .filter((entry) => entry.record);
     const expandedSpellIds = [...new Set(featRecords.flatMap(({ record }) =>
       (record.grants && record.grants.spellList) || []))];
     for (const caster of per) caster.expandedSpellIds = expandedSpellIds.slice();
@@ -618,17 +794,25 @@ export function hydrate(decisions, api, ruleset) {
     const grantCastingAbilities = (cd && cd.grantCastingAbilities) || {};
     const castingAbilityChoices = [];
     const castingChoiceKeys = new Set();
-    const castingAbilityFor = (source) => {
-      let grants = null;
-      if (source.type === 'feat') {
-        const entry = featRecords.find((candidate) => candidate.id === source.id);
-        grants = entry && entry.record && entry.record.grants;
-      } else if (source.type === 'species') {
-        grants = species && species.grants;
-      }
+    const castingAbilityFor = (source, sourceGrants = null) => {
+      const matching = sourceGrants ? null : grantSources.find((candidate) =>
+        candidate.source.type === source.type
+        && candidate.source.id === source.id
+        && candidate.grants.castingAbility);
+      const grants = sourceGrants || (matching && matching.grants);
       const declaration = grants && grants.castingAbility;
       if (!declaration) return null;
       if (declaration.fixed) return declaration.fixed;
+      if (declaration.fromAbilityScoreIncrease) {
+        for (const grant of Array.isArray(cd.abilityGrants) ? cd.abilityGrants : []) {
+          if (!grant || !grant.source || grant.source.type !== 'feat') continue;
+          const choiceId = String(grant.id || '').replace(/:featability$/, ':feat');
+          if ((cd.featureChoices || {})[choiceId] !== source.id) continue;
+          const selected = Object.keys(grant.assign || {}).find((ability) => num(grant.assign[ability]) > 0);
+          if (selected) return selected;
+        }
+        return null;
+      }
       const options = Array.isArray(declaration.choose) ? declaration.choose : [];
       const key = `${source.type}:${source.id}:${declaration.id || 'casting-ability'}`;
       const selected = options.includes(grantCastingAbilities[key])
@@ -649,6 +833,7 @@ export function hydrate(decisions, api, ruleset) {
         alwaysPrepared: !!(opts && opts.alwaysPrepared),
         free: (opts && opts.free) || null,
         castingAbility: (opts && opts.castingAbility) || null,
+        castAtLevel: opts && opts.castAtLevel != null ? num(opts.castAtLevel) : null,
       });
     };
     // One grant entry: either FIXED (`ids`) or a CHOICE (`choose` + `from`). A
@@ -656,15 +841,26 @@ export function hydrate(decisions, api, ruleset) {
     // the (possibly under-filled) choice on the sheet so the UI can render a
     // filtered picker (SP-10/SP-20 — Magic Initiate, Fey Touched's choose-1,
     // High Elf's wizard cantrip). `unlocked` gates by the source's level.
-    const addGrantEntry = (sp, source, unlocked) => {
+    const addGrantEntry = (sp, source, unlocked, sourceLevel = 0, sourceGrants = null) => {
       if (!unlocked) return;
-      const castingAbility = castingAbilityFor(source);
+      const castingAbility = castingAbilityFor(source, sourceGrants);
+      let castAtLevel = null;
+      for (const row of Array.isArray(sp.castAtLevelByLevel) ? sp.castAtLevelByLevel : []) {
+        if (num(sourceLevel) >= num(row.level)) castAtLevel = num(row.castAtLevel);
+      }
       if (Array.isArray(sp.ids) && sp.ids.length) {
-        for (const ref of sp.ids) addGrant(ref, source, { alwaysPrepared: sp.alwaysPrepared, free: sp.free, castingAbility });
+        for (const ref of sp.ids) addGrant(ref, source, {
+          alwaysPrepared: sp.alwaysPrepared, free: sp.free, castingAbility, castAtLevel,
+        });
       } else if (num(sp.choose) > 0 && sp.id) {
         const key = source.type + ':' + source.id + ':' + sp.id;
-        const picked = Array.isArray(grantChoices[key]) ? grantChoices[key].slice(0, num(sp.choose)) : [];
-        for (const ref of picked) addGrant(ref, source, { alwaysPrepared: sp.alwaysPrepared, free: sp.free, castingAbility });
+        const explicit = Array.isArray(grantChoices[key])
+          ? grantChoices[key].slice(0, num(sp.choose))
+          : [];
+        const picked = explicit.length || !sp.default ? explicit : [sp.default];
+        for (const ref of picked) addGrant(ref, source, {
+          alwaysPrepared: sp.alwaysPrepared, free: sp.free, castingAbility, castAtLevel,
+        });
         pendingChoices.push({
           key,
           source,
@@ -672,6 +868,7 @@ export function hydrate(decisions, api, ruleset) {
           spellLevel: sp.spellLevel == null ? null : num(sp.spellLevel),
           maxSpellLevel: sp.maxSpellLevel == null ? null : num(sp.maxSpellLevel),
           from: sp.from || {},
+          default: sp.default || null,
           alwaysPrepared: !!sp.alwaysPrepared,
           picked: picked.slice(),
         });
@@ -680,18 +877,14 @@ export function hydrate(decisions, api, ruleset) {
     const unlockLevel = (sp) => num(sp.atLevel != null ? sp.atLevel : sp.level);
     for (const c of classes) {
       const subRec = c.subclass && api && api.getItem ? api.getItem('subclass', c.subclass) : null;
-      for (const sp of (subRec && subRec.spells) || []) addGrantEntry(sp, { type: 'subclass', id: c.subclass }, unlockLevel(sp) <= c.level);
-    }
-    for (const { id: fid, record: frec } of featRecords) {
-      for (const sp of (frec && frec.grants && frec.grants.spells) || []) addGrantEntry(sp, { type: 'feat', id: fid }, true);
-    }
-    if (species && species.grants && species.grants.spells) {
-      for (const sp of species.grants.spells) {
-        addGrantEntry(sp, { type: 'species', id: species.id }, unlockLevel(sp) <= totalLevel);
+      for (const sp of (subRec && subRec.spells) || []) {
+        addGrantEntry(sp, { type: 'subclass', id: c.subclass }, unlockLevel(sp) <= c.level, c.level);
       }
     }
-    if (lineage && lineage.grants && lineage.grants.spells) {
-      for (const sp of lineage.grants.spells) addGrantEntry(sp, { type: 'species', id: species.id }, unlockLevel(sp) <= totalLevel);
+    for (const source of grantSources) {
+      for (const sp of source.grants.spells || []) {
+        addGrantEntry(sp, source.source, unlockLevel(sp) <= source.level, source.level, source.grants);
+      }
     }
     for (const { id: fid, record: frec } of featRecords) {
       const target = frec.grants && frec.grants.prepareSpellListOf;
@@ -734,8 +927,12 @@ export function hydrate(decisions, api, ruleset) {
   // weapon (resolved from inventory refs/names), and the attunement tally.
   step(() => {
     const inv = Array.isArray(cd.inventory) ? cd.inventory : [];
-    const profW = classWeaponProf(classes);
+    const profW = classWeaponProf(classes, sheet.proficiencies.weapons);
     const masterySet = new Set(cd.weaponMasteryChoices || []);
+    const preferredAbility = activeModifiers
+      .filter((modifier) => modifier && modifier.target === 'weaponAbility')
+      .map((modifier) => modifier.ability)
+      .find(Boolean);
     const resolveW = (it) => (it.ref && api && api.getItem && api.getItem('weapon', it.ref)) || (it.name && api && api.getItemByName && api.getItemByName('weapon', it.name)) || null;
     const weapons = [];
     let attuned = 0;
@@ -744,7 +941,7 @@ export function hydrate(decisions, api, ruleset) {
       const loc = it.location || 'pack';
       if (loc !== 'equipped' && loc !== 'ready') continue;
       const rec = resolveW(it);
-      if (rec) weapons.push(computeWeaponAttack(rec, mods, pb, profW, masterySet));
+      if (rec) weapons.push(computeWeaponAttack(rec, mods, pb, profW, masterySet, preferredAbility));
     }
     sheet.weapons = weapons;
     let attuneLimit = num(rs.constants.attunementLimit, 3);
@@ -861,18 +1058,20 @@ export function hydrate(decisions, api, ruleset) {
         });
       }
     }
-    for (const res of (species && species.grants && species.grants.resources) || []) {
-      if (!res || !res.key || num(res.minLevel, 1) > totalLevel) continue;
-      const max = resolveMax(res, totalLevel);
-      if (max <= 0) continue;
-      resources.push({
-        key: String(res.key),
-        name: res.name || String(res.key),
-        max,
-        kind: 'pool',
-        recharge: normRecharge(res.recharge, totalLevel),
-        source: { type: 'species', id: species.id, level: totalLevel },
-      });
+    for (const source of grantSources) {
+      for (const res of source.grants.resources || []) {
+        if (!res || !res.key || num(res.minLevel, 1) > source.level) continue;
+        const max = resolveMax(res, source.level);
+        if (max <= 0) continue;
+        resources.push({
+          key: String(res.key),
+          name: res.name || String(res.key),
+          max,
+          kind: 'pool',
+          recharge: normRecharge(res.recharge, source.level),
+          source: source.source,
+        });
+      }
     }
     // 2. Hit Dice — aggregate by die size. 2024 Long Rest: "You regain all
     // lost Hit Points and all spent Hit Point Dice" — ALL of them; a 2014

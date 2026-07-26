@@ -78,7 +78,7 @@ export const blank = () => ({
   level: 1,
   abilities: { STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10 },
   maxHp: 0, hp: 0, tempHp: 0, ac: 10, initiative: 0, speed: 30, profBonus: 2,
-  saveProf: {}, skillProf: {},
+  saveProf: {}, manualSaveProf: {}, skillProf: {},
   skillExpertise: {},  // { <skillId>: true } — materialized so standalone mode retains expertise
   spells: [],      // manual/extra + copied spell entries [{id,name,level,school,origin}] (SP-1/SP-15)
   preparedSpells: {}, // engine mode: { <classId>: [spellRef,…] } prepared picks (SP-2)
@@ -90,6 +90,8 @@ export const blank = () => ({
   inventory: [],   // [{id, name, qty, location, notes}]
   resources: [],   // [{id, name, current, max}] manual play trackers (standalone / homebrew)
   resourceUses: {}, // engine mode: { <resourceKey>: current } — spend state for build-derived trackers; max/name/recharge come from the engine
+  activeFeatures: {}, // { '<sourceType>:<sourceId>:<activationId>': true } for eligible self-effect modes
+  traitSnapshot: { languages: [], senses: {}, resistances: [], damageImmunities: [], conditionImmunities: [], armor: [], weapons: [], tools: [] },
   currency: { pp: 0, gp: 0, ep: 0, sp: 0, cp: 0 },
   overrides: {},   // engine-mode manual overrides
   // ── Builder decision model (engine mode). The flat fields above are kept as
@@ -129,6 +131,11 @@ export function makeHelpers(host) {
       ...b, ...s,
       abilities: { ...b.abilities, ...(s.abilities || {}) },
       saveProf:  { ...(s.saveProf || {}) },
+      manualSaveProf: {
+        ...(Object.prototype.hasOwnProperty.call(s, 'manualSaveProf')
+          ? (s.manualSaveProf || {})
+          : (s.rulesProvider && s.rulesProvider.materialized ? {} : (s.saveProf || {}))),
+      },
       skillProf: { ...(s.skillProf || {}) },
       skillExpertise: { ...(s.skillExpertise || {}) },
       currency:  { ...b.currency, ...(s.currency || {}) },
@@ -153,6 +160,19 @@ export function makeHelpers(host) {
       inventory: Array.isArray(s.inventory) ? s.inventory : [],
       resources: Array.isArray(s.resources) ? s.resources : [],
       resourceUses: { ...(s.resourceUses || {}) },
+      activeFeatures: { ...(s.activeFeatures || {}) },
+      traitSnapshot: {
+        ...b.traitSnapshot,
+        ...(s.traitSnapshot || {}),
+        languages: Array.isArray(s.traitSnapshot && s.traitSnapshot.languages) ? s.traitSnapshot.languages : [],
+        senses: { ...((s.traitSnapshot && s.traitSnapshot.senses) || {}) },
+        resistances: Array.isArray(s.traitSnapshot && s.traitSnapshot.resistances) ? s.traitSnapshot.resistances : [],
+        damageImmunities: Array.isArray(s.traitSnapshot && s.traitSnapshot.damageImmunities) ? s.traitSnapshot.damageImmunities : [],
+        conditionImmunities: Array.isArray(s.traitSnapshot && s.traitSnapshot.conditionImmunities) ? s.traitSnapshot.conditionImmunities : [],
+        armor: Array.isArray(s.traitSnapshot && s.traitSnapshot.armor) ? s.traitSnapshot.armor : [],
+        weapons: Array.isArray(s.traitSnapshot && s.traitSnapshot.weapons) ? s.traitSnapshot.weapons : [],
+        tools: Array.isArray(s.traitSnapshot && s.traitSnapshot.tools) ? s.traitSnapshot.tools : [],
+      },
       baseStats: s.baseStats || null,
       classes:   Array.isArray(s.classes) ? s.classes : [],
       abilityGrants: Array.isArray(s.abilityGrants) ? s.abilityGrants : [],

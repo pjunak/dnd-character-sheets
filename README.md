@@ -83,7 +83,7 @@ through `host.provide()`.
 
 ## Designed to grow
 
-- **Rules in harmony:** the sheet *soft-uses* per-book data addons
+- **Rules in harmony:** the sheet *soft-uses* a rules-data addon
   (`dnd55e-compendium`, a manifest `optionalDependencies` entry) — when one is
   installed, the built-in engine auto-fills stats from class/species/background choices,
   free-text fields become dropdowns, and the Builder tab appears. If the book addon is
@@ -94,9 +94,14 @@ through `host.provide()`.
   2014 provider). If computed flat values were edited while the provider was
   unavailable, that character stays hand-filled until the user explicitly
   keeps manual mode or resumes the rulebook; other characters are unaffected.
-  Supplement records can add reduced multiclass proficiencies, species/tool
-  choices, expanded spell lists, granted-spell casting abilities, resource
-  schedules, and class-specific attunement limits without book-specific code.
+  Supplement records can add fixed traits and proficiencies, runtime choices,
+  expanded spell lists, granted-spell casting abilities and upcast schedules,
+  resource pools, selected self-effect modes, and class-specific attunement
+  limits without book-specific code. The same generic contract handles nested
+  proficiency grants, senses, mutually exclusive modes, delegated subclass
+  spell lists, and printed armor restrictions. Disabling a compendium book group removes
+  those records from hydration; stored fallback fields cannot turn a removed
+  rule grant into a manual choice.
 - **Rules API for other addons:** the addon `provide()`s the same rules api the panels
   consume (`hydrate` / `derive.*` / `list*` passthroughs), so another addon can
   declare a dependency on `dnd-sheets` and reuse the engine.

@@ -1,7 +1,7 @@
 {
   "id": "dnd-sheets",
   "name": "D&D Character Sheets",
-  "version": "0.8.0",
+  "version": "0.10.0",
   "apiVersion": 2,
   "hostVersion": ">=1.0.0",
   "capabilities": {

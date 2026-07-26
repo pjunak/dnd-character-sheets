@@ -3,7 +3,7 @@ import { registerActionMap } from './actions.shared.js';
 export const RESOURCE_ACTIONS = Object.freeze([
   'resourceAdd', 'resourceDel', 'resourceAdjust', 'resourceSet',
   'resourceUseAdjust', 'resourceUseReset', 'restOpen', 'restClose',
-  'restSpendHitDie', 'restApply',
+  'restSpendHitDie', 'restApply', 'featureToggle',
 ]);
 
 export function applyHpChange(sheet, delta, maxHp, num, clampHp) {
@@ -82,6 +82,27 @@ export function registerResourceActions(deps) {
         return sheet;
       });
     },
+    featureToggle(cid, key) {
+      mutate(cid, (sheet) => {
+        const computed = hydrate(sheet);
+        const activation = (computed && computed.activations || [])
+          .find((candidate) => candidate.key === key);
+        if (!activation || !activation.available) return sheet;
+        const active = { ...(sheet.activeFeatures || {}) };
+        if (active[key]) {
+          delete active[key];
+        } else {
+          if (activation.exclusiveGroup) {
+            for (const candidate of (computed && computed.activations) || []) {
+              if (candidate.exclusiveGroup === activation.exclusiveGroup) delete active[candidate.key];
+            }
+          }
+          active[key] = true;
+        }
+        sheet.activeFeatures = active;
+        return sheet;
+      });
+    },
     restOpen(cid) {
       uiState.set(cid, 'restOpen', true);
       host.ui.rerender();
@@ -128,7 +149,11 @@ export function registerResourceActions(deps) {
           for (const recharge of resource.recharge || []) if (triggers.includes(recharge.on)) regain(resource, recharge.amount);
         }
         sheet.resourceUses = uses;
-        if (long) { sheet.hp = maxHp > 0 ? maxHp : num(sheet.hp, 0); sheet.tempHp = 0; }
+        if (long) {
+          sheet.hp = maxHp > 0 ? maxHp : num(sheet.hp, 0);
+          sheet.tempHp = 0;
+          sheet.activeFeatures = {};
+        }
         return sheet;
       });
     },

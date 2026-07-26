@@ -155,7 +155,9 @@ export function makeBuilderPanel(ctx) {
 
   // Human label for a resolved choice value (skill / feature-pool / weapon / feat).
   function labelValue(ch, v, engine) {
-    if (ch.kind === 'skills' || ch.kind === 'expertise') return t('skill.' + v) || titleize(v);
+    if (ch.kind === 'skills' || ch.kind === 'expertise' || ch.kind === 'skillExpertise') {
+      return t('skill.' + v) || titleize(v);
+    }
     if (ch.kind === 'tools') return (engine.getItem('tool', v) || {}).name || titleize(v);
     if (ch.kind === 'proficiencies') {
       const [kind, id] = String(v).split(':', 2);
@@ -165,6 +167,8 @@ export function makeBuilderPanel(ctx) {
     const fr = engine.getFeature && engine.getFeature(v); if (fr && fr.name) return fr.name;
     if (ch.kind === 'weaponMastery') { const w = engine.getItem && engine.getItem('weapon', v); if (w) return w.name; }
     if (ch.kind === 'feat') { const f = engine.getItem && engine.getItem('feat', v); if (f) return f.name; }
+    if (ch.kind === 'savingThrows') return t('ability.' + v) || v;
+    if (ch.kind === 'weapons') return (engine.getItem('weapon', v) || {}).name || titleize(v);
     return titleize(v);
   }
 
@@ -185,7 +189,10 @@ export function makeBuilderPanel(ctx) {
     }
     const count = Math.max(1, num(ch.count, 1));
     const vals = [];
-    for (let i = 0; i < count; i++) { const v = fc[count > 1 ? ch.id + '#' + i : ch.id]; if (v && !vals.includes(v)) vals.push(v); }
+    for (let i = 0; i < count; i++) {
+      const v = fc[count > 1 ? ch.id + '#' + i : ch.id] || (i === 0 ? ch.default : '');
+      if (v && !vals.includes(v)) vals.push(v);
+    }
     return { text: vals.length ? vals.map((v) => labelValue(ch, v, engine)).join(', ') : null, done: vals.length >= count };
   }
 
@@ -414,16 +421,18 @@ export function makeBuilderPanel(ctx) {
     const count = Math.max(1, num(ch.count, 1));
     let options = null;
     let label = ch.prompt || titleize(ch.id);
-    if (ch.kind === 'skills' || ch.kind === 'expertise') {
-      const pool = (ch.kind === 'skills' && Array.isArray(ch.from) && ch.from.length) ? ch.from : SKILLS.map((sk) => sk.id);
+    if (ch.kind === 'skills' || ch.kind === 'expertise' || ch.kind === 'skillExpertise') {
+      const pool = Array.isArray(ch.from) && ch.from.length ? ch.from : SKILLS.map((sk) => sk.id);
       options = pool.map((id) => ({ value: id, label: t('skill.' + id) }));
-      label = ch.kind === 'skills' ? t('builder.skillProfs') : t('builder.expertise');
+      label = ch.prompt || (ch.kind === 'skills' ? t('builder.skillProfs') : t('builder.expertise'));
     } else if (ch.kind === 'tools') {
       options = (ch.from || []).map((id) => ({ value: id, label: (engine.getItem('tool', id) || {}).name || titleize(id) }));
       label = ch.prompt || t('builder.toolProfs');
     } else if (ch.kind === 'proficiencies') {
       options = (ch.from || []).map((value) => ({ value, label: labelValue(ch, value, engine) }));
       label = ch.prompt || t('builder.proficiencyChoice');
+    } else if (['languages', 'savingThrows', 'weapons', 'armor', 'resistances', 'immunities'].includes(ch.kind)) {
+      options = (ch.from || []).map((value) => ({ value, label: labelValue(ch, value, engine) }));
     } else if (Array.isArray(ch.from)) {
       // Values may be feature ids (option pools like Metamagic/maneuvers) — label
       // them by the feature's name rather than a titleized id when resolvable.
@@ -444,7 +453,10 @@ export function makeBuilderPanel(ctx) {
     // also how a level-up "swap" works: just edit the box). A value that duplicates
     // an earlier box (e.g. legacy stored data) renders empty, to be re-picked.
     const picks = [];
-    for (let i = 0; i < count; i++) picks.push(s.featureChoices[count > 1 ? ch.id + '#' + i : ch.id] || '');
+    for (let i = 0; i < count; i++) {
+      const key = count > 1 ? ch.id + '#' + i : ch.id;
+      picks.push(s.featureChoices[key] || (i === 0 ? ch.default : '') || '');
+    }
     const pickers = [];
     for (let i = 0; i < count; i++) {
       const key = count > 1 ? ch.id + '#' + i : ch.id;

@@ -43,6 +43,12 @@ export function makeUI(ctx) {
     .addon-dnd-sheets .dse-cards { display:flex; flex-direction:column; gap:var(--space-3); flex:0 1 17rem; min-width:14rem }
     .addon-dnd-sheets .dse-cols-main { flex:1 1 20rem; min-width:0 }
     @media (max-width:768px){ .addon-dnd-sheets .dse-cards { flex-basis:100% } }
+    .addon-dnd-sheets .dse-trait-row { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,2fr); gap:var(--space-2); padding:var(--space-1) 0; border-bottom:1px solid var(--border-subtle); font-size:var(--text-sm) }
+    .addon-dnd-sheets .dse-trait-label { color:var(--text-muted) }
+    .addon-dnd-sheets .dse-trait-value { color:var(--text-light); min-width:0 }
+    .addon-dnd-sheets .dse-mode-row { display:flex; align-items:center; gap:var(--space-2); padding:var(--space-1) 0; border-bottom:1px solid var(--border-subtle) }
+    .addon-dnd-sheets .dse-mode-name { flex:1; color:var(--text-light); font-size:var(--text-sm) }
+    .addon-dnd-sheets .dse-mode-state { color:var(--text-muted); font-size:var(--text-xs) }
     /* Compact vitals strip: two tall anchor tiles (the HP counter + the AC/shield
        tile) with the small stats stacked two-high in a column-flow grid, so the
        whole strip reads as ONE uniform-height band. Tiles hug their label/value
