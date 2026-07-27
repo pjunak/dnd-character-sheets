@@ -121,7 +121,8 @@ export function makeHeaderPanel(ctx) {
     const filled = (it, tag, clearAction) => {
       const tagHtml = tag ? `<span class="dse-slot-tag">${esc(tag)}</span>` : '';
       const nameHtml = statTip(`<span class="dse-slot-name">${esc(it.name || t('misc.unnamed'))}</span>`, itemLegend(engine, it), { align: 'r' });
-      const x = editable ? `<button class="inline-create-btn dse-slot-x" title="${esc(t('equip.clear'))}"${host.h.dataAction(host.action(clearAction), cid, it.id)}>✕</button>` : '';
+      const clearLabel = `${t('equip.clear')}: ${it.name || t('misc.unnamed')}`;
+      const x = editable ? `<button class="inline-create-btn dse-slot-x" title="${esc(clearLabel)}" aria-label="${esc(clearLabel)}"${host.h.dataAction(host.action(clearAction), cid, it.id)}>✕</button>` : '';
       return `<div class="dse-slot">${tagHtml}${nameHtml}${x}</div>`;
     };
     // An empty slot: a picker (editor + eligible items) else a placeholder.

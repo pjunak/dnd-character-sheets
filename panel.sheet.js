@@ -1,3 +1,5 @@
+import { resolveInventoryItem } from './equipment-model.js';
+
 // ═══════════════════════════════════════════════════════════════
 //  panel.sheet.js — the Combat tab.
 //
@@ -32,10 +34,14 @@ export function makeSheetPanel(ctx) {
 
   // Equipped/ready weapons from inventory (standalone, or engine with nothing
   // equipped). We can't compute to-hit without the engine, so show name + qty.
-  function readiedList(c, s) {
+  function readiedList(s, engine) {
     const readied = (s.inventory || []).filter((it) => {
       const loc = it.location || 'pack';
-      return loc === 'equipped' || loc === 'ready';
+      if (loc !== 'equipped' && loc !== 'ready') return false;
+      const resolved = resolveInventoryItem(engine, it);
+      if (resolved) return resolved.kind === 'weapon';
+      if (it.kind) return it.kind === 'weapon';
+      return !engine;
     });
     if (!readied.length) {
       return `<div style="color:var(--text-muted);font-size:var(--text-sm)">${esc(t('combat.noWeapons'))}</div>`;
@@ -104,8 +110,11 @@ export function makeSheetPanel(ctx) {
   // Standalone hand-managed tracker row (no engine to derive it).
   function trackerRow(c, r, edit) {
     const cur = num(r.current, 0), max = num(r.max, 0);
-    const minus = `<button class="inline-create-btn" title="${esc(t('tracker.minus'))}"${dataAction(host.action('resourceAdjust'), c.id, r.id, -1)}>−</button>`;
-    const plus = `<button class="inline-create-btn" title="${esc(t('tracker.plus'))}"${dataAction(host.action('resourceAdjust'), c.id, r.id, 1)}>＋</button>`;
+    const name = r.name || t('misc.unnamed');
+    const minusLabel = `${t('tracker.minus')}: ${name}`;
+    const plusLabel = `${t('tracker.plus')}: ${name}`;
+    const minus = `<button class="inline-create-btn" title="${esc(minusLabel)}" aria-label="${esc(minusLabel)}"${dataAction(host.action('resourceAdjust'), c.id, r.id, -1)}>−</button>`;
+    const plus = `<button class="inline-create-btn" title="${esc(plusLabel)}" aria-label="${esc(plusLabel)}"${dataAction(host.action('resourceAdjust'), c.id, r.id, 1)}>＋</button>`;
     const count = max > 0
       ? `<strong style="color:var(--text-parchment);font-variant-numeric:tabular-nums">${esc(String(cur))}<span style="color:var(--text-muted)"> / ${esc(String(max))}</span></strong>`
       : `<strong style="color:var(--text-parchment);font-variant-numeric:tabular-nums">${esc(String(cur))}</strong>`;
@@ -133,8 +142,9 @@ export function makeSheetPanel(ctx) {
     const count = `<strong style="color:var(--text-parchment);font-variant-numeric:tabular-nums">${esc(String(cur))}<span style="color:var(--text-muted)"> / ${esc(String(max))}</span></strong>`;
     const rech = rechargeLabel(r.recharge);
     const rechTag = rech ? `<span style="color:var(--text-muted);font-size:var(--text-xs);white-space:nowrap">${esc(rech)}</span>` : '';
+    const resourceName = r.name || key;
     const controls = editable
-      ? `<button class="inline-create-btn" title="${esc(t('tracker.minus'))}"${dataAction(host.action('resourceUseAdjust'), c.id, key, -1, max)}>−</button>${count}<button class="inline-create-btn" title="${esc(t('tracker.plus'))}"${dataAction(host.action('resourceUseAdjust'), c.id, key, 1, max)}>＋</button><button class="inline-create-btn" title="${esc(t('tracker.reset'))}"${dataAction(host.action('resourceUseReset'), c.id, key)}>↺</button>`
+      ? `<button class="inline-create-btn" title="${esc(t('tracker.minus'))}" aria-label="${esc(`${t('tracker.minus')}: ${resourceName}`)}"${dataAction(host.action('resourceUseAdjust'), c.id, key, -1, max)}>−</button>${count}<button class="inline-create-btn" title="${esc(t('tracker.plus'))}" aria-label="${esc(`${t('tracker.plus')}: ${resourceName}`)}"${dataAction(host.action('resourceUseAdjust'), c.id, key, 1, max)}>＋</button><button class="inline-create-btn" title="${esc(t('tracker.reset'))}" aria-label="${esc(`${t('tracker.reset')}: ${resourceName}`)}"${dataAction(host.action('resourceUseReset'), c.id, key)}>↺</button>`
       : count;
     return `<div style="display:flex;align-items:center;gap:var(--space-2);padding:var(--space-2);border-bottom:1px solid var(--border-subtle);flex-wrap:wrap">
       <span style="flex:1;min-width:8rem;color:var(--text-light);font-size:var(--text-sm)">${esc(r.name || key)}</span>
@@ -263,7 +273,7 @@ export function makeSheetPanel(ctx) {
   function panelSheet(c, s, edit, comp, engine) {
     const engineAttacks = attacksBlock(comp);   // '' when no comp.weapons
     const attacks = engineAttacks
-      || section(t('combat.title'), readiedList(c, s), { icon: '⚔️' });
+      || section(t('combat.title'), readiedList(s, engine), { icon: '⚔️' });
 
     // Ability cards stack down the left; the vital strip (shifted here from the
     // full-width top) leads the right column, above attacks · spells · trackers.

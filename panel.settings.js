@@ -48,7 +48,11 @@ export function makeSettingsPanel(ctx) {
     const provider = ctx.engine.providerState(s);
     let status = '';
     if (provider.status === 'active') {
-      status = `<p style="color:var(--color-success);font-size:var(--text-sm);margin:0">${esc(plural('rules.connected', engine.listClasses().length))}</p>`;
+      status = `<p style="color:var(--color-success);font-size:var(--text-sm);margin:0">${esc(
+        edit
+          ? plural('rules.connected', engine.listClasses().length)
+          : plural('rules.connectedReadOnly', engine.listClasses().length)
+      )}</p>`;
     } else if (provider.status === 'reconcile') {
       const message = provider.reason === 'edition'
         ? t('rules.reconcileEdition')
@@ -68,10 +72,24 @@ export function makeSettingsPanel(ctx) {
     } else {
       status = `<p style="color:var(--text-muted);font-size:var(--text-sm);margin:0">${esc(t('rules.disconnected'))}</p>`;
     }
+    const norm = value => String(value || '').trim().toLocaleLowerCase();
+    const coreClass = engine && c.title
+      ? engine.listClasses().find(record => norm(record.name) === norm(c.title))
+      : null;
+    const sheetClass = engine && s.className
+      ? (engine.getItem('class', s.className) || engine.getItemByName('class', s.className))
+      : null;
+    const identityWarning = coreClass && sheetClass && coreClass.id !== sheetClass.id
+      ? `<div class="codex-warnings">${esc(t('rules.coreClassMismatch', {
+          core: coreClass.name,
+          sheet: sheetClass.name,
+        }))}</div>`
+      : '';
 
     return `<div style="display:flex;flex-direction:column;gap:var(--space-4);max-width:44rem;padding-top:var(--space-3)">
       ${section(t('settings.layoutTitle'), layoutBody)}
       ${section(t('settings.dataTitle'), tools)}
+      ${identityWarning}
       ${status}
     </div>`;
   }

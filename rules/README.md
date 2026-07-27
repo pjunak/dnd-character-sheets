@@ -83,7 +83,10 @@ throwing, and the sheet is always returned. `derive.*` exposes granular helpers
 classes) uses the combined-caster-level table, with fraction rounding from the
 ruleset. Current `dnd55e-compendium` class records omit printed slot rows, so
 their real slot pools use the resolved ruleset table. Pact Magic remains a
-separate pool driven by `constants.pactMagic`.
+separate pool driven by `constants.pactMagic`. If provider content also emits
+a same-class generic resource with the Pact Magic slot identity, the engine
+keeps the derived pact pool and ignores that duplicate instead of rendering
+two trackers.
 
 **Multiclassing & HP:** the first entry in `classes[]` is the origin class. Its
 first character level gets the maximum of its hit die and later levels use the

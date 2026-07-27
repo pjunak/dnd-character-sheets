@@ -69,8 +69,9 @@ export function makeUI(ctx) {
     .addon-dnd-sheets .dse-eqh { display:flex; align-items:center; gap:var(--space-1); font-size:var(--text-xs); text-transform:uppercase; letter-spacing:.05em; color:var(--text-muted) }
     .addon-dnd-sheets .dse-eqh-cnt { margin-left:auto; color:var(--accent-gold); font-weight:600; font-variant-numeric:tabular-nums }
     .addon-dnd-sheets .dse-eqh-over { color:var(--color-danger) }
-    .addon-dnd-sheets .dse-eqrow { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:var(--space-1) }
-    .addon-dnd-sheets .dse-slot { background:var(--bg-raised); border:1px solid rgba(var(--accent-gold-rgb),.3); border-radius:var(--radius); padding:var(--space-1) var(--space-2); min-height:2.3rem; display:flex; align-items:center; gap:var(--space-1) }
+    .addon-dnd-sheets .dse-eqrow { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,10rem),1fr)); gap:var(--space-1) }
+    .addon-dnd-sheets .dse-slot { min-width:0; background:var(--bg-raised); border:1px solid rgba(var(--accent-gold-rgb),.3); border-radius:var(--radius); padding:var(--space-1) var(--space-2); min-height:2.3rem; display:flex; flex-wrap:wrap; align-items:center; gap:var(--space-1) }
+    .addon-dnd-sheets .dse-slot .codex-tip { flex:1; min-width:0 }
     .addon-dnd-sheets .dse-slot-empty { border-style:dashed; border-color:var(--border-subtle); background:transparent }
     .addon-dnd-sheets .dse-slot-tag { font-size:var(--text-xs); text-transform:uppercase; letter-spacing:.04em; color:var(--text-muted); flex:none }
     .addon-dnd-sheets .dse-slot-name { flex:1; min-width:0; font-size:var(--text-sm); color:var(--text-parchment); line-height:1.15; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
@@ -152,6 +153,8 @@ export function makeUI(ctx) {
     .addon-dnd-sheets .dse-builder-main { min-width:0; display:flex; flex-direction:column; gap:var(--space-4) }
     .addon-dnd-sheets .dse-build-rail { position:sticky; top:var(--space-3); overflow:hidden; background:linear-gradient(155deg,var(--bg-surface),var(--bg-raised)); border:1px solid rgba(var(--accent-gold-rgb),.32); border-radius:var(--radius-lg); box-shadow:var(--shadow-sm) }
     .addon-dnd-sheets .dse-build-progress-head { padding:var(--space-4); border-bottom:1px solid var(--border-subtle) }
+    .addon-dnd-sheets .dse-build-progress-head { cursor:pointer; list-style:none }
+    .addon-dnd-sheets .dse-build-progress-head::-webkit-details-marker { display:none }
     .addon-dnd-sheets .dse-build-progress-head p { margin:0 0 var(--space-1); color:var(--accent-gold); font-size:var(--text-xs); font-weight:700; letter-spacing:.1em; text-transform:uppercase }
     .addon-dnd-sheets .dse-build-progress-head h2 { margin:0 0 var(--space-3); color:var(--text-parchment); font-size:var(--text-xl); line-height:1.15 }
     .addon-dnd-sheets .dse-build-progress-head > strong { display:block; margin-top:var(--space-2); color:var(--text-light); font-size:var(--text-sm) }
@@ -172,6 +175,10 @@ export function makeUI(ctx) {
       .addon-dnd-sheets .dse-build-step:last-child { border-right:0 }
     }
     @media (max-width:768px){
+      .addon-dnd-sheets .dse-build-progress-head { padding:var(--space-3) }
+      .addon-dnd-sheets .dse-build-progress-head p,
+      .addon-dnd-sheets .dse-build-progress-head h2 { display:none }
+      .addon-dnd-sheets .dse-build-step.is-complete { display:none }
       .addon-dnd-sheets .dse-build-step { display:block; width:auto; min-width:0; border-right:0; border-bottom:1px solid var(--border-subtle) }
       .addon-dnd-sheets .dse-build-step:last-child { border-bottom:0 }
     }
@@ -405,8 +412,8 @@ export function makeUI(ctx) {
     return `<select class="edit-input" ${actionAttr}>${opts}</select>`;
   }
   function fieldRow(label, control) {
-    return `<div style="display:grid;grid-template-columns:8rem 1fr;gap:var(--space-2);align-items:center;padding:var(--space-1) 0">
-      <label class="edit-label" style="margin:0">${esc(label)}</label><div>${control}</div></div>`;
+    return `<label style="display:grid;grid-template-columns:8rem 1fr;gap:var(--space-2);align-items:center;padding:var(--space-1) 0">
+      <span class="edit-label" style="margin:0">${esc(label)}</span><span>${control}</span></label>`;
   }
   function choiceBlock(label, control, hint) {
     return `<div style="background:var(--bg-raised);border:1px solid var(--border-subtle);border-radius:var(--radius);padding:var(--space-2) var(--space-3)">

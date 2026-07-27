@@ -451,6 +451,11 @@
     "one": "Rulebook data connected — {n} class available. The Builder and auto-computed stats are active.",
     "other": "Rulebook data connected — {n} classes available. The Builder and auto-computed stats are active."
   },
+  "rules.connectedReadOnly": {
+    "one": "Rulebook data connected — calculated values from {n} class are shown. Log in to use the Builder.",
+    "other": "Rulebook data connected — calculated values from {n} classes are shown. Log in to use the Builder."
+  },
+  "rules.coreClassMismatch": "The main character profile says {core}, while this sheet uses {sheet}. Both values are preserved; update the main profile if that label is outdated.",
   "rules.disconnected": "No rulebook addon installed — the sheet is fully hand-fillable. Install a rulebook data addon (e.g. the D&D 5.5e Compendium) to unlock the Builder and auto-computed stats.",
   "rules.reconcileManual": "Values that were previously computed changed while this sheet was manual. Choose which source should remain authoritative; nothing is overwritten until you decide.",
   "rules.reconcileEdition": "This sheet was last computed with a different ruleset. Choose whether to keep the current manual values or recompute from the installed rulebook.",

@@ -125,17 +125,18 @@ export function makeBuilderPanel(ctx) {
         )).join('')}</div>` : ''}
       </section>`;
     }).join('');
-    return `<aside class="dse-build-rail" aria-label="${esc(t('builder.progress.title'))}">
-      <div class="dse-build-progress-head">
+    const open = !globalThis.matchMedia?.('(max-width: 768px)').matches;
+    return `<details class="dse-build-rail" aria-label="${esc(t('builder.progress.title'))}"${open ? ' open' : ''}>
+      <summary class="dse-build-progress-head">
         <p>${esc(t('builder.progress.eyebrow'))}</p>
         <h2>${esc(t('builder.progress.title'))}</h2>
         <div class="dse-build-meter" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percent}" aria-label="${esc(status)}">
           <span style="width:${percent}%"></span>
         </div>
         <strong>${esc(status)}</strong>
-      </div>
-      ${sections}
-    </aside>`;
+      </summary>
+      <div class="dse-build-steps">${sections}</div>
+    </details>`;
   }
 
   // Sub-tab strip: Character + one tab per (set) class. Switching is a plain action
@@ -400,9 +401,10 @@ export function makeBuilderPanel(ctx) {
       const lvlHint = cl.classId
         ? `<span style="color:var(--text-muted);font-size:var(--text-xs)">${esc(t('field.level'))} ${esc(String(num(cl.level, 1)))}${sub ? ' · ' + esc(sub) : ''}</span>`
         : '';
-      const removeBtn = (!ro && classes.length > 1) ? `<button class="inline-create-btn" title="${esc(t('action.remove'))}"${dataAction(host.action('builderRemoveClass'), c.id, idx)}>✕</button>` : '';
+      const classLabel = (rec && rec.name) || cl.classId || t('field.class');
+      const removeBtn = (!ro && classes.length > 1) ? `<button class="inline-create-btn" title="${esc(t('action.remove'))}" aria-label="${esc(`${t('action.remove')}: ${classLabel}`)}"${dataAction(host.action('builderRemoveClass'), c.id, idx)}>✕</button>` : '';
       return `<div style="display:flex;flex-wrap:wrap;gap:var(--space-2);align-items:center;padding:var(--space-1) 0;border-bottom:1px solid rgba(var(--gold-muted),.12)">
-        <div style="min-width:9rem">${selectBox(cl.classId, classOpts, dataOn('change', host.action('builderClassSet'), c.id, idx, '$value'), t('builder.choose'), ro)}</div>
+        <label style="min-width:9rem"><span class="sr-only">${esc(t('field.class'))}</span>${selectBox(cl.classId, classOpts, dataOn('change', host.action('builderClassSet'), c.id, idx, '$value'), t('builder.choose'), ro)}</label>
         ${lvlHint}
         ${removeBtn}
       </div>`;

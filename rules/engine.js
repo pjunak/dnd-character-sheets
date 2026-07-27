@@ -1050,6 +1050,11 @@ export function hydrate(decisions, api, ruleset) {
       for (const [res, source] of pools) {
         if (!res || !res.key) continue;
         if (num(res.minLevel, 1) > c.level) continue;
+        const resourceId = `${res.key} ${res.name || ''}`.toLowerCase();
+        const hasDerivedPactSlots = source.type === 'class' &&
+          ((sheet.spellcasting && sheet.spellcasting.perClass) || [])
+            .some((entry) => entry.classId === source.id && entry.pact);
+        if (hasDerivedPactSlots && /\bpact[- ]slots?\b/.test(resourceId)) continue;
         const max = resolveMax(res, c.level);
         if (max <= 0) continue;
         resources.push({
