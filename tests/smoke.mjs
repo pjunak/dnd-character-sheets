@@ -38,6 +38,15 @@ import { captureProviderState } from '../provider-state.js';
 
 const EN_CATALOG = JSON.parse(readFileSync(new URL('../locales/en.json', import.meta.url), 'utf8'));
 
+test('sheet: shared page composition uses host design-system classes and tokens', () => {
+  const entrySource = readFileSync(new URL('../entry.js', import.meta.url), 'utf8');
+  const printSource = readFileSync(new URL('../panel.print.js', import.meta.url), 'utf8');
+  assert.match(entrySource, /codex-stack codex-stack-flush/, 'sheet root uses the host stack');
+  assert.match(entrySource, /codex-reading-flow/, 'overview float containment is host-owned');
+  assert.match(printSource, /codex-code-input/, 'machine-readable import field uses host typography');
+  assert.doesNotMatch(printSource, /--font-mono,/, 'no local fallback bypasses the host token contract');
+});
+
 function mockLocalStorage(tab) {
   const storage = {
     getItem: (k) => (String(k).startsWith('dse-tab:') ? (tab || null) : null),

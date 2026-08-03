@@ -189,19 +189,14 @@ export function makeUI(ctx) {
        the whole-row click target discoverable; focus-visible draws a keyboard ring. */
     .addon-dnd-sheets .dse-spine-toggle { border-radius:var(--radius-sm); transition:background var(--dur-fast) var(--ease-out); }
     .addon-dnd-sheets .dse-spine-toggle:hover { background:rgba(var(--accent-gold-rgb),0.07); }
-    .addon-dnd-sheets .dse-spine-toggle:focus-visible { outline:2px solid rgba(var(--accent-gold-rgb),0.5); outline-offset:-2px; }`;
+    .addon-dnd-sheets .dse-spine-toggle:focus-visible { outline:2px solid rgba(var(--accent-gold-rgb),0.5); outline-offset:-2px; }
+    .addon-dnd-sheets .dse-dot { padding:0; color:inherit; background:none; border:0; line-height:0; cursor:pointer }`;
   const styleTag = `<style>${STYLE}</style>`;
 
   // ── Hoisted style strings (M8) — tokens only, reused verbatim. ────
   const S = {
     // Layout
     column: 'display:flex;flex-direction:column;gap:var(--space-4)',
-    // Titled section
-    sectionHead: 'display:flex;align-items:center;gap:var(--space-2);margin-bottom:var(--space-3);padding-bottom:var(--space-1);border-bottom:1px solid var(--border-subtle)',
-    sectionTick: 'width:3px;height:.9rem;border-radius:var(--radius-pill);background:var(--accent-gold);flex:none',
-    sectionTitle: 'font-size:var(--text-sm);font-weight:600;color:var(--text-light);letter-spacing:.04em;text-transform:uppercase',
-    // Boxed surface
-    card: 'background:var(--bg-surface);border:1px solid var(--border-subtle);border-radius:var(--radius-lg);padding:var(--space-3) var(--space-4)',
     // Ability tile
     abilTile: 'background:var(--bg-raised);border:1px solid var(--border-subtle);border-radius:var(--radius);padding:var(--space-2) var(--space-1);text-align:center',
     abilAbbr: 'font-size:var(--text-xs);color:var(--text-muted);letter-spacing:.08em;font-weight:600',
@@ -213,8 +208,6 @@ export function makeUI(ctx) {
     profTotal: 'color:var(--text-parchment);font-weight:600;font-variant-numeric:tabular-nums',
     abilityTag: 'color:var(--text-muted);font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.03em',
     // Misc labels
-    sectionLabel: 'font-size:var(--text-xs);color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:var(--space-2)',
-    subLabel: 'color:var(--text-muted);font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.04em;margin-bottom:var(--space-1)',
     // Legacy compact tiles (Builder summary still uses these)
     statBoxLabel: 'font-size:var(--text-xs);color:var(--text-muted)',
     miniStat: 'background:var(--bg-surface);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);padding:var(--space-1) var(--space-2);text-align:center;min-width:3.5rem',
@@ -226,20 +219,20 @@ export function makeUI(ctx) {
   // HTML (a count, an add button…). `card` is a bordered surface for nesting.
   function section(title, body, opts) {
     opts = opts || {};
-    const right = opts.right ? `<div style="margin-left:auto;display:flex;align-items:center;gap:var(--space-2)">${opts.right}</div>` : '';
-    const icon = opts.icon ? `<span style="font-size:var(--text-sm)">${esc(opts.icon)}</span>` : `<span style="${S.sectionTick}"></span>`;
-    return `<section style="display:flex;flex-direction:column">
-      <div style="${S.sectionHead}">${icon}<span style="${S.sectionTitle}">${esc(title)}</span>${right}</div>
+    const right = opts.right ? `<div class="codex-section-actions">${opts.right}</div>` : '';
+    const icon = opts.icon ? `<span class="codex-section-icon">${esc(opts.icon)}</span>` : '<span class="codex-section-mark"></span>';
+    return `<section class="codex-section-block">
+      <div class="codex-section-rule">${icon}<span class="codex-section-title">${esc(title)}</span>${right}</div>
       <div>${body}</div></section>`;
   }
   function card(body, opts) {
     opts = opts || {};
-    const extra = opts.danger ? ';border-color:var(--color-danger-bd)' : opts.accent ? ';border-color:rgba(var(--accent-gold-rgb),.35)' : '';
-    return `<div style="${S.card}${extra}${opts.style ? ';' + opts.style : ''}">${body}</div>`;
+    const variant = opts.danger ? ' codex-surface-danger' : opts.accent ? ' codex-surface-accent' : '';
+    return `<div class="codex-surface${variant}"${opts.style ? ` style="${opts.style}"` : ''}>${body}</div>`;
   }
 
-  function sectionLabel(text) { return `<div style="${S.sectionLabel}">${esc(text)}</div>`; }
-  function subLabel(text) { return `<div style="${S.subLabel}">${esc(text)}</div>`; }
+  function sectionLabel(text) { return `<div class="codex-kicker">${esc(text)}</div>`; }
+  function subLabel(text) { return `<div class="codex-subkicker">${esc(text)}</div>`; }
 
   // ── The backpack/satchel icon — stroke-drawn like the host stat glyphs
   //    (the 🎒 emoji renders as a garish school backpack on most platforms).
@@ -294,7 +287,7 @@ export function makeUI(ctx) {
     const svg = `<svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" style="display:block">${shape}</svg>`;
     const title = state === 'exp' ? t('misc.expertise') : state === 'prof' ? t('misc.proficient') : t('misc.notProficient');
     if (dotAttr) {
-      return `<button class="dse-dot" title="${esc(title)}" aria-pressed="${state !== 'none' ? 'true' : 'false'}" style="background:none;border:none;cursor:pointer;padding:0;line-height:0"${dotAttr}>${svg}</button>`;
+      return `<button class="dse-dot" title="${esc(title)}" aria-pressed="${state !== 'none' ? 'true' : 'false'}"${dotAttr}>${svg}</button>`;
     }
     return `<span title="${esc(title)}" style="line-height:0">${svg}</span>`;
   }

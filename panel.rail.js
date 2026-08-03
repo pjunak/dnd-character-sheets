@@ -44,7 +44,7 @@ export function makeRail(ctx) {
   function saveShield(prof, attr, title) {
     const path = `<path d="M12 2.4 L19.3 5.3 V11 C19.3 15.8 16 19.6 12 21.5 C8 19.6 4.7 15.8 4.7 11 V5.3 Z" style="fill:${prof ? 'var(--accent-gold)' : 'none'};stroke:${prof ? 'var(--accent-gold)' : 'var(--text-muted)'};stroke-width:1.7;stroke-linejoin:round"/>`;
     const svg = `<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" style="display:block">${path}</svg>`;
-    if (attr) return `<button class="dse-dot" title="${esc(title)}" aria-pressed="${prof ? 'true' : 'false'}" style="background:none;border:none;cursor:pointer;padding:0;line-height:0"${attr}>${svg}</button>`;
+    if (attr) return `<button class="dse-dot" title="${esc(title)}" aria-pressed="${prof ? 'true' : 'false'}"${attr}>${svg}</button>`;
     return `<span title="${esc(title)}" style="line-height:0">${svg}</span>`;
   }
 

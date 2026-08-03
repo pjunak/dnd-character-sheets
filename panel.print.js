@@ -24,7 +24,7 @@ export function makePrintPanel(ctx) {
       <input id="dse-import-file-${esc(cid)}" class="edit-input" type="file" accept="application/json,.json">
     </label>
     <div style="text-align:center;color:var(--text-muted);font-size:var(--text-xs)">${esc(t('data.importOrPaste'))}</div>
-    <textarea id="dse-import-${esc(cid)}" class="edit-input" spellcheck="false" style="width:100%;min-height:9rem;font-family:var(--font-mono,monospace);font-size:var(--text-xs)" placeholder="${esc(t('data.importPlaceholder'))}"></textarea>`;
+    <textarea id="dse-import-${esc(cid)}" class="edit-input codex-code-input" spellcheck="false" style="min-height:9rem" placeholder="${esc(t('data.importPlaceholder'))}"></textarea>`;
     const preview = draft?.ok && draft.status !== 'completed'
       ? `<div style="display:flex;flex-direction:column;gap:var(--space-2)">
           <strong style="color:var(--text-parchment)">${esc(t('data.importPreviewTitle'))}</strong>

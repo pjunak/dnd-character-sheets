@@ -214,7 +214,7 @@ export default function register(host) {
       const addItemOpen = !!(editable && addItemModal && ctx.uiState.get(c.id, 'addItem'));
       const addItemOverlay = addItemOpen ? addItemModal(c, s, engine) : '';
 
-      return `<div class="addon-dnd-sheets" style="display:flex;flex-direction:column">${ctx.ui.styleTag}${tabBar}
+      return `<div class="addon-dnd-sheets codex-stack codex-stack-flush">${ctx.ui.styleTag}${tabBar}
         <div role="tabpanel" id="${esc(pid)}" aria-labelledby="${esc(tabBtnId(c.id, active))}" tabindex="0">${vitals}${panel}</div>${restOverlay}${swapOverlay}${spellMgrOverlay}${importOverlay}${addItemOverlay}</div>`;
     },
   });
@@ -226,8 +226,8 @@ export default function register(host) {
   // portrait cleanly (magazine-style) without bleeding into the next tab.
   function lorePanel(html) {
     const lore = (typeof html === 'string' && html.trim()) ? html
-      : `<div style="color:var(--text-muted);font-size:var(--text-sm)">${esc(t('sheet.notesEmpty'))}</div>`;
-    return `<div style="display:flow-root">${lore}</div>`;
+      : `<div class="codex-muted">${esc(t('sheet.notesEmpty'))}</div>`;
+    return `<div class="codex-reading-flow">${lore}</div>`;
   }
 
 
