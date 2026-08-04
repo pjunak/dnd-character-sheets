@@ -1471,7 +1471,7 @@ test('sheets: toolbar gone from the sheet body — Print/Export ride the ⚙ tab
   } finally { clearLocalStorage(); }
 });
 
-test('sheets: currency renders as ONE line pinned under the whole Backpack split', () => {
+test('sheets: named currency counters span the row below the Backpack split', () => {
   mockLocalStorage('stats');
   try {
     const { rec } = dryRun();
@@ -1480,7 +1480,9 @@ test('sheets: currency renders as ONE line pinned under the whole Backpack split
     const split = body.indexOf('dse-bp-split');
     const coins = body.indexOf('dse-bp-coins');
     assert.ok(split >= 0 && coins > split, 'the coin line sits below the two-column split');
-    assert.match(body, /dse-coin-lbl">GP<\/span>/, 'coins are inline label+value pairs');
+    assert.match(body, /dse-coin-lbl">Copper<\/span>/, 'coin labels use full names');
+    assert.match(body, /dse-coin-lbl">Gold<\/span>/, 'gold uses its full coin name');
+    assert.doesNotMatch(body, /🪙 Currency/, 'the redundant currency heading is absent');
   } finally { clearLocalStorage(); }
 });
 

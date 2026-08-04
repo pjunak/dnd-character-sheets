@@ -104,11 +104,11 @@ export function makeBackpackPanel(ctx) {
     const cells = COINS.map((coin) => {
       const v = num(s.currency[coin], 0);
       const inner = edit
-        ? numField(dataOn('change', host.action('currencySet'), c.id, coin, '$value'), v, { min: 0, ariaLabel: t('coin.' + coin), width: '3.6rem' })
+        ? numField(dataOn('change', host.action('currencySet'), c.id, coin, '$value'), v, { min: 0, ariaLabel: t('coin.' + coin), width: '3rem' })
         : `<span style="color:var(--text-parchment);font-weight:600;font-variant-numeric:tabular-nums">${esc(String(v))}</span>`;
       return `<span class="dse-coin"><span class="dse-coin-lbl">${esc(t('coin.' + coin))}</span>${inner}</span>`;
     }).join('');
-    return `<div class="dse-bp-coins"><span class="dse-bp-lbl" style="margin:0">🪙 ${esc(t('backpack.currency'))}</span>${cells}</div>`;
+    return `<div class="dse-bp-coins">${cells}</div>`;
   }
 
   return { panelBackpack };

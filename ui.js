@@ -101,13 +101,14 @@ export function makeUI(ctx) {
     }
     .addon-dnd-sheets .dse-bp-lbl { font-size:var(--text-xs); text-transform:uppercase; letter-spacing:.05em; color:var(--text-muted); margin-bottom:var(--space-1) }
     .addon-dnd-sheets .dse-bp-cnt { opacity:.65 }
-    /* Currency: ONE inline line pinned under the whole split (label · coin
-       pairs, cp→pp ascending). margin-top:auto sinks it to the column's
-       bottom — level with the rail's last ability card when the backpack
-       stretches (panel.overview.js). flex-wrap is the overflow fallback. */
-    .addon-dnd-sheets .dse-bp-coins { display:flex; align-items:center; gap:var(--space-3); flex-wrap:wrap; border-top:1px solid var(--border-subtle); padding-top:var(--space-2); margin-top:auto }
-    .addon-dnd-sheets .dse-coin { display:inline-flex; align-items:center; gap:var(--space-1) }
+    /* Currency: five equal coin cells pinned under the whole split, cp→pp
+       ascending. margin-top:auto sinks them to the column's bottom — level
+       with the rail's last ability card when the backpack stretches
+       (panel.overview.js). Narrow screens let the cells wrap into fewer rows. */
+    .addon-dnd-sheets .dse-bp-coins { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:var(--space-2); border-top:1px solid var(--border-subtle); padding-top:var(--space-2); margin-top:auto }
+    .addon-dnd-sheets .dse-coin { min-width:0; display:flex; flex-direction:column; align-items:center; gap:var(--space-1); text-align:center }
     .addon-dnd-sheets .dse-coin-lbl { font-size:var(--text-xs); color:var(--accent-gold); font-weight:600 }
+    @media (max-width:768px){ .addon-dnd-sheets .dse-bp-coins { grid-template-columns:repeat(auto-fit,minmax(5rem,1fr)) } }
     /* Add-item wizard: a wide panel with a browse column + a batch-tray rail. */
     .addon-dnd-sheets .dse-aiw-panel { width:min(94vw,640px); max-width:none }
     .addon-dnd-sheets .dse-aiw { display:grid; grid-template-columns:1fr 200px; gap:var(--space-3) }
