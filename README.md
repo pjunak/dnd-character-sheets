@@ -113,6 +113,19 @@ rules data are intentionally absent from this repository.
   source of truth and partial translations fall back per key through the host's
   per-user locale rules. The current package ships English.
 
+## Upgrade from the built-in rules engine
+
+For an existing installation, install `dnd-engine` first, then update the
+rules-data addon, and update `dnd-sheets` last. The official compendium keeps a
+temporary legacy publication during this migration, so an older sheet release
+continues to automate while the new engine is being introduced. Once this
+sheet version is active, it uses only the host-selected `dnd5e.rules-engine`
+service and never names the compendium or engine addon.
+
+If no compatible engine is selected, sheets remain hand-fillable and retain
+their stored/materialized values. Installing a compatible engine later enables
+the Builder without migrating the `dnd-sheets` character namespace.
+
 ## Develop
 
 No build step (browser ES modules). From a sibling checkout of the host:

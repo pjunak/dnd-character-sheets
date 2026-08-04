@@ -40,33 +40,37 @@ const builtins = Object.freeze([
 ]);
 
 function inspectHandle(handle) {
-  const api = handle?.api;
-  const provider = handle?.provider || {};
-  const permissions = new Set(Array.isArray(provider.permissions) ? provider.permissions : []);
-  if (!api || api.apiVersion !== RENDERER_CONTRACT_VERSION
-      || typeof api.descriptor !== 'function' || typeof api.render !== 'function') return null;
-  if (REQUIRED_PERMISSIONS.some(permission => !permissions.has(permission))) return null;
-  let descriptor;
-  try { descriptor = api.descriptor(); } catch (_) { return null; }
-  if (!descriptor || !ID_RE.test(String(descriptor.id || ''))
-      || Number(descriptor.sheetSchemaVersion) !== 1) return null;
-  const identity = `${provider.addonId}:${descriptor.id}`;
-  if (identity.length > 128) return null;
-  return Object.freeze({
-    identity,
-    id: String(descriptor.id),
-    label: String(descriptor.label || descriptor.id).slice(0, 120),
-    description: String(descriptor.description || '').slice(0, 300),
-    owner: String(provider.addonName || provider.addonId || '').slice(0, 120),
-    provider: Object.freeze({
-      addonId: String(provider.addonId || ''),
-      addonVersion: String(provider.addonVersion || ''),
-      contractVersion: String(provider.contractVersion || ''),
-    }),
-    builtin: false,
-    baseLayout: 'compact',
-    api,
-  });
+  try {
+    const api = handle?.api;
+    const provider = handle?.provider || {};
+    const permissions = new Set(Array.isArray(provider.permissions) ? provider.permissions : []);
+    if (!api || api.apiVersion !== RENDERER_CONTRACT_VERSION
+        || typeof api.descriptor !== 'function' || typeof api.render !== 'function') return null;
+    if (REQUIRED_PERMISSIONS.some(permission => !permissions.has(permission))) return null;
+    const descriptor = api.descriptor();
+    const id = String(descriptor?.id || '');
+    if (!descriptor || !ID_RE.test(id) || Number(descriptor.sheetSchemaVersion) !== 1) return null;
+    const providerId = String(provider.addonId || '');
+    const identity = `${providerId}:${id}`;
+    if (!providerId || identity.length > 128) return null;
+    return Object.freeze({
+      identity,
+      id,
+      label: String(descriptor.label || id).slice(0, 120),
+      description: String(descriptor.description || '').slice(0, 300),
+      owner: String(provider.addonName || providerId).slice(0, 120),
+      provider: Object.freeze({
+        addonId: providerId,
+        addonVersion: String(provider.addonVersion || ''),
+        contractVersion: String(provider.contractVersion || ''),
+      }),
+      builtin: false,
+      baseLayout: 'compact',
+      api,
+    });
+  } catch (_) {
+    return null;
+  }
 }
 
 export function createRendererRegistry(host, uiState) {
@@ -117,9 +121,9 @@ export function createRendererRegistry(host, uiState) {
       if (renderer.builtin) return defaultHtml;
       try {
         const input = freezeTree(clone({
+          ...payload,
           sheetSchemaVersion: 1,
           surface: String(surface || ''),
-          ...payload,
           defaultHtml,
         }));
         const html = renderer.api.render(input);

@@ -88,5 +88,11 @@ sheet renders Compact/default HTML and remains usable. The user's preferred
 identity is retained so it resumes automatically after a temporary disable,
 update, or failure is fixed.
 
+Descriptor invocation and property reads are part of that isolation boundary;
+a getter that throws cannot prevent another renderer from being discovered.
+The sheet also overwrites invariant payload fields after copying caller data,
+so `sheetSchemaVersion`, `surface`, and `defaultHtml` always describe the
+actual render operation.
+
 Tests should exercise registration with the host's published addon harness and
 should verify rendering over sparse, standalone, and engine-computed payloads.

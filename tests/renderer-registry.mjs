@@ -69,6 +69,26 @@ test('missing or failing renderer falls back to Compact without erasing preferen
   assert.equal(local.value('dse-ui:renderer:hero'), 'community-sheets:ink');
 });
 
+test('throwing renderer descriptor properties are isolated per provider', () => {
+  const malformed = handle('malformed-style', {
+    api: {
+      descriptor: () => ({
+        id: 'ink',
+        sheetSchemaVersion: 1,
+        get label() { throw new Error('bad label'); },
+      }),
+    },
+  });
+  const healthy = handle('healthy-style');
+  const registry = createRendererRegistry(
+    { listServices: () => [malformed, healthy] },
+    createUiState(storage()),
+  );
+  assert.doesNotThrow(() => registry.list());
+  assert.ok(registry.list().some(renderer => renderer.identity === 'healthy-style:ink'));
+  assert.ok(!registry.list().some(renderer => renderer.identity === 'malformed-style:ink'));
+});
+
 test('renderer providers must hold the privileges delegated through the sheet', () => {
   const denied = handle('unprivileged-style', { provider: { permissions: Object.freeze([]) } });
   const registry = createRendererRegistry({ listServices: () => [denied] }, createUiState(storage()));
