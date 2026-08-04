@@ -1,9 +1,9 @@
 {
   "id": "dnd-sheets",
   "name": "D&D Character Sheets",
-  "version": "0.11.1",
+  "version": "0.12.0",
   "apiVersion": 2,
-  "hostVersion": ">=1.0.0",
+  "hostVersion": ">=1.2.0",
   "capabilities": {
     "required": [
       "lifecycle.dispose",
@@ -20,18 +20,30 @@
     "data:read:characters",
     "data:write:characters.addonData"
   ],
-  "optionalDependencies": {
-    "dnd55e-compendium": ">=0.4.0",
-    "dnd5e-compendium": ">=0.1.0"
+  "services": {
+    "consumes": [
+      {
+        "contract": "dnd5e.rules-engine",
+        "range": "^1.0.0",
+        "cardinality": "one",
+        "required": false
+      },
+      {
+        "contract": "dnd-sheets.renderer",
+        "range": "^1.0.0",
+        "cardinality": "many",
+        "required": false
+      }
+    ]
   },
   "tests": {
     "client": [
       "tests/smoke.mjs",
-      "tests/rules.mjs",
+      "tests/renderer-registry.mjs",
       "tests/builder-progress.mjs",
       "tests/sheet-transfer.mjs",
       "tests/provider-state.mjs"
     ]
   },
-  "summary": "A fully hand-fillable D&D character sheet with a built-in rules engine on every character page; auto-fills from rulebook data addons (e.g. the D&D 5.5e Compendium) when installed, and provides the rules API for other addons."
+  "summary": "Hand-fillable D&D character sheets with per-character renderer selection; discovers compatible rules engines and renderer addons through versioned service contracts."
 }

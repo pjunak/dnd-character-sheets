@@ -23,7 +23,7 @@
 import { equipmentModel } from './equipment-model.js';
 
 export function makeUI(ctx) {
-  const { host, t, num, signed, compendiumHref, titleize, firstPara } = ctx;
+  const { host, t, num, signed, referenceHref, titleize, firstPara } = ctx;
   const { esc } = host.h;
 
   // ── Scoped stylesheet (tokens only) ──────────────────────────────
@@ -358,7 +358,7 @@ export function makeUI(ctx) {
       + `<span class="codex-pop" role="tooltip"><span class="codex-pop-title">${esc(legend.title || '')}</span>${desc}${formula}${terms}${total}</span></span>`;
   }
 
-  // ── A record name that (when resolvable) links to its compendium detail page
+  // ── A record name that (when resolvable) links to its provider-owned detail page
   //    AND carries a hover legend — the shared "click-to-go + hover" primitive
   // Gates on `id`: with no id the name stays plain text (no dead link),
   //    mirroring the Builder log. `legend` is a statTip legend (or null → link
@@ -366,7 +366,8 @@ export function makeUI(ctx) {
   function entityRef(kind, id, name, legend, opts) {
     opts = opts || {};
     const label = esc(String(name == null ? '' : name));
-    const inner = id ? `<a href="${esc(compendiumHref(kind, id))}">${label}</a>` : label;
+    const href = id ? referenceHref(kind, id) : '';
+    const inner = href ? `<a href="${esc(href)}">${label}</a>` : label;
     return statTip(inner, legend || null, { underline: !!legend, ...opts });
   }
 

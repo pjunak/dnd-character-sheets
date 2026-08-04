@@ -8,16 +8,14 @@
 //  always wins). Also owns `mutate` / `builderMutate` (persist + re-render
 //  through patchAddonData → this NS only).
 //
-//  The rules ENGINE is built in (rules/engine.js + rules/api.js); what's
-//  optional is the CONTENT: the
-//  api activates only while a book data addon (dnd55e-compendium) is
-//  installed, and the sheet stays fully hand-fillable without it.
+//  A compatible rules engine is discovered through the generic host service
+//  registry. Without one, or without its rules-data provider, the sheet stays
+//  fully hand-fillable from its durable materialized fields.
 //
 //  `makeEngine(ctx)` binds host + the shared helpers/constants; every function is
 //  pure-ish (no module-level state) except the two mutators.
 // ═══════════════════════════════════════════════════════════════
 
-import { makeRulesApi } from './rules/api.js';
 import {
   captureProviderState,
   resolveProviderState,
@@ -25,10 +23,15 @@ import {
 
 export function makeEngine(ctx) {
   const { host, NS, ABILITIES, SKILLS, num, abilityMod, sheetOf } = ctx;
+  const engineIdentities = new WeakMap();
+
+  const identityFor = engine => engineIdentities.get(engine) || {
+    ...(engine?.getContextIdentity?.() || {}),
+  };
 
   /** Normalize a stored sheet into the Builder's working model, deriving the
    *  rich shape from the flat fields on first use (MC-1 migration). `engine` is
-   *  used to resolve a free-text className → a compendium class id. Returns
+   *  used to resolve a free-text className → a rules-data class id. Returns
    *  { classes, baseStats } — does NOT mutate; the actions persist edits. */
   const builderModel = (s, engine) => {
     const baseStats = (s.baseStats && Object.keys(s.baseStats).length)
@@ -49,8 +52,8 @@ export function makeEngine(ctx) {
   // Rogue 10) declared in the class's `progression` (levels whose features
   // include an "Ability Score Improvement"). Union with the base so extras are
   // ADDED without dropping anything.
-  const asiLevelsFor = (rec) => {
-    const set = new Set(rulesApi.getRuleset().constants.asi.baseLevels);
+  const asiLevelsFor = (rec, engine) => {
+    const set = new Set(engine.getRuleset().constants.asi.baseLevels);
     for (const p of (Array.isArray(rec && rec.progression) ? rec.progression : []))
       if ((p.features || []).some((f) => /ability score improvement/i.test(String(f)))) { const n = num(p.level); if (n > 0) set.add(n); }
     return [...set].sort((a, b) => a - b);
@@ -82,7 +85,7 @@ export function makeEngine(ctx) {
     const out = [];
     // A ruleset without the weapon-mastery subsystem drops those
     // descriptors — the engine zeroes the slots too, this keeps the picker away.
-    const noMastery = rulesApi.getRuleset().capabilities.weaponMastery === false;
+    const noMastery = engine.getRuleset().capabilities.weaponMastery === false;
     for (const [classIndex, cl] of classes.entries()) {
       const rec = cl.classId ? engine.getItem('class', cl.classId) : null;
       if (!rec) continue;
@@ -147,7 +150,7 @@ export function makeEngine(ctx) {
           }
         }
       }
-      for (const lvl of asiLevelsFor(rec)) if (lvl <= clvl) out.push({ id: 'asi:' + cl.classId + ':' + lvl, kind: 'asiMode', classId: cl.classId, level: lvl, source: { type: 'class', id: cl.classId, level: lvl } });
+      for (const lvl of asiLevelsFor(rec, engine)) if (lvl <= clvl) out.push({ id: 'asi:' + cl.classId + ':' + lvl, kind: 'asiMode', classId: cl.classId, level: lvl, source: { type: 'class', id: cl.classId, level: lvl } });
     }
     // Dedupe by descriptor id (keep-first). Class records declare the L1 skills
     // choice TWICE — canonically in startingProficiencies.skills (pushed first, WITH
@@ -348,9 +351,8 @@ export function makeEngine(ctx) {
   const materializeInto = (s, engine) => {
     const r = safeHydrate(engine, decisionsOf(s, engine));
     if (!r || !r.sheet) return;
-    // Stamp which edition's rules computed this build; the provider
-    // selection key for campaigns with a non-2024 compendium (blank() seeds
-    // '2024' for blobs that predate providers shipping a ruleset record).
+    // Stamp which edition's rules computed this build for legacy display and
+    // migration; full engine/data/ruleset identity is captured below.
     if (engine.getRuleset) { const ed = engine.getRuleset().edition; if (ed) s.ruleset = ed; }
     const cs = r.sheet, d = cs.derived || {};
     const m = builderModel(s, engine);
@@ -427,50 +429,41 @@ export function makeEngine(ctx) {
     }
     for (const g of (cs.spellcasting && cs.spellcasting.granted) || []) addSnap(g.ref, nice((g.source && (g.source.id || g.source.type)) || ''));
     s.spells = (Array.isArray(s.spells) ? s.spells : []).filter((sp) => sp && sp.origin !== 'snapshot').concat(snap);
-    captureProviderState(
-      s,
-      engine.getRuleset ? engine.getRuleset().edition : s.ruleset,
-    );
+    captureProviderState(s, identityFor(engine));
   };
 
-  // ── The rules api — the built-in engine bound to live book data ──
-  // The engine always ships with this addon now; what's optional is CONTENT.
-  // `_probeData()` soft-probes the known data providers IN ORDER (each a
-  // manifest `optionalDependencies` entry: the host permits host.use() for it
-  // and load-orders it before us WHEN present, but never blocks us when it's
-  // absent — then use() throws → skip → standalone). The probe is duck-typed
-  // (`apiVersion >= 1`), so ANY addon providing the compendium's api shape
-  // works; the first valid provider wins (one edition per campaign;
-  // its `ruleset` record dictates the system rules; the character's stored
-  // `ruleset` tag records which edition built it, and a mismatch surfaces as a
-  // hydrate warning in safeHydrate). `getRules()` returns the api only while
-  // book data is actually present, so every engine-mode branch (Builder tab,
-  // computed vitals, the spellbook engine path) lights up exactly when there
-  // is content to compute from, and the sheet degrades to the hand-filled
-  // standalone paths otherwise. The probe is lazy, per render,
-  // try/caught — installing/removing a book mid-session never breaks the sheet.
-  const DATA_ADDONS = ['dnd55e-compendium', 'dnd5e-compendium'];   // 2024, 2014 (future repo)
-  const _probeProvider = () => {
-    for (const id of DATA_ADDONS) {
-      try {
-        const d = host.use && host.use(id);
-        if (d && d.apiVersion >= 1) return { id, data: d };
-      } catch (_) { /* not installed / not declared — try the next candidate */ }
+  // ── Replaceable rules engine service ──────────────────────────
+  // Resolve lazily on every render/action. The host owns provider selection,
+  // lifecycle ordering, and reloads this addon when the selected engine or its
+  // rules-data provider changes.
+  const _probeEngine = () => {
+    try {
+      const handle = host.useService?.('dnd5e.rules-engine');
+      const engine = handle?.api;
+      if (!engine || engine.apiVersion !== 1 || typeof engine.hydrate !== 'function') return null;
+      const availability = engine.getAvailability?.();
+      if (!availability?.available) return null;
+      const identity = {
+        engineAddonId: String(handle.provider?.addonId || ''),
+        engineAddonVersion: String(handle.provider?.addonVersion || ''),
+        engineContractVersion: String(handle.provider?.contractVersion || ''),
+        ...(engine.getContextIdentity?.() || {}),
+      };
+      engineIdentities.set(engine, identity);
+      return { engine, identity };
+    } catch (_) {
+      return null;
     }
-    return null;
   };
-  const _probeData = () => _probeProvider()?.data || null;
-  const rulesApi = makeRulesApi(_probeData);
   const providerState = (sheet) => {
-    const provider = _probeProvider();
+    const provider = _probeEngine();
     if (!provider) return { status: 'unavailable', engine: null };
-    const edition = rulesApi.getRuleset().edition;
-    const state = resolveProviderState(sheet, edition);
+    const state = resolveProviderState(sheet, provider.identity);
     return {
       ...state,
-      providerId: provider.id,
-      edition,
-      engine: state.status === 'active' ? rulesApi : null,
+      identity: provider.identity,
+      edition: provider.identity.edition,
+      engine: state.status === 'active' ? provider.engine : null,
     };
   };
   const getRules = sheet => providerState(sheet).engine;
@@ -563,7 +556,7 @@ export function makeEngine(ctx) {
       const out = fn(s) || s;
       const state = providerState(out);
       if (state.status === 'active' && !out.rulesProvider) {
-        captureProviderState(out, state.edition);
+        captureProviderState(out, state.identity);
       }
       return out;
     });
@@ -591,11 +584,11 @@ export function makeEngine(ctx) {
         sheet.rulesMode = 'manual';
         return sheet;
       }
-      const provider = _probeProvider();
+      const provider = _probeEngine();
       if (!provider) return sheet;
       sheet.rulesMode = 'auto';
       sheet.rulesProvider = null;
-      materializeInto(sheet, rulesApi);
+      materializeInto(sheet, provider.engine);
       return sheet;
     });
   };
@@ -604,14 +597,14 @@ export function makeEngine(ctx) {
     const copy = JSON.parse(JSON.stringify(sheet));
     const state = providerState(copy);
     if (state.status === 'active' && !copy.rulesProvider) {
-      captureProviderState(copy, state.edition);
+      captureProviderState(copy, state.identity);
     }
     return copy;
   };
 
   return {
     builderModel, collectChoices, collectCreationChoices, resolveChoices, reconcile, decisionsOf,
-    safeHydrate, materializeInto, getRules, rulesApi, viewModel, mutate, builderMutate,
+    safeHydrate, materializeInto, getRules, viewModel, mutate, builderMutate,
     effectiveMaxHp, providerState, resolveProvider, prepareSheetExport,
   };
 }

@@ -1,7 +1,6 @@
-// A fake Player's-Handbook data API shared by BOTH test suites — mirrors the
-// real seed shapes (and the api the dnd55e-compendium addon provide()s).
-// tests/rules.mjs drives the pure engine with it; tests/smoke.mjs injects it as
-// deps['dnd55e-compendium'] so the sheet's REAL rules api computes over it.
+// A compact in-memory rules-data service fixture. Shapes mirror the public
+// contract while remaining synthetic and redistributable.
+import { DEFAULT_RULESET } from '../../addon-dnd-engine/rules/ruleset.js';
 export function makeFake() {
   const store = {
     class: {
@@ -197,8 +196,13 @@ export function makeFake() {
       (!q || !q.class || (Array.isArray(sp.classes) && sp.classes.includes(q.class)))),
     listSkills: () => [], listArmor: () => vals('armor').map((a) => ({ id: a.id, name: a.name })),
     listWeapons: () => vals('weapon').map((w) => ({ id: w.id, name: w.name })),
+    listEquipment: () => [...vals('armor'), ...vals('weapon')],
     getItem: (kind, id) => (store[kind] && store[kind][id]) || null,
     getItemByName: byName,
     getRecords: (kind) => vals(kind),
+    getRuleset: () => DEFAULT_RULESET,
+    resolveReference: (kind, id) => (store[kind] && store[kind][id])
+      ? { href: `#/compendium/${kind}:${id}` }
+      : null,
   };
 }

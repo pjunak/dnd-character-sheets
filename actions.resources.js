@@ -118,7 +118,7 @@ export function registerResourceActions(deps) {
         if (!resource || currentResource(sheet, resource) <= 0) return sheet;
         sheet.resourceUses = { ...(sheet.resourceUses || {}), [dieKey]: currentResource(sheet, resource) - 1 };
         const con = computed.abilities && computed.abilities.CON ? num(computed.abilities.CON.mod, 0) : 0;
-        const heal = Math.max(1, hitDieAvg(resource.die) + con);
+        const heal = Math.max(1, hitDieAvg(resource.die, getRules(sheet)) + con);
         const maxHp = effectiveMaxHp(sheet, computed);
         sheet.hp = maxHp > 0 ? Math.min(maxHp, num(sheet.hp, 0) + heal) : num(sheet.hp, 0) + heal;
         return sheet;

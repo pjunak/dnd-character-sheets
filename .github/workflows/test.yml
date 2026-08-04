@@ -1,7 +1,7 @@
 name: Tests
 
-# The tests import the published addon-test harness from a SIBLING checkout
-# of the host repo (../ttrpg-codex), so CI checks out both.
+# Tests import the published host harness and exercise the extracted engine
+# through sibling checkouts, matching the local suite layout.
 on:
   push:
   pull_request:
@@ -18,6 +18,11 @@ jobs:
         with:
           repository: pjunak/ttrpg-codex
           path: ttrpg-codex
+
+      - uses: actions/checkout@v7
+        with:
+          repository: pjunak/addon-dnd-engine
+          path: addon-dnd-engine
 
       - uses: actions/setup-node@v7
         with:

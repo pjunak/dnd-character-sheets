@@ -1,191 +1,98 @@
-# Rules runtime contract and edge cases
+# Sheet rules and renderer integration contract
 
-This is the canonical current-state contract for the rules engine built into
-`dnd-sheets`. It describes shipped behavior, not implementation history or
-future design proposals. Provider schema details and current cross-repository
-gaps live in `dnd55e-compendium/data/SCHEMA.md` and `data/GAPS.md`.
+This document defines the boundaries owned by `dnd-sheets`. Rules derivation
+semantics belong to the selected engine addon; rules record semantics belong to
+the selected rules-data provider.
 
-## Contract boundaries
+## Stable ownership
 
-- The addon id is `dnd-sheets`; that id also owns
-  `character.addonData["dnd-sheets"]` and must not change without a data-key
+- The addon id is `dnd-sheets`. It is also the permanent key at
+  `character.addonData["dnd-sheets"]`; changing it requires an explicit data-key
   migration.
-- The engine is part of this addon. `rules/api.js` exposes its pure API to
-  future consumers; moving or extracting it is not part of the contract.
-- Book data is optional. The 2024 provider id is `dnd55e-compendium`; the
-  reserved 2014 provider id is `dnd5e-compendium`.
-- The sheet addon manifest uses host addon API v2 and requires the
-  `lifecycle.dispose` and `i18n.catalogs` capabilities. The rules object
-  returned through `host.provide(...)` separately has `apiVersion: 1`.
-  Provider API versions and host manifest API versions are different
-  namespaces.
-- `collections.dm` is an available API-v2 host capability for addon-owned
-  DM-only collections. This addon does not require or use it.
-  The sheet contract does not require or advertise it.
+- The host owns character identity, portrait, lore, relationships, routing,
+  authorization, persistence, and addon lifecycle.
+- This addon owns the sheet decision blob, durable hand-filled/materialized
+  fields, sheet tabs and actions, renderer selection UI, and renderer contract.
+- This repository contains no rules engine and no rulebook records.
 
-## Stored decisions and materialized fields
+## Rules-engine discovery
 
-The builder decision spine includes `classes`, `baseStats`, `abilityGrants`,
-`featureChoices`, `grantChoices`, `grantCastingAbilities`, `manualSaveProf`,
-spell selections,
-equipment state, and `overrides`. On hydration, the engine derives rules-owned values and the addon
-materializes the result into the ordinary character fields used by the host.
-The view model applies explicit overrides over the derived result; overrides
-are never folded into provider data.
+The manifest consumes optional cardinality-one `dnd5e.rules-engine` v1 through
+`host.useService()`. It never names an engine or data-provider addon. The host
+selects among compatible engine providers; the engine independently selects a
+compatible rules-data service.
 
-When no compatible provider is available, the sheet remains hand-fillable and
-uses the last materialized flat fields. The sheet records a bounded baseline of
-the fields owned by materialization. If any of those fields change before the
-provider returns, or the returning provider has a different edition, computed
-mode remains disabled for that character until the user explicitly chooses:
+An engine is active only when its API is compatible and `getAvailability()`
+reports available rules data. Otherwise the sheet remains fully hand-fillable,
+the Builder is hidden, and the last materialized flat values remain usable.
 
-- keep the exact hand-filled values and remain in manual mode; or
-- resume the stored decision spine and rematerialize from the installed
-  provider.
+The sheet delegates ruleset-dependent calculations to the engine API. Panels
+and actions must not recreate point-buy tables, spell-copy costs, hit-die
+averages, feat caps, edition constants, or sourcebook-specific branches.
+Presentation vocabulary and manual-mode arithmetic may remain local.
 
-Play state such as current HP, inventory, currency, resource uses, and manual
-spell entries is not part of the baseline and never triggers reconciliation.
-The choice is per character and does not disable the provider for other sheets.
+Provider-owned record links are resolved through
+`engine.resolveReference(kind, id, mode)`. The sheet must render plain text when
+the provider supplies no safe route; it must never synthesize a named
+compendium route.
 
-Derived validation is advisory. Over-budget point buy, over-limit prepared
-spells, unmet prerequisites, and similar warnings do not silently delete user
-choices.
+## Stored decisions and reconciliation
 
-## Hydration order
+The decision spine includes classes, base scores, grants, feature and spell
+choices, manual proficiencies, equipment state, and overrides. Successful
+hydration is copied into ordinary fallback fields so removing services never
+turns a character blank or unreadable.
 
-After resolving the ruleset, `hydrate()` runs error-isolated steps in this
-order:
+Each materialization stores a bounded snapshot plus the full computation
+identity: engine addon/version/contract, rules-data addon/version/contract,
+content revision, ruleset id/version, and edition. Recalculation pauses for that
+character when:
 
-1. ability scores and caps;
-2. ordered classes, total level, and proficiency bonus;
-3. species, lineage, background, hit points, Armor Class, and initiative;
-4. saving throws, skills, languages, defenses, and equipment proficiencies;
-5. spellcasting, granted spells, and pending spell choices;
-6. weapon mastery, equipped weapon attacks, and attunement;
-7. record-first collected features; and
-8. build-derived resource trackers.
+- a materialized field was changed manually;
+- the edition changed; or
+- any other engine/data/ruleset/content identity component changed.
 
-The model then materializes the result and the view model applies explicit
-overrides. Class roster position and grant provenance are observable contract
-inputs rather than display-only metadata.
+The user must explicitly keep the current values in manual mode or resume the
+Builder and rematerialize. Current HP, inventory, currency, resource uses, and
+other play state do not trigger reconciliation. The choice is per character.
 
-## Classes and multiclassing
+Legacy edition-only snapshots are safe but intentionally reconcile once when a
+full service identity becomes available.
 
-- Class array order is significant. The first class is the origin class for
-  saving throws, first-level hit points, and starting proficiency semantics.
-- Total character level drives proficiency bonus. Per-class level drives class
-  features and each class's spellcasting contribution.
-- Class features are record-first: matching `feature` records are authoritative
-  for identity and level. `progression[].features` supplies printed ordering
-  and a label fallback only when no record exists at all; a same-name record at
-  another level is not granted early.
-- The origin class uses `startingProficiencies`; later classes use
-  `multiclassProficiencies` when present. Reduced skill choices and armor,
-  weapon, and tool grants are all consumed. A provider that omits the reduced
-  object falls back to starting proficiencies for compatibility.
+## Renderer discovery and selection
 
-## Abilities, feats, and choices
+The manifest consumes optional cardinality-many `dnd-sheets.renderer` v1
+through `host.listServices()`. A provider is accepted by contract and schema,
+not by addon id, when it:
 
-- Base scores and provider grants are combined before user overrides.
-  Ability caps are enforced by the derived result and surfaced through
-  warnings rather than destructive choice cleanup.
-- Every repeatable or ambiguous choice needs a stable id. `grantChoices` uses
-  that id so selections survive rehydration.
-- Generic record choices can grant skills, expertise, tools, languages, saving
-  throws, weapons, armor, damage resistance, condition immunity, feats, or
-  enumerated values. `choicePackages` lets one enumerated value add a coherent
-  bundle of grants. A choice may declare a `default` from its option pool; that
-  value applies until the player explicitly selects a replacement.
-  `skillExpertise` applies a coupled skill-proficiency-and-Expertise choice.
-- Fixed spell grants and filtered `choose` grants are supported for feats,
-  species, lineages, backgrounds, classes, subclasses, and feature records.
-  Filters support exact or maximum spell level and a union of class-list,
-  school, and explicit-id sources; `from.castingTime` intersects that pool.
-  A single spell choice may provide a default that remains active until the
-  player selects a replacement.
-- A feat's `spellList` expands each caster's selectable pool.
-  `prepareSpellListOf` can make the lists of owned feats in a named category
-  always prepared.
-- Granted spells carry fixed or selected casting abilities. Unresolved
-  selections appear in `castingAbilityChoices`; chosen values are stored in
-  `grantCastingAbilities` and copied into grant provenance. A feat may instead
-  bind casting to its selected Ability Score Increase. `castAtLevelByLevel`
-  publishes the highest unlocked fixed upcast level.
+- exposes `apiVersion: 1`, `descriptor()`, and `render(payload)`;
+- declares `sheetSchemaVersion: 1` and a safe renderer id; and
+- has explicit `ui:override` and `data:read:characters` grants, because the
+  sheet delegates HTML production and a bounded character snapshot.
 
-## Supplement grants and active modes
+The effective renderer identity is `<provider-addon-id>:<renderer-id>`. Built-in
+styles use the same registry with identities `builtin:compact` and
+`builtin:classic`; Compact is the default.
 
-- Fixed grants and choices are collected from the selected class, subclass,
-  eligible feature records, species/lineage, background, and feats. No
-  sourcebook ID is interpreted by the engine.
-- Resources from any source use the same bounded tracker and rest-recharge
-  contract as class resources.
-- A selected activation can add AC, speed, a weapon ability, Concentration
-  save bonuses, resistances, immunities, or a fly speed. Armor/shield
-  restrictions are checked before modifiers apply.
-- Activations represent explicit self states. They do not target creatures or
-  automate attacks, saving throws, areas, damage, or encounter timing.
-- Materialized saving-throw results live in `saveProf`; manual additions live
-  separately in `manualSaveProf`. Consequently a provider or book removed
-  from the active content tree cannot leave a derived proficiency behind as a
-  manual decision.
+Preference is stored in local browser storage per character. It is not campaign
+data, so two players or browsers may choose different styles for the same
+entity. Legacy Classic/Compact layout keys migrate on read. If a preferred
+renderer is missing, invalid, throws, or returns an invalid result, the sheet
+uses Compact without deleting the preference. It resumes automatically when
+the provider returns.
 
-## Spellcasting
-
-- `spellcasting.type` selects full, half, third, or pact contribution.
-  Multiclass slot math comes from the resolved ruleset; Pact Magic remains a
-  separate pool and its resources recover on a Short Rest.
-- A class or subclass `progression` row can provide `preparedSpells`,
-  `cantripsKnown`, and an optional printed `spellSlots` row. Printed slots win
-  for a single caster. Otherwise the resolved ruleset table is used. Current
-  2024 class records omit printed `spellSlots`, so their real slot pools use
-  the ruleset; pact slots use `constants.pactMagic`.
-- The engine consumes `ability`, `type`, `prepares`, `ritual`, and an optional
-  `spellListClassId` from the spellcasting descriptor. A subclass such as
-  Eldritch Knight or Arcane Trickster can therefore use the Wizard list while
-  keeping its own casting source identity. Provider fields such as `prepared`
-  and `startLevel` are not independent engine inputs.
-- Prepared and cantrip limits are tracked per casting source. Over-limit lists
-  remain visible and produce warnings.
-- Wizard spellbooks are character-owned learned-spell references. Provider
-  spell records remain immutable.
-- Granted spells preserve their source and distinguish always-prepared and
-  free-use semantics. Choice grants use the same stable choice machinery as
-  other builder decisions.
-- Class-specific attunement-limit schedules override the ruleset baseline at
-  the relevant class level. Resource recharge entries may similarly use
-  `minLevel`; species may grant proficiency-bonus-sized resource pools.
-- A feat may grant a separately tracked, restricted spell slot with a bounded
-  level rule and structured Short/Long Rest recharge. It never merges into the
-  ordinary multiclass slot table.
-- Eldritch Knight and Arcane Trickster ship all twenty subclass progression
-  rows, including cantrip, prepared-spell, and printed slot limits.
-
-## Equipment and Armor Class
-
-- Equipment references resolve against provider records; character-owned
-  quantity and state stay in the sheet blob.
-- Armor Class uses `armorType`, `baseAC`, `dexCap`, and `acBonus`, with the
-  selected/equipped items and explicit overrides.
-- The selected base armor exposes `armorRestrictions`. An unmet numeric
-  `strReq` reduces derived Speed by 10 feet; `stealthDisadvantage` is preserved
-  as a derived flag for consumers. Armor Class itself is unchanged by either
-  restriction.
-
-## Ruleset authority and compatibility
-
-The resolved edition ruleset overrides built-in 2024 defaults per constant.
-Printed record data is more specific than a ruleset constant; built-in values
-are the final compatibility fallback. The 2024 provider and built-in defaults
-are byte-checked by the cross-repository tests for the constants they share.
-
-Structural 2014 support is intentionally incomplete until a real
-`dnd5e-compendium` provider exists. Provider selection may recognize the
-reserved id, but that does not make untested 2014 record shapes part of the
-runtime contract.
+The Settings tab and selector remain sheet-owned so a renderer cannot hide the
+mechanism used to leave it. Renderer input is cloned/frozen, excludes other
+addons' `addonData`, and includes only the bounded character identity, this
+sheet's blob, computed sheet result, warnings, editability, surface, and default
+HTML. Renderer output is failure-isolated and size-bounded.
 
 ## Verification
 
-Pure engine behavior is covered by `tests/rules.mjs`; addon/provider wiring and
-choice UI behavior are covered by `tests/smoke.mjs`. Provider record integrity
-belongs to the compendium repository. Any contract change must update the
-provider data/schema, consumer behavior, and both sides' tests together.
+- `tests/provider-state.mjs` covers full-identity and manual reconciliation.
+- `tests/renderer-registry.mjs` covers whitelist-free discovery, per-character
+  and per-browser preferences, privilege checks, and safe fallback.
+- `tests/smoke.mjs` covers integration against the real extracted engine with a
+  synthetic rules-data provider.
+- Engine mechanics and provider-schema integrity are tested in their owning
+  repositories.

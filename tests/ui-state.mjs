@@ -15,7 +15,7 @@ function memoryStorage(initial = {}) {
   };
 }
 
-test('UI state persists only tab and layout preferences', () => {
+test('UI state persists only tab and per-character renderer preferences', () => {
   const storage = memoryStorage({
     'dse-tab:c1': 'combat',
     'dse-ui:layout': 'compact',
@@ -26,11 +26,11 @@ test('UI state persists only tab and layout preferences', () => {
   assert.equal(state.getTab('c1', tabs), 'combat');
   assert.equal(state.getLayout('c1'), 'compact');
   state.setTab('c1', 'overview');
-  state.setLayout('c1', 'classic');
+  state.setRenderer('c1', 'community-style:ink');
   state.set('c1', 'restOpen', true);
 
   assert.equal(storage.values.get('dse-tab:c1'), 'overview');
-  assert.equal(storage.values.get('dse-ui:layout:c1'), 'classic');
+  assert.equal(storage.values.get('dse-ui:renderer:c1'), 'community-style:ink');
   assert.equal(storage.values.has('restOpen'), false);
 });
 
@@ -52,14 +52,14 @@ test('UI state isolates and clears transient values by character', () => {
   assert.deepEqual(state.get('a', 'cart', []), []);
 });
 
-test('UI state rejects unavailable tabs and invalid layouts safely', () => {
+test('UI state rejects unavailable tabs and invalid renderer identities safely', () => {
   const storage = memoryStorage({
     'dse-tab:c1': 'removed-tab',
     'dse-ui:layout:c1': 'unknown',
   });
   const state = createUiState(storage);
   assert.equal(state.getTab('c1', [{ id: 'overview' }]), 'overview');
-  assert.equal(state.getLayout('c1'), 'classic');
-  state.setLayout('c1', 'unknown');
-  assert.equal(storage.values.get('dse-ui:layout:c1'), 'classic');
+  assert.equal(state.getLayout('c1'), 'compact');
+  assert.equal(state.setRenderer('c1', 'unknown'), false);
+  assert.equal(storage.values.has('dse-ui:renderer:c1'), false);
 });

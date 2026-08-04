@@ -36,7 +36,7 @@ export function registerSpellActions(deps) {
     host.ui.rerender();
   });
   // Copy a spell into the book: read the picked spell (+ optional scroll) at click
-  // time, charge 50 gp × spell level (2024 copying cost), consume the scroll if one
+  // time, charge the engine-provided copying cost, consume the scroll if one
   // was chosen, and add the ref to s.spellbook[classId].
   register('spellCopy', (cid, classId) => {
     let ref = '', scrollId = '';
@@ -46,7 +46,7 @@ export function registerSpellActions(deps) {
     mutate(cid, (s) => {
       const engine = getRules(s);
       const rec = engine && engine.getItem ? engine.getItem('spell', ref) : null;
-      const cost = scrollCopyCost(rec && rec.level);
+      const cost = scrollCopyCost(rec && rec.level, engine);
       addRef(s, 'spellbook', classId, ref);
       s.currency = { ...s.currency, gp: Math.max(0, num(s.currency.gp, 0) - cost) };
       // Consume the scroll ONLY when it actually holds the copied spell (the

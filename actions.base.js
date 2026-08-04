@@ -2,14 +2,14 @@ import { registerActionMap } from './actions.shared.js';
 
 export const BASE_ACTIONS = Object.freeze([
   'tab', 'tabKey', 'setField', 'setAbility', 'toggleSave', 'toggleSkill',
-  'setOverrideValue', 'clearOverride', 'uiLayoutSet', 'providerResolve',
+  'setOverrideValue', 'clearOverride', 'uiRendererSet', 'providerResolve',
 ]);
 
 export function registerBaseActions(deps) {
   const {
     host, ABILITIES, SKILLS, num, clampHp, sheetOf, mutate, effectiveMaxHp,
     getRules, safeHydrate, decisionsOf, resolveProvider, visibleTabs,
-    hasSpellsOf, tabBtnId, uiState,
+    hasSpellsOf, tabBtnId, uiState, renderers,
   } = deps;
   const timers = new Set();
   const later = (fn) => {
@@ -103,9 +103,8 @@ export function registerBaseActions(deps) {
         return sheet;
       });
     },
-    uiLayoutSet(cid, mode) {
-      uiState.setLayout(cid, String(mode));
-      host.ui.rerender();
+    uiRendererSet(cid, identity) {
+      if (renderers.select(cid, String(identity))) host.ui.rerender();
     },
     providerResolve(cid, choice) {
       resolveProvider(cid, choice);

@@ -43,6 +43,21 @@ export function createUiState(storage = browserStorage()) {
     return value;
   };
 
+  const getRenderer = characterId => {
+    const stored = readPreference(`dse-ui:renderer:${characterId}`);
+    if (stored) return stored;
+    const legacy = readPreference(`dse-ui:layout:${characterId}`)
+      || readPreference('dse-ui:layout');
+    return legacy === 'classic' ? 'builtin:classic' : 'builtin:compact';
+  };
+
+  const setRenderer = (characterId, identity) => {
+    const value = String(identity || '');
+    if (!/^[a-z0-9][a-z0-9-]{0,63}:[a-z0-9][a-z0-9-]{0,63}$/.test(value)) return false;
+    writePreference(`dse-ui:renderer:${characterId}`, value);
+    return true;
+  };
+
   return Object.freeze({
     getTab(characterId, tabs) {
       const stored = readPreference(`dse-tab:${characterId}`);
@@ -53,17 +68,15 @@ export function createUiState(storage = browserStorage()) {
       writePreference(`dse-tab:${characterId}`, String(tabId));
     },
 
+    getRenderer,
+    setRenderer,
+
     getLayout(characterId) {
-      const stored = readPreference(`dse-ui:layout:${characterId}`)
-        || readPreference('dse-ui:layout');
-      return stored === 'compact' ? 'compact' : 'classic';
+      return getRenderer(characterId) === 'builtin:classic' ? 'classic' : 'compact';
     },
 
     setLayout(characterId, layout) {
-      writePreference(
-        `dse-ui:layout:${characterId}`,
-        layout === 'compact' ? 'compact' : 'classic',
-      );
+      return setRenderer(characterId, layout === 'classic' ? 'builtin:classic' : 'builtin:compact');
     },
 
     get: readSession,

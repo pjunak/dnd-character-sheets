@@ -390,7 +390,7 @@ export function makeSpellbookPanel(ctx) {
       const form = copyable.length
         ? `<div style="display:flex;flex-direction:column;gap:var(--space-2)">
              <label style="display:flex;flex-direction:column;gap:2px;font-size:var(--text-sm);color:var(--text-muted)">${esc(t('spell.copyPick'))}
-               <select id="dse-copy-spell-${esc(cid)}" class="edit-input"${dataOn('change', host.action('spellCopyPick'), cid, '$value')}>${copyable.map((sp) => `<option value="${esc(sp.id)}"${sp.id === selected ? ' selected' : ''}>${esc(sp.name)} — ${scrollCopyCost(sp.level)} ${esc(t('spell.gp'))}</option>`).join('')}</select></label>
+               <select id="dse-copy-spell-${esc(cid)}" class="edit-input"${dataOn('change', host.action('spellCopyPick'), cid, '$value')}>${copyable.map((sp) => `<option value="${esc(sp.id)}"${sp.id === selected ? ' selected' : ''}>${esc(sp.name)} — ${scrollCopyCost(sp.level, engine)} ${esc(t('spell.gp'))}</option>`).join('')}</select></label>
              <label style="display:flex;flex-direction:column;gap:2px;font-size:var(--text-sm);color:var(--text-muted)">${esc(t('spell.copyScroll'))}
                ${scrollSelect}</label>
              <div style="font-size:var(--text-xs);color:var(--text-muted)">${esc(t('spell.copyCost', { gp }))}</div>

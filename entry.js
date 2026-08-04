@@ -21,7 +21,7 @@
 //    • Combat          — attacks from equipped/ready weapons + resource trackers.
 //    • Spellbook       — prepared/cantrip slots, granted/choose-grant (UI-4).
 //    • Builder         — guided progression; engine mode + editors only.
-//    • Settings        — per-sheet layout switch + print/export/import, rightmost.
+//    • Settings        — per-character renderer + print/export/import, rightmost.
 //  A slim vitals bar (HP / AC / Init / Speed / PB / Passive + spell DC/attack
 //  + class-level line) sits under the tabs on the mechanical tabs (panel.header.js).
 //
@@ -34,10 +34,8 @@
 //  prof toggles) follow the same gate.
 //
 //  ── Module layout (decomposed; native ES modules, no build step) ──
-//    rules/engine.js     the PURE D&D rules engine (host-free, tests/rules.mjs)
-//    rules/api.js        │  — merged from the retired dnd55e-core-rules addon.
-//                        └  makeRulesApi(getData): engine + live book data.
-//    helpers.js          pure constants + helpers (re-exports the rules facts).
+//    helpers.js          sheet vocabulary, manual-mode helpers, service adapters.
+//    renderer-registry.js built-in + discovered per-character sheet renderers.
 //    model.js            decision/derivation pipeline + viewModel + mutators.
 //    ui.js               shared render primitives (section/heroTile/abilityTile/…).
 //    actions.*.js        domain controllers: base, spells, inventory, resources,
@@ -56,8 +54,8 @@
 
 import {
   ABILITIES, COINS, LOCATIONS, SKILLS,
-  num, abilityMod, signed, titleize, clampHp, blank, makeHelpers, compendiumHref, firstPara, featureRecordFor,
-  POINT_BUY, pointCost, pointsSpent, hitDieAvg, scrollCopyCost, ASI_RULES, featAsiFrom, featAbilityCap,
+  num, abilityMod, signed, titleize, clampHp, blank, makeHelpers, referenceHref as resolveReferenceHref, firstPara, featureRecordFor,
+  pointBuyFor, pointCost, pointsSpent, hitDieAvg, scrollCopyCost, featAsiFrom, featAbilityCap,
 } from './helpers.js';
 import { makeEngine } from './model.js';
 import { makeUI } from './ui.js';
@@ -79,6 +77,7 @@ import { registerResourceActions } from './actions.resources.js';
 import { registerBuilderActions } from './actions.builder.js';
 import { registerTransferActions } from './actions.transfer.js';
 import { createUiState } from './ui-state.js';
+import { createRendererRegistry } from './renderer-registry.js';
 
 export default function register(host) {
   const { esc } = host.h;
@@ -90,11 +89,16 @@ export default function register(host) {
   const ctx = {
     host, t, plural, NS,
     ABILITIES, COINS, LOCATIONS, SKILLS,
-    num, abilityMod, signed, titleize, clampHp, blank, uid, sheetOf, compendiumHref, firstPara, featureRecordFor,
-    POINT_BUY, pointCost, pointsSpent, hitDieAvg, scrollCopyCost, ASI_RULES, featAsiFrom, featAbilityCap,
+    num, abilityMod, signed, titleize, clampHp, blank, uid, sheetOf, firstPara, featureRecordFor,
+    pointBuyFor, pointCost, pointsSpent, hitDieAvg, scrollCopyCost, featAsiFrom, featAbilityCap,
   };
   ctx.uiState = createUiState();
-  ctx.uiLayout = ctx.uiState.getLayout;
+  ctx.renderers = createRendererRegistry(host, ctx.uiState);
+  ctx.uiLayout = ctx.renderers.baseLayout;
+  ctx.referenceHref = (kind, id, mode) => {
+    try { return resolveReferenceHref(host.useService('dnd5e.rules-engine')?.api, kind, id, mode); }
+    catch (_) { return ''; }
+  };
   ctx.engine = makeEngine(ctx);
   ctx.viewModel = ctx.engine.viewModel;     // hot path — promote for panel destructuring
   ctx.ui = makeUI(ctx);
@@ -195,7 +199,7 @@ export default function register(host) {
       const vitals = (active === 'spellbook') ? vitalsBar(c, s, comp, editable, engine) : '';
 
       const restOpen = !!(engine && editable && restModal && ctx.uiState.get(c.id, 'restOpen', false));
-      const restOverlay = restOpen ? restModal(c, s, comp) : '';
+      const restOverlay = restOpen ? restModal(c, s, comp, engine) : '';
       const swapClass = engine && editable && spellSwapModal
         ? ctx.uiState.get(c.id, 'spellSwapClass')
         : null;
@@ -214,8 +218,16 @@ export default function register(host) {
       const addItemOpen = !!(editable && addItemModal && ctx.uiState.get(c.id, 'addItem'));
       const addItemOverlay = addItemOpen ? addItemModal(c, s, engine) : '';
 
+      const defaultHtml = vitals + panel;
+      const rendered = active === 'settings' ? defaultHtml : ctx.renderers.render(c.id, active, {
+        character: { id: c.id, title: c.title || '', portrait: c.portrait || '' },
+        sheet: s,
+        computed: comp,
+        warnings,
+        editable,
+      }, defaultHtml);
       return `<div class="addon-dnd-sheets codex-stack codex-stack-flush">${ctx.ui.styleTag}${tabBar}
-        <div role="tabpanel" id="${esc(pid)}" aria-labelledby="${esc(tabBtnId(c.id, active))}" tabindex="0">${vitals}${panel}</div>${restOverlay}${swapOverlay}${spellMgrOverlay}${importOverlay}${addItemOverlay}</div>`;
+        <div role="tabpanel" id="${esc(pid)}" aria-labelledby="${esc(tabBtnId(c.id, active))}" tabindex="0">${rendered}</div>${restOverlay}${swapOverlay}${spellMgrOverlay}${importOverlay}${addItemOverlay}</div>`;
     },
   });
 
@@ -232,15 +244,14 @@ export default function register(host) {
 
 
   const disposers = [
-    registerBaseActions({ host, ABILITIES, SKILLS, num, clampHp, sheetOf, mutate, effectiveMaxHp, getRules, safeHydrate, decisionsOf, resolveProvider, visibleTabs, hasSpellsOf, tabBtnId, uiState: ctx.uiState }),
+    registerBaseActions({ host, ABILITIES, SKILLS, num, clampHp, sheetOf, mutate, effectiveMaxHp, getRules, safeHydrate, decisionsOf, resolveProvider, visibleTabs, hasSpellsOf, tabBtnId, uiState: ctx.uiState, renderers: ctx.renderers }),
     registerSpellActions({ host, num, uid, mutate, getRules, safeHydrate, decisionsOf, scrollCopyCost, uiState: ctx.uiState }),
     registerInventoryActions({ host, num, uid, sheetOf, mutate, getRules, LOCATIONS, uiState: ctx.uiState }),
     registerResourceActions({ host, num, uid, mutate, getRules, safeHydrate, decisionsOf, effectiveMaxHp, hitDieAvg, uiState: ctx.uiState }),
-    registerBuilderActions({ host, plural, num, uid, ABILITIES, POINT_BUY, pointCost, pointsSpent, featAsiFrom, featAbilityCap, uiState: ctx.uiState, sheetOf, getRules, engine: ctx.engine }),
+    registerBuilderActions({ host, plural, num, uid, ABILITIES, pointBuyFor, pointCost, pointsSpent, featAsiFrom, featAbilityCap, uiState: ctx.uiState, sheetOf, getRules, engine: ctx.engine }),
     registerTransferActions({ host, NS, blank, sheetOf, getRules, safeHydrate, decisionsOf, buildPrintHtml, mutate, prepareSheetExport, uiState: ctx.uiState }),
   ].filter(Boolean);
 
-  host.provide(ctx.engine.rulesApi);
   return () => {
     for (const dispose of disposers.slice().reverse()) dispose();
     ctx.uiState.clear();

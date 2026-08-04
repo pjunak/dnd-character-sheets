@@ -5,18 +5,22 @@ This repository contains the `dnd-sheets` addon for the sibling
 character state lives at `character.addonData["dnd-sheets"]`. Do not rename it
 without a data migration.
 
-The addon remains hand-fillable without a provider. When a compatible
-compendium is present, its built-in pure rules engine hydrates a guided builder
-and computed sheet. It publishes a versioned rules API for optional consumers.
+The addon remains hand-fillable without services. When compatible
+`dnd5e.rules-engine` and rules-data services are present, the engine hydrates a
+guided builder and computed sheet. Sheet styles are selected per character and
+per browser from built-ins plus compatible `dnd-sheets.renderer` providers.
 
 ## Read before editing
 
 1. [`README.md`](README.md) for user-visible behavior and development commands.
-2. [`rules/README.md`](rules/README.md) for the rules-engine boundary.
-3. [`docs/RULES_EDGE_CASES.md`](docs/RULES_EDGE_CASES.md) for current mechanics
-   and deliberately unsupported cases.
+2. [`docs/RULES_EDGE_CASES.md`](docs/RULES_EDGE_CASES.md) for sheet/engine
+   reconciliation and renderer semantics.
+3. [`docs/RENDERER_CONTRACT.md`](docs/RENDERER_CONTRACT.md) before changing
+   renderer discovery, payloads, or authoring requirements.
 4. `../ttrpg-codex/examples/addons/AGENTS.md` for the host contract.
-5. `../dnd55e-compendium/data/SCHEMA.md` when changing provider record use.
+5. `../addon-dnd-engine/AGENTS.md` and its `contract/` docs before changing
+   rules-engine use.
+6. A rules-data provider's schema only when changing record consumption.
 
 `model.js` and the tests are authoritative for stored field names. Do not copy
 the host authoring contract into this repository.
@@ -24,21 +28,21 @@ the host authoring contract into this repository.
 ## Architecture
 
 ```text
-addon.json              API-v2 manifest and optional providers
-entry.js                composition root and public API registration
+addon.json              API-v2 manifest and consumed service contracts
+entry.js                composition root and fragment registration
 actions.*.js            domain controllers and owned cleanup
 actions.shared.js       action-map registration helper
 model.js                stored-blob migration, view model, builder mutations
 provider-state.js       provider detection and per-character materialization
 ui-state.js             session UI state and persisted view preferences
+renderer-registry.js    built-in and discovered renderer normalization
 builder-progress.js     pure Builder completion and navigation model
 equipment-model.js      pure inventory/equipment resolution
 sheet-transfer.js       bounded, versioned JSON import/export
 panel.*.js              rendering only
 ui.js / helpers.js      shared presentation helpers
-rules/                  pure host-free rules engine and public API
 locales/en.json         complete English UI source catalog
-tests/                  smoke, rule, state, transfer, and pure-module tests
+tests/                  smoke, renderer, state, transfer, and pure-module tests
 ```
 
 The host wiki profile is the Overview tab. `panel.overview.js` renders the
@@ -61,23 +65,25 @@ renders Combat. Preserve this naming unless doing a deliberate, tested rename.
 - `provider-state.js` resolves provider availability per character. Do not
   assume a globally installed provider means every stored character is safe to
   recompute.
-- `rules/` stays deterministic, host-free, and DOM-free. Rules facts and
-  edition-dependent tables belong there, not in panels.
-- Rulebook records belong in a compendium addon. Tests use `tests/fake-phb.mjs`
-  instead of embedding production book data.
+- Rules implementation and edition-dependent tables belong in a compatible
+  engine addon; rulebook records belong in rules-data addons. This repository
+  contains neither. Tests use a synthetic provider through the real engine.
 - Add supplement mechanics through generic documented record fields. Do not
   branch on sourcebook IDs in the engine, model, panels, or actions.
-- Fixed grants, runtime choice packages, resources, and self-effect
-  activations are collected through `rules/grants.js`. Keep book provenance in
-  the provider; absent records must contribute no derived mechanics.
 - `ui-state.js` owns transient navigation, modal, wizard, and selection state.
-  Persist only intentional view preferences.
+  Persist only intentional view preferences. Renderer choice is keyed by
+  character and browser, never stored in campaign/entity data.
+- `renderer-registry.js` accepts providers by service contract, schema version,
+  and granted permissions. Never add provider-id branches or a style whitelist.
+  Missing/failing preferred renderers fall back to Compact without erasing the
+  preference; Settings always remains owned by this addon.
 - Domain controllers dispose their own timers, URLs, listeners, and other
   resources. The host disposes registrations.
-- Optional providers enhance the sheet but never become an accidental hard
-  dependency. Probe through `host.use()` behind a coherent standalone fallback.
-- Action names are internal UI wiring. The object passed to `host.provide()` is
-  the versioned consumer contract.
+- Optional services enhance the sheet but never become an accidental hard
+  dependency. Probe through `host.useService()` / `host.listServices()` behind
+  coherent standalone fallbacks.
+- Action names are internal UI wiring. This addon does not publish a rules API;
+  rules consumers discover the engine contract directly.
 
 ## UI and localization
 
@@ -95,7 +101,8 @@ renders Combat. Preserve this naming unless doing a deliberate, tested rename.
 
 ## Working loop
 
-Run from this repository in PowerShell:
+Run from this repository in PowerShell with sibling checkouts of the host and
+`addon-dnd-engine`:
 
 ```text
 node --test tests/*.mjs
@@ -122,8 +129,8 @@ repo-local TODO, roadmap, or planning files.
 
 ## Scope
 
-- One ruleset provider is selected for a campaign; stored overrides win over
-  computed values.
+- One rules-engine service is selected by the host; that engine selects one
+  rules-data service. Stored overrides win over computed values.
 - Builder choices remain editable and validation is advisory where possible.
 - Combat resolution/automation is a separate addon concern.
 - Structured 2014 support depends on a future compatible provider and must

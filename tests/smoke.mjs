@@ -15,10 +15,8 @@
 // Editing is role-gated (editor by default; pass { isAnonymous: true } for the
 // read-only path).
 //
-// ENGINE MODE: the rules engine is BUILT IN (rules/) — what the tests inject is
-// fake BOOK DATA as deps['dnd55e-compendium'] (tests/fake-phb.mjs, shared
-// with tests/rules.mjs), so the real engine computes over it. Expected numbers
-// below therefore mirror the engine-pinned values in tests/rules.mjs.
+// ENGINE MODE: tests inject the extracted engine service over synthetic rules
+// data. This exercises the same versioned boundary used by installed addons.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -26,7 +24,7 @@ import { dryRunRegister, smokeRegistrations, createMockHost } from '../../ttrpg-
 import register from '../entry.js';
 import { makeFake } from './fake-phb.mjs';
 import { makeEngine } from '../model.js';
-import { makeRulesApi } from '../rules/api.js';
+import { makeRulesApi } from '../../addon-dnd-engine/rules/api.js';
 import { makeHelpers, ABILITIES, SKILLS, num, abilityMod, clampHp } from '../helpers.js';
 import { BASE_ACTIONS } from '../actions.base.js';
 import { RESOURCE_ACTIONS, applyHpChange } from '../actions.resources.js';
@@ -73,18 +71,49 @@ const META = {
   id: 'dnd-sheets',
   version: '0.9.0',
   apiVersion: 2,
-  hostVersion: '>=1.0.0',
+  hostVersion: '>=1.2.0',
   capabilities: { required: ['lifecycle.dispose', 'i18n.catalogs'] },
   locales: { en: 'locales/en.json' },
   permissions: ['ui:override', 'ui:action', 'data:read:characters', 'data:write:characters.addonData'],
-  optionalDependencies: { 'dnd55e-compendium': { range: '>=0.1.0' } },
+  services: { consumes: [
+    { contract: 'dnd5e.rules-engine', range: '^1.0.0', cardinality: 'one', required: false },
+    { contract: 'dnd-sheets.renderer', range: '^1.0.0', cardinality: 'many', required: false },
+  ] },
 };
 const localizedOpts = (opts = {}) => ({ ...opts, catalogs: { en: EN_CATALOG } });
 const dryRun = (opts = {}) => dryRunRegister(register, META, localizedOpts(opts));
 const mockHost = (opts = {}) => createMockHost(META, localizedOpts(opts));
 
-// Book data present → the built-in engine computes (fresh fake per test).
-const PHB = () => ({ deps: { 'dnd55e-compendium': makeFake() } });
+const rulesDataHandle = api => Object.freeze({
+  api,
+  provider: Object.freeze({
+    addonId: 'test-rules-data', addonName: 'Test Rules Data', addonVersion: '1.0.0',
+    contract: 'dnd5e.rules-data', contractVersion: '1.0.0', contentRevision: 'test',
+  }),
+});
+const engineHandle = api => Object.freeze({
+  api: makeRulesApi(() => rulesDataHandle(api)),
+  provider: Object.freeze({
+    addonId: 'test-rules-engine', addonName: 'Test Rules Engine', addonVersion: '1.0.0',
+    contract: 'dnd5e.rules-engine', contractVersion: '1.0.0', contentRevision: '', permissions: Object.freeze([]),
+  }),
+});
+const testIdentity = () => {
+  const handle = engineHandle(makeFake());
+  return {
+    engineAddonId: handle.provider.addonId,
+    engineAddonVersion: handle.provider.addonVersion,
+    engineContractVersion: handle.provider.contractVersion,
+    ...handle.api.getContextIdentity(),
+  };
+};
+const makeTestRulesApi = overrides => {
+  const base = makeFake();
+  return makeRulesApi(() => rulesDataHandle(Object.freeze({ ...base, ...overrides })));
+};
+
+// Rules data present → the extracted engine computes (fresh fake per test).
+const PHB = () => ({ services: { 'dnd5e.rules-engine': engineHandle(makeFake()) } });
 const RETAINED_ACTIONS = [
   ...BASE_ACTIONS, ...SPELL_ACTIONS, ...INVENTORY_ACTIONS,
   ...RESOURCE_ACTIONS, ...BUILDER_ACTIONS, ...TRANSFER_ACTIONS,
@@ -110,7 +139,7 @@ test('sheets: register is clean + wires the expected surface', () => {
   assert.equal(new Set(names).size, names.length, 'every retained action is registered exactly once');
   for (const name of REMOVED_ACTIONS) assert.ok(!names.includes(name), `${name} stays removed`);
   assert.equal(rec.settingsTabs.length, 0, 'no host settings tab — sheet options live on the sheet\'s own ⚙ tab');
-  assert.ok(rec.provided && rec.provided.apiVersion === 1, 'provides the rules api for other addons');
+  assert.equal(rec.provided, undefined, 'the sheet no longer republishes or owns a rules engine');
   assert.ok(!rec.articleSections.length, 'no standalone article section (we own the body instead)');
   assert.ok(!rec.editorFields.length, 'no editor fields (the host edit form stays host-only)');
 });
@@ -233,8 +262,8 @@ test('sheets: HP is a directly editable stepper with no damage-by-amount field',
   } finally { clearLocalStorage(); }
 });
 
-test('sheets: vital tiles carry text labels + the compact strip adds spell DC/attack', () => {
-  mockLocalStorage('stats');
+test('sheets: Classic vital tiles carry text labels + spell DC/attack', () => {
+  mapLocalStorage({ 'dse-tab:cvi': 'stats', 'dse-ui:renderer:cvi': 'builtin:classic' });
   try {
     const { rec } = dryRun(PHB());
     const out = renderBody(rec, { id: 'cvi', name: 'Mage', addonData: { 'dnd-sheets': { className: 'Wizard', abilities: { DEX: 14 } } } });
@@ -345,11 +374,10 @@ test('sheets: featureChoices resolve into engine inputs (skill prof + expertise)
     startingProficiencies: { skills: { choose: 2, from: ['arcana', 'history', 'stealth'] } },
     grants: { choices: [{ id: 'wiz-exp', type: 'expertise', count: 1, source: 'wizard:1' }] },
   };
-  const api = makeRulesApi(() => ({
-    apiVersion: 1,
+  const api = makeTestRulesApi({
     getItem: (kind, id) => ((kind === 'class' && id === 'wizard') ? WIZ : null),
     getItemByName: (kind, name) => ((kind === 'class' && /wizard/i.test(String(name))) ? WIZ : null),
-  }));
+  });
   const { host } = mockHost({});
   const { sheetOf } = makeHelpers(host);
   const E = makeEngine({ host, NS: 'dnd-sheets', ABILITIES, SKILLS, num, abilityMod, sheetOf });
@@ -365,9 +393,9 @@ test('sheets: featureChoices resolve into engine inputs (skill prof + expertise)
 test('sheets: duplicate multi-pick values dedupe in resolved inputs (FE-7)', () => {
   const WIZ = { id: 'wizard', name: 'Wizard', hitDie: 'd6', subclassLevel: 3,
     startingProficiencies: { skills: { choose: 2, from: ['arcana', 'history', 'stealth'] } } };
-  const api = makeRulesApi(() => ({ apiVersion: 1,
+  const api = makeTestRulesApi({
     getItem: (kind, id) => ((kind === 'class' && id === 'wizard') ? WIZ : null),
-    getItemByName: (kind, name) => ((kind === 'class' && /wizard/i.test(String(name))) ? WIZ : null) }));
+    getItemByName: (kind, name) => ((kind === 'class' && /wizard/i.test(String(name))) ? WIZ : null) });
   const { host } = mockHost({});
   const { sheetOf } = makeHelpers(host);
   const E = makeEngine({ host, NS: 'dnd-sheets', ABILITIES, SKILLS, num, abilityMod, sheetOf });
@@ -390,9 +418,9 @@ test('sheets: duplicate L1 skills descriptor dedupes to one picker — no "conte
     startingProficiencies: { skills: { choose: 2, from: ['history', 'insight', 'medicine', 'persuasion', 'religion'] } },
     grants: { choices: [{ id: 'skills:cleric', source: 'cleric:1', type: 'skills', count: 2 }] },
   };
-  const api = makeRulesApi(() => ({ apiVersion: 1,
+  const api = makeTestRulesApi({
     getItem: (kind, id) => ((kind === 'class' && id === 'cleric') ? CLERIC : null),
-    getItemByName: (kind, name) => ((kind === 'class' && /cleric/i.test(String(name))) ? CLERIC : null) }));
+    getItemByName: (kind, name) => ((kind === 'class' && /cleric/i.test(String(name))) ? CLERIC : null) });
   const { host } = mockHost({});
   const { sheetOf } = makeHelpers(host);
   const E = makeEngine({ host, NS: 'dnd-sheets', ABILITIES, SKILLS, num, abilityMod, sheetOf });
@@ -877,7 +905,7 @@ test('sheets: the Character tab manages compendium and free-text extra feats', (
 });
 
 test('sheets: an extra feat with a featId feeds the engine feats list', () => {
-  const api = makeRulesApi(() => ({ apiVersion: 1, getItem: () => null, getItemByName: () => null }));
+  const api = makeTestRulesApi({ getItem: () => null, getItemByName: () => null });
   const { host } = mockHost({});
   const { sheetOf } = makeHelpers(host);
   const E = makeEngine({ host, NS: 'dnd-sheets', ABILITIES, SKILLS, num, abilityMod, sheetOf });
@@ -1301,23 +1329,23 @@ test('sheets: COMPACT layout docks Init / passive / DC / Atk onto the ability ca
   } finally { clearLocalStorage(); }
 });
 
-test('sheets: ⚙ Settings tab — per-sheet layout switch + the print/export/import tools', () => {
+test('sheets: ⚙ Settings tab — per-character renderer + print/export/import tools', () => {
   const ls = mapLocalStorage({ 'dse-tab:cs': 'settings' });
   try {
     const { rec } = dryRun(PHB());
     const out = renderBody(rec, { id: 'cs', name: 'Mage', addonData: { 'dnd-sheets': { className: 'Wizard' } } });
-    assert.match(out, /name="dse-layout-cs"/, 'layout radios render on the sheet\'s own tab');
-    assert.match(out, /value="classic"[^>]*checked/, 'classic is the default');
-    assert.match(out, /uiLayoutSet/, 'radios wire to the uiLayoutSet action');
+    assert.match(out, /name="dse-renderer-cs"/, 'renderer radios render on the sheet\'s own tab');
+    assert.match(out, /value="builtin:compact"[^>]*checked/, 'Compact is the default');
+    assert.match(out, /uiRendererSet/, 'radios wire to the generic renderer action');
     // The old toolbar row is gone; Print / Export / Import moved onto this tab.
     assert.match(out, /printSheet/, 'Print lives on the tab');
     assert.match(out, /exportSheet/, 'Export lives on the tab');
     assert.match(out, /importOpen/, 'Import lives on the tab (editor)');
     const act = (name, ...args) => rec.actions.find((a) => a.name === name).fn(...args);
-    act('uiLayoutSet', 'cs', 'compact');
-    assert.equal(ls.get('dse-ui:layout:cs'), 'compact', 'compact persists PER SHEET');
-    act('uiLayoutSet', 'cs', 'classic');
-    assert.equal(ls.get('dse-ui:layout:cs'), 'classic', 'classic is stored explicitly (beats the legacy global fallback)');
+    act('uiRendererSet', 'cs', 'builtin:classic');
+    assert.equal(ls.get('dse-ui:renderer:cs'), 'builtin:classic', 'renderer persists PER SHEET');
+    act('uiRendererSet', 'cs', 'builtin:compact');
+    assert.equal(ls.get('dse-ui:renderer:cs'), 'builtin:compact', 'Compact is stored explicitly');
   } finally { clearLocalStorage(); }
 });
 
@@ -1328,7 +1356,7 @@ test('sheets: provider return keeps changed materialized values manual until res
       ...FIGHTER.addonData['dnd-sheets'],
       abilities: { ...FIGHTER.addonData['dnd-sheets'].abilities },
     };
-    captureProviderState(sheet, '2024');
+    captureProviderState(sheet, testIdentity());
     sheet.abilities.STR = 18;
     const character = {
       ...FIGHTER,
@@ -1350,7 +1378,7 @@ test('sheets: provider reconciliation can preserve manual mode or explicitly res
     ...FIGHTER.addonData['dnd-sheets'],
     abilities: { ...FIGHTER.addonData['dnd-sheets'].abilities },
   };
-  captureProviderState(sheet, '2024');
+  captureProviderState(sheet, testIdentity());
   sheet.ac = 21;
   let stored = sheet;
   const character = {
@@ -1397,7 +1425,7 @@ test('sheets: the first edit during a provider outage captures the pre-edit base
   };
   const host = {
     id: 'dnd-sheets',
-    use: () => provider,
+    useService: () => provider,
     store: {
       patchAddonData(_collection, _id, update) {
         stored = update(stored) || stored;
@@ -1423,15 +1451,14 @@ test('sheets: the first edit during a provider outage captures the pre-edit base
   });
   assert.equal(stored.rulesProvider.materialized.ac, 16);
 
-  provider = makeFake();
-  assert.deepEqual(model.providerState(stored), {
-    status: 'reconcile',
-    reason: 'manual',
-    changed: ['ac'],
-    providerId: 'dnd55e-compendium',
-    edition: '2024',
-    engine: null,
-  });
+  provider = engineHandle(makeFake());
+  const state = model.providerState(stored);
+  assert.equal(state.status, 'reconcile');
+  assert.equal(state.reason, 'identity');
+  assert.equal(state.identity.engineAddonId, 'test-rules-engine');
+  assert.equal(state.identity.providerAddonId, 'test-rules-data');
+  assert.equal(state.edition, '2024');
+  assert.equal(state.engine, null);
 });
 
 test('sheets: toolbar gone from the sheet body — Print/Export ride the ⚙ tab only', () => {

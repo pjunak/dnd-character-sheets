@@ -5,14 +5,12 @@ import { createBuilderProgress, descriptorCompletion } from './builder-progress.
 //
 //  Writes the rich decision model (classes[]/baseStats/grants/choices); every edit
 //  rehydrates and materializes the durable fallback. Reached only when rulebook
-//  data is present (the tab is gated on `getRules()`), and the rules api is
-//  built in-addon (rules/api.js) with a guaranteed shape — its list* members
-//  return [] while data is missing, so sections degrade to empty pickers
-//  rather than throwing.
+//  data is present (the tab is gated on `getRules()`). The discovered engine
+//  contract provides the list and derivation methods used below.
 // ═══════════════════════════════════════════════════════════════
 
 export function makeBuilderPanel(ctx) {
-  const { host, t, plural, ABILITIES, SKILLS, num, signed, abilityMod, titleize, firstPara, featureRecordFor, ui, engine: E, POINT_BUY, pointCost, pointsSpent, featAsiFrom, uiState } = ctx;
+  const { host, t, plural, ABILITIES, SKILLS, num, signed, abilityMod, titleize, firstPara, featureRecordFor, ui, engine: E, pointBuyFor, pointCost, pointsSpent, featAsiFrom, uiState } = ctx;
   const { esc, dataAction, dataOn } = host.h;
   const { section, miniStat, selectBox, fieldRow, choiceBlock, warningsBlock, numField, entityRef } = ui;
   const { builderModel, collectChoices, collectCreationChoices } = E;
@@ -29,7 +27,7 @@ export function makeBuilderPanel(ctx) {
     const creationChoices = collectCreationChoices(s, engine);
     const pointBuyRemaining = s.manualScores
       ? 0
-      : POINT_BUY.budget - pointsSpent(base);
+      : pointBuyFor(engine).budget - pointsSpent(base, engine);
     const progress = createBuilderProgress({
       sheet: s,
       classes,
@@ -53,7 +51,7 @@ export function makeBuilderPanel(ctx) {
     const active = classTabs.some((cl) => cl.classId === st.tab) ? st.tab : 'character';
 
     const body = active === 'character'
-      ? `${builderAbilities(c, s, base, comp, ro)}
+      ? `${builderAbilities(c, s, base, comp, ro, engine)}
          ${builderIdentity(c, s, engine, ro)}
          ${builderClasses(c, classes, engine, ro)}
          ${builderCreationChoices(c, s, engine, ro)}
@@ -326,7 +324,7 @@ export function makeBuilderPanel(ctx) {
   // Ability scores — point buy by default (27 pts, each base 8–15), or free
   // manual entry when the box is ticked. Either way this sets only the BASE
   // scores; the engine adds species / background / feat increases on top.
-  function builderAbilities(c, s, base, comp, ro) {
+  function builderAbilities(c, s, base, comp, ro, engine) {
     const manual = !!s.manualScores;
     const toggle = ro ? '' : `<label style="display:inline-flex;align-items:center;gap:6px;font-size:var(--text-xs);color:var(--text-muted);cursor:pointer">
       <input type="checkbox" style="accent-color:var(--accent-gold);cursor:pointer"${manual ? ' checked' : ''}${dataOn('change', host.action('builderToggleManual'), c.id)}> ${esc(t('builder.manualScores'))}</label>`;
@@ -355,19 +353,20 @@ export function makeBuilderPanel(ctx) {
     }
 
     // ── Point buy ──
-    const spent = pointsSpent(base);
-    const remaining = POINT_BUY.budget - spent;
+    const pointBuy = pointBuyFor(engine);
+    const spent = pointsSpent(base, engine);
+    const remaining = pointBuy.budget - spent;
     const remColor = remaining < 0 ? 'var(--color-danger)' : remaining === 0 ? 'var(--text-muted)' : 'var(--accent-gold)';
     const budget = `<span style="font-size:var(--text-xs);font-weight:600;color:${remColor};font-variant-numeric:tabular-nums">${esc(plural('builder.pointsLeft', remaining))}</span>`;
     const cells = ABILITIES.map((a) => {
-      const b = Math.max(POINT_BUY.min, Math.min(POINT_BUY.max, num(base[a], POINT_BUY.min)));
+      const b = Math.max(pointBuy.min, Math.min(pointBuy.max, num(base[a], pointBuy.min)));
       // Host `.codex-stepper` (numField): min = the point-buy floor, max = the highest
       // score still affordable within the budget, so the ± buttons can't overspend;
       // builderAbilitySet re-clamps a typed value the same way.
-      let cap = b; while (cap < POINT_BUY.max && (spent - pointCost(b) + pointCost(cap + 1)) <= POINT_BUY.budget) cap++;
+      let cap = b; while (cap < pointBuy.max && (spent - pointCost(b, engine) + pointCost(cap + 1, engine)) <= pointBuy.budget) cap++;
       const ctrl = ro
         ? `<div style="color:var(--text-parchment);font-weight:700;font-size:var(--text-lg)">${esc(String(b))}</div>`
-        : numField(dataOn('change', host.action('builderAbilitySet'), c.id, a, '$value'), b, { min: POINT_BUY.min, max: cap, ariaLabel: a });
+        : numField(dataOn('change', host.action('builderAbilitySet'), c.id, a, '$value'), b, { min: pointBuy.min, max: cap, ariaLabel: a });
       return tile(a, ctrl, b);
     }).join('');
     return section(t('builder.abilities'),
@@ -610,7 +609,7 @@ export function makeBuilderPanel(ctx) {
       // the applied bump flow through the engine via abilityGrants.
       const asi = featRec && featRec.grants && featRec.grants.abilityScoreIncrease;
       // 'ANY' (Boon of Skill) expands to all six abilities for the picker.
-      const from = featAsiFrom(asi);
+      const from = featAsiFrom(asi, engine);
       if (asi && from.length > 1) {
         // Distribute a half-feat or boon ability increase through the pickers.
         const amt = Math.max(1, num(asi.amount, 1));

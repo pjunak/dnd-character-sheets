@@ -44,24 +44,51 @@ export function materializedValues(sheet) {
   );
 }
 
-export function captureProviderState(sheet, edition) {
+function normalizeIdentity(identity) {
+  if (typeof identity === 'string') {
+    return Object.freeze({ edition: identity, legacy: true });
+  }
+  const value = identity && typeof identity === 'object' ? identity : {};
+  if (value.legacy) return Object.freeze({ edition: String(value.edition || ''), legacy: true });
+  return Object.freeze({
+    engineAddonId: String(value.engineAddonId || ''),
+    engineAddonVersion: String(value.engineAddonVersion || ''),
+    engineContractVersion: String(value.engineContractVersion || ''),
+    providerAddonId: String(value.providerAddonId || ''),
+    providerAddonVersion: String(value.providerAddonVersion || ''),
+    providerContractVersion: String(value.providerContractVersion || ''),
+    contentRevision: String(value.contentRevision || ''),
+    rulesetId: String(value.rulesetId || ''),
+    rulesetVersion: Number(value.rulesetVersion) || 0,
+    edition: String(value.edition || ''),
+  });
+}
+
+export function captureProviderState(sheet, identity) {
   sheet.rulesMode = 'auto';
   sheet.rulesProvider = {
-    edition: String(edition || ''),
+    identity: normalizeIdentity(identity),
     materialized: materializedValues(sheet),
   };
   return sheet;
 }
 
-export function resolveProviderState(sheet, edition, available = true) {
+export function resolveProviderState(sheet, identity, available = true) {
   if (!available) return Object.freeze({ status: 'unavailable' });
   if (sheet?.rulesMode === 'manual') {
     return Object.freeze({ status: 'manual' });
   }
   const state = sheet?.rulesProvider;
   if (!state?.materialized) return Object.freeze({ status: 'active' });
-  if (String(state.edition || '') !== String(edition || '')) {
+  const current = normalizeIdentity(identity);
+  const stored = state.identity
+    ? normalizeIdentity(state.identity)
+    : normalizeIdentity(state.edition || sheet?.ruleset || '');
+  if (stored.edition !== current.edition) {
     return Object.freeze({ status: 'reconcile', reason: 'edition' });
+  }
+  if (stored.legacy || !equal(stored, current)) {
+    return Object.freeze({ status: 'reconcile', reason: 'identity' });
   }
   const changed = MATERIALIZED_FIELDS.filter(
     field => !equal(sheet?.[field], state.materialized[field]),

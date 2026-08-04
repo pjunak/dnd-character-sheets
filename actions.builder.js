@@ -1,7 +1,7 @@
 export const BUILDER_ACTIONS = Object.freeze(['builderField','builderAbility','builderToggleManual','builderAbilitySet','builderClassSet','builderLevelSet','builderSubclassSet','builderAddClass','builderRemoveClass','builderTab','builderTabKey','builderNavigate','builderToggleLevel','builderExtraFeatAdd','builderExtraFeatRemove','builderAsiSet','builderChoose']);
 
 export function registerBuilderActions(deps) {
-  const { host, plural, num, uid, ABILITIES, POINT_BUY, pointCost, pointsSpent, featAsiFrom, featAbilityCap, uiState, sheetOf, getRules } = deps;
+  const { host, plural, num, uid, ABILITIES, pointBuyFor, pointCost, pointsSpent, featAsiFrom, featAbilityCap, uiState, sheetOf, getRules } = deps;
   const { builderMutate, reconcile, builderModel } = deps.engine;
   const register = (name, fn) => host.registerAction(name, fn);
   const timers = new Set();
@@ -25,12 +25,13 @@ export function registerBuilderActions(deps) {
   // Toggle point-buy ↔ manual base scores. Leaving manual (→ point buy) clamps
   // each base into the 8–15 point-buy range so the pool math stays valid.
   register('builderToggleManual', (cid) => {
-    builderMutate(cid, (s) => {
+    builderMutate(cid, (s, engine) => {
       const on = !s.manualScores;
       s.manualScores = on;
       if (!on) {
+        const pointBuy = pointBuyFor(engine);
         const base = { ...(s.baseStats || {}) };
-        for (const a of ABILITIES) base[a] = Math.max(POINT_BUY.min, Math.min(POINT_BUY.max, num(base[a], POINT_BUY.min)));
+        for (const a of ABILITIES) base[a] = Math.max(pointBuy.min, Math.min(pointBuy.max, num(base[a], pointBuy.min)));
         s.baseStats = base;
       }
     });
@@ -41,14 +42,15 @@ export function registerBuilderActions(deps) {
   register('builderAbilitySet', (cid, ability, value) => {
     if (ABILITIES.indexOf(ability) < 0) return;
     let left = null;   // remaining point-buy budget, captured post-clamp
-    builderMutate(cid, (s) => {
+    builderMutate(cid, (s, engine) => {
+      const pointBuy = pointBuyFor(engine);
       const base = { ...(s.baseStats || {}) };
-      const cur = num(base[ability], POINT_BUY.min);
-      let next = Math.max(POINT_BUY.min, Math.min(POINT_BUY.max, num(value, POINT_BUY.min)));
-      while (next > POINT_BUY.min && (pointsSpent(base) - pointCost(cur) + pointCost(next)) > POINT_BUY.budget) next--;
+      const cur = num(base[ability], pointBuy.min);
+      let next = Math.max(pointBuy.min, Math.min(pointBuy.max, num(value, pointBuy.min)));
+      while (next > pointBuy.min && (pointsSpent(base, engine) - pointCost(cur, engine) + pointCost(next, engine)) > pointBuy.budget) next--;
       base[ability] = next;
       s.baseStats = base;
-      left = POINT_BUY.budget - pointsSpent(base);
+      left = pointBuy.budget - pointsSpent(base, engine);
     });
     // Announce the new remaining budget through the HOST's persistent live
     // region — the full-panel re-render destroys any in-page live region, so
@@ -181,7 +183,7 @@ export function registerBuilderActions(deps) {
       let cap = null;
       if (type === 'feat' && engine) {
         const featId = s.featureChoices[k.replace(/:featability$/, ':feat')];
-        cap = featAbilityCap(featId ? engine.getItem('feat', String(featId)) : null);
+        cap = featAbilityCap(featId ? engine.getItem('feat', String(featId)) : null, engine);
       }
       const g = (s.abilityGrants || []).find((x) => x.id === k);
       const assign = { ...((g && g.assign) || {}) };
@@ -204,7 +206,7 @@ export function registerBuilderActions(deps) {
       else s.featureChoices[k] = String(value);
       if (/:featability$/.test(k)) {
         const featId = s.featureChoices[k.replace(/:featability$/, ':feat')];
-        const cap = engine ? featAbilityCap(featId ? engine.getItem('feat', String(featId)) : null) : null;
+        const cap = engine ? featAbilityCap(featId ? engine.getItem('feat', String(featId)) : null, engine) : null;
         upsertGrant(s, k, { type: 'feat' }, value ? { [String(value)]: 1 } : null, cap);
       } else if (/:ability$/.test(k)) {
         upsertGrant(s, k, { type: 'asi' }, value ? { [String(value)]: 2 } : null);
@@ -215,9 +217,9 @@ export function registerBuilderActions(deps) {
         const asi = feat && feat.grants && feat.grants.abilityScoreIncrease;
         // 'ANY' (Boon of Skill) expands to all six — never auto-applied; a
         // genuine single-option bump applies with its feat's cap (boons: 30).
-        const from = featAsiFrom(asi);
+        const from = featAsiFrom(asi, engine);
         if (asi && from.length === 1) {
-          upsertGrant(s, abilKey, { type: 'feat' }, { [from[0]]: num(asi.amount, 1) }, featAbilityCap(feat));
+          upsertGrant(s, abilKey, { type: 'feat' }, { [from[0]]: num(asi.amount, 1) }, featAbilityCap(feat, engine));
         }
       } else if (/^asi:[^:]+:\d+$/.test(k)) {
         if (value !== 'asi') { removeGrant(s, k + ':ability'); delete s.featureChoices[k + ':ability']; }

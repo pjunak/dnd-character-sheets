@@ -1,40 +1,66 @@
 // ═══════════════════════════════════════════════════════════════
 //  helpers.js — domain constants + pure helpers, shared by every module.
 //
-//  RULES facts (ability list, skill→ability map, point buy, HP clamp, the mod
-//  math) live in rules/engine.js — the single source of D&D system knowledge —
-//  and are re-exported here so panels keep one import site (ctx). This file
-//  adds only UI-side constants + formatting.
+//  The sheet owns its presentation vocabulary and hand-fillable arithmetic.
+//  Ruleset-dependent values are requested from the discovered rules-engine
+//  service; this addon carries no rules implementation of its own.
 //
 //  No host/DOM coupling except `uid`, which uses host.store.generateId for
 //  stable ids (with a safe random fallback). `makeHelpers(host)` binds that one
 //  dependency; everything else is a free pure function exported directly.
 // ═══════════════════════════════════════════════════════════════
 
-import { ABILITIES, SKILL_ABILITY, num, abilityMod, POINT_BUY, pointCost, pointsSpent, clampHp, hitDieAvg, scrollCopyCost, ASI_RULES, featAsiFrom, featAbilityCap } from './rules/engine.js';
-export { ABILITIES, num, abilityMod, POINT_BUY, pointCost, pointsSpent, clampHp, hitDieAvg, scrollCopyCost, ASI_RULES, featAsiFrom, featAbilityCap };
-
 // ── Domain constants (UI-side) ───────────────────────────────────
+export const ABILITIES = Object.freeze(['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA']);
+const SKILL_ABILITY = Object.freeze({
+  acrobatics: 'DEX', animalHandling: 'WIS', arcana: 'INT', athletics: 'STR',
+  deception: 'CHA', history: 'INT', insight: 'WIS', intimidation: 'CHA',
+  investigation: 'INT', medicine: 'WIS', nature: 'INT', perception: 'WIS',
+  performance: 'CHA', persuasion: 'CHA', religion: 'INT', sleightOfHand: 'DEX',
+  stealth: 'DEX', survival: 'WIS',
+});
 export const COINS = ['cp', 'sp', 'ep', 'gp', 'pp'];   // ascending value — cp leftmost in the coin line
 export const LOCATIONS = ['equipped', 'ready', 'pack']; // carry state (EQ-1)
-// Display-friendly skill list, derived from the engine's skill→ability map so
-// the two encodings can never drift (D&D 2024).
+// Display vocabulary for the D&D 5e sheet schema. Edition-dependent mechanics
+// remain engine-owned.
 export const SKILLS = Object.entries(SKILL_ABILITY).map(([id, ability]) => ({ id, ability }));
 
 // ── Pure helpers (formatting) ────────────────────────────────────
 export const signed = (n) => (n >= 0 ? '+' + n : String(n));
 export const titleize = (id) => String(id || '').replace(/[-_:]/g, ' ').replace(/\b\w/g, (ch) => ch.toUpperCase());
+export const num = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
+export const abilityMod = score => Math.floor((num(score, 10) - 10) / 2);
+export const clampHp = (value, max) => Math.max(0, Math.min(Math.max(0, num(max, 0)), num(value, 0)));
 
-// Href into the compendium addon (it owns the `/compendium` route; addon
-// routes are global hash routes, so a plain anchor reaches it). Callers gate
-// on a resolved record id — without the book the name stays plain text (no
-// dead link).
-export const compendiumHref = (kind, id) => `#/compendium/${kind}:${id}`;
+export const pointBuyFor = engine => {
+  const value = engine?.getRuleset?.()?.constants?.pointBuy;
+  return value && typeof value === 'object'
+    ? value
+    : Object.freeze({ budget: 0, min: 1, max: 30, cost: Object.freeze({}) });
+};
+export const pointCost = (value, engine) => num(engine?.derive?.pointBuyCost?.(value), 0);
+export const pointsSpent = (scores, engine) => num(engine?.derive?.pointsSpent?.(scores), 0);
+export const hitDieAvg = (die, engine) => num(engine?.derive?.hitDieAverage?.(die), 0);
+export const scrollCopyCost = (level, engine) => num(engine?.derive?.scrollCopyCost?.(level), 0);
+export const featAsiFrom = (value, engine) => {
+  const result = engine?.derive?.featAsiFrom?.(value);
+  return Array.isArray(result) ? result.slice() : [];
+};
+export const featAbilityCap = (feat, engine) => {
+  const value = engine?.derive?.featAbilityCap?.(feat);
+  return value == null ? null : num(value, null);
+};
+
+export function referenceHref(engine, kind, id, mode = 'view') {
+  const reference = engine?.resolveReference?.(kind, id, mode);
+  const href = typeof reference === 'string' ? reference : reference?.href;
+  return typeof href === 'string' && /^#\/[A-Za-z0-9/_:.-]+$/.test(href) ? href : '';
+}
 
 // First paragraph of a markdown body, flattened for a hover legend's `desc`
 // (statTip renders desc as ESCAPED plain text): drop a leading heading + emphasis
 // markers, collapse whitespace, cap the length so the card stays compact. Full
-// prose stays on the compendium detail page.
+// prose stays on the provider-owned detail page.
 export function firstPara(md) {
   const body = String(md || '').replace(/\r/g, '').replace(/^#{1,6}\s+[^\n]*\n+/, '').trim();
   const para = (body.split(/\n\s*\n/)[0] || '').replace(/\*\*/g, '').replace(/\s+/g, ' ').trim();
@@ -45,7 +71,7 @@ export function firstPara(md) {
  *  hover. Subclass features resolve within the selected subclass (by name, then local
  *  id). Class features join by (classId, level, name) with a level-agnostic and a
  *  shared-generic (ASI / Epic Boon, classId null) fallback. `cl` supplies classId for
- *  class features. null when the book addon predates feature records. (Shared by the
+ *  class features. null when the data provider has no feature records. (Shared by the
  *  Builder log + the read-tab Features summary.) */
 export function featureRecordFor(engine, cl, level, f) {
   if (!engine || !engine.listFeatures || !engine.getFeature) return null;
@@ -71,7 +97,7 @@ export function featureRecordFor(engine, cl, level, f) {
  *  the empty arrays). Multiclass `classes[]` arrives with the Builder. */
 export const blank = () => ({
   v: 2,
-  ruleset: '2024',   // edition used to materialize this character; restamped on every Builder save
+  ruleset: '',   // edition used to materialize this character; restamped on every Builder save
   rulesMode: 'auto',
   rulesProvider: null,
   player: '', className: '', subclass: '', race: '', background: '', alignment: '',
@@ -143,6 +169,9 @@ export function makeHelpers(host) {
       rulesMode: s.rulesMode === 'manual' ? 'manual' : 'auto',
       rulesProvider: s.rulesProvider && typeof s.rulesProvider === 'object'
         ? {
+          identity: s.rulesProvider.identity && typeof s.rulesProvider.identity === 'object'
+            ? JSON.parse(JSON.stringify(s.rulesProvider.identity))
+            : null,
           edition: String(s.rulesProvider.edition || ''),
           materialized: s.rulesProvider.materialized
             && typeof s.rulesProvider.materialized === 'object'

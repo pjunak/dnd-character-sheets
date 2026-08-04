@@ -175,7 +175,7 @@ export function makeSheetPanel(ctx) {
   //    Hit Dice for short-rest healing (average + CON), then take a short or long
   //    rest; the engine's recharge rules decide what resets. Rendered at the
   //    fragment root by entry.js when `dse-rest:<cid>` is open. ──
-  function restModal(c, s, comp) {
+  function restModal(c, s, comp, engine) {
     const cid = c.id;
     const resources = (comp && comp.resources) || [];
     const uses = s.resourceUses || {};
@@ -183,7 +183,7 @@ export function makeSheetPanel(ctx) {
     const conMod = comp && comp.abilities && comp.abilities.CON ? num(comp.abilities.CON.mod, 0) : 0;
     const hdRows = resources.filter((r) => r.kind === 'hitdice').map((r) => {
       const cur = curOf(r);
-      const heal = Math.max(1, hitDieAvg(r.die) + conMod);
+      const heal = Math.max(1, hitDieAvg(r.die, engine) + conMod);
       const btn = cur > 0
         ? `<button class="inline-create-btn"${dataAction(host.action('restSpendHitDie'), cid, r.key)}>${esc(t('rest.spendDie', { die: r.die, heal }))}</button>`
         : `<span style="color:var(--text-muted);font-size:var(--text-xs)">${esc(t('rest.noneLeft'))}</span>`;
