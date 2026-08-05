@@ -12,7 +12,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          path: dnd-character-sheets
+          path: addon-dnd-character-sheets
 
       - uses: actions/checkout@v7
         with:
@@ -29,4 +29,4 @@ jobs:
           node-version: 26
 
       - run: node --test tests/*.mjs
-        working-directory: dnd-character-sheets
+        working-directory: addon-dnd-character-sheets
