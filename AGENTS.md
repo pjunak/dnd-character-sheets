@@ -1,4 +1,4 @@
-# AGENTS.md — dnd-character-sheets
+# AGENTS.md — addon-dnd-character-sheets
 
 This repository contains the `dnd-sheets` addon for the sibling
 `ttrpg-codex` host. The manifest ID is a permanent data namespace:
@@ -59,7 +59,8 @@ renders Combat. Preserve this naming unless doing a deliberate, tested rename.
   descriptors rather than duplicating rulebook-specific checks in the panel.
 - `model.js` owns migrations and mutations. Builder changes flow through
   `builderMutate()` and `materializeInto()` so computed state is copied into
-  flat fallback fields.
+  flat fallback fields. Builder discovery, choice mutation, and reconciliation
+  delegate to the engine v2 normalized Builder API.
 - The fallback fields are a durability contract: losing or disabling a
   provider must leave a usable hand-filled sheet rather than erase data.
 - `provider-state.js` resolves provider availability per character. Do not
@@ -75,6 +76,8 @@ renders Combat. Preserve this naming unless doing a deliberate, tested rename.
   character and browser, never stored in campaign/entity data.
 - `renderer-registry.js` accepts providers by service contract, schema version,
   and granted permissions. Never add provider-id branches or a style whitelist.
+  Renderer v2 applicability is declarative and may filter by class, subclass,
+  edition, and ruleset without sheet-owned IDs.
   Missing/failing preferred renderers fall back to Compact without erasing the
   preference; Settings always remains owned by this addon.
 - Domain controllers dispose their own timers, URLs, listeners, and other
@@ -112,7 +115,7 @@ Use relative test paths on Windows. From the host repository, install the
 current source with:
 
 ```text
-node scripts/dev-install-addon.cjs ../dnd-character-sheets
+node scripts/dev-install-addon.cjs ../addon-dnd-character-sheets
 ```
 
 Source edits are not visible in the app until reinstall. Client-only changes

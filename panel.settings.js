@@ -18,7 +18,8 @@ export function makeSettingsPanel(ctx) {
   const { section } = ui;
 
   function panelSettings(c, s, edit, engine) {
-    const rendererState = renderers.resolve(c.id);
+    const rendererContext = { sheet: s, engine };
+    const rendererState = renderers.resolve(c.id, rendererContext);
 
     const opt = (renderer) => `
       <label style="display:flex;align-items:flex-start;gap:var(--space-2);padding:var(--space-2);border:1px solid ${rendererState.preferred === renderer.identity ? 'rgba(var(--accent-gold-rgb),.45)' : 'var(--border-subtle)'};border-radius:var(--radius);cursor:${renderer.unavailable ? 'not-allowed' : 'pointer'};background:var(--bg-surface);opacity:${renderer.unavailable ? '.65' : '1'}">
@@ -30,7 +31,7 @@ export function makeSettingsPanel(ctx) {
     const rendererBody = `
       <p style="color:var(--text-muted);font-size:var(--text-sm);margin:0 0 var(--space-2)">${esc(t('settings.rendererHint'))}</p>
       <div style="display:flex;flex-direction:column;gap:var(--space-2)">
-        ${renderers.options(c.id).map(renderer => opt({
+        ${renderers.options(c.id, rendererContext).map(renderer => opt({
           ...renderer,
           label: renderer.identity === 'builtin:classic' ? t('settings.layoutClassic')
             : renderer.identity === 'builtin:compact' ? t('settings.layoutCompact') : renderer.label,

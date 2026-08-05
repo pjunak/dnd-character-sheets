@@ -31,12 +31,12 @@ export function descriptorCompletion(sheet, choice, engine) {
 
   const mode = sheet.featureChoices?.[choice.id] || '';
   if (mode === 'asi') {
-    const required = Math.max(1, number(engine.getRuleset().constants.asi.budget, 2));
-    const picked = grantTotal(sheet, `${choice.id}:ability`);
+    const required = Math.max(1, number(choice.ability?.budget, 1));
+    const picked = grantTotal(sheet, choice.ability?.id);
     return Object.freeze({ done: picked >= required, picked, required, mode });
   }
   if (mode === 'feat') {
-    const featId = sheet.featureChoices?.[`${choice.id}:feat`] || '';
+    const featId = sheet.featureChoices?.[choice.feat?.id] || '';
     if (!featId) return Object.freeze({ done: false, picked: 0, required: 1, mode });
     const feat = engine.getItem('feat', featId);
     const increase = feat?.grants?.abilityScoreIncrease;
@@ -45,7 +45,7 @@ export function descriptorCompletion(sheet, choice, engine) {
       : increase?.from === 'ANY' ? ['ANY'] : [];
     if (increase && (from.length > 1 || from.includes('ANY'))) {
       const required = Math.max(1, number(increase.amount, 1));
-      const picked = grantTotal(sheet, `${choice.id}:featability`);
+      const picked = grantTotal(sheet, choice.feat?.ability?.id);
       return Object.freeze({ done: picked >= required, picked, required, mode });
     }
     return Object.freeze({ done: true, picked: 1, required: 1, mode });
@@ -73,6 +73,7 @@ export function createBuilderProgress({
   classes,
   classChoices,
   creationChoices,
+  creationAbilityChoices = [],
   engine,
   computed,
   pointBuyRemaining,
@@ -101,15 +102,10 @@ export function createBuilderProgress({
       issue: issue('lineage', characterTarget),
     });
   }
-  const background = sheet.background
-    ? engine.getItemByName('background', sheet.background)
-      || engine.getItem('background', sheet.background)
-    : null;
-  const backgroundBudget = number(engine.getRuleset().constants.asi.bgBudget);
-  if (background?.abilityScores?.length && backgroundBudget > 0) {
+  for (const choice of creationAbilityChoices) {
     foundation.push({
-      done: grantTotal(sheet, 'bgasi') >= backgroundBudget,
-      issue: issue('backgroundAsi', characterTarget),
+      done: grantTotal(sheet, choice.id) >= Math.max(1, number(choice.budget, 1)),
+      issue: issue('originAbility', characterTarget, { abilityChoice: choice }),
     });
   }
   for (const choice of creationChoices) {

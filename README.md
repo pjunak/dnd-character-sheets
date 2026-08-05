@@ -34,8 +34,9 @@ above it). The D&D tabs follow:
   per-level progression spine whose rows expand in place.
   Only with the rules engine and only for editors.
 - **Settings** — per-sheet tools, rightmost: a per-character, per-browser style
-  selector (Compact by default, Classic built in, compatible renderer addons
-  discovered automatically), plus **🖨 Print / PDF** (a self-contained printable sheet), **⬇ Export**
+  selector (Compact by default, Classic built in, compatible universal or
+  class/subclass-specific renderer addons discovered automatically), plus
+  **🖨 Print / PDF** (a self-contained printable sheet), **⬇ Export**
   (download a versioned character JSON), and **⬆ Import** (file or paste,
   bounded validation, preview, explicit confirmation, and immediate undo —
   editors only).
@@ -84,8 +85,9 @@ domain disposers. Controller actions live in focused modules:
   rulebook-return reconciliation.
 
 Panels remain render-only and `model.js` owns stored-sheet mutation,
-materialization, and service-identity reconciliation. Rules implementation and
-rules data are intentionally absent from this repository.
+materialization, service-identity reconciliation, and thin calls into the
+engine's normalized Builder API. Builder rules implementation and rules data
+are intentionally absent from this repository.
 
 ## Designed to grow
 
@@ -104,10 +106,12 @@ rules data are intentionally absent from this repository.
   spell lists, and printed armor restrictions. Disabling a compendium book group removes
   those records from hydration; stored fallback fields cannot turn a removed
   rule grant into a manual choice.
-- **Independent styles:** any addon can provide `dnd-sheets.renderer` v1. The
+- **Independent styles:** any addon can provide `dnd-sheets.renderer` v2. The
   sheet lists compatible providers automatically; no repository change or
-  addon-id whitelist is required. Renderer preference is local to each browser
-  and character, Compact is the safe fallback, and unavailable preferences are retained.
+  addon-id whitelist is required. Providers may be universal or declare class,
+  subclass, edition, and ruleset applicability. Renderer preference is local
+  to each browser and character, Compact is the safe fallback, and unavailable
+  or temporarily inapplicable preferences are retained.
 - **Localization:** all UI strings flow through the scoped `host.i18n` facade.
   `addon.json` declares packaged JSON catalogs under `locales/`; English is the
   source of truth and partial translations fall back per key through the host's
@@ -115,12 +119,12 @@ rules data are intentionally absent from this repository.
 
 ## Upgrade from the built-in rules engine
 
-For an existing installation, install `dnd-engine` first, then update the
-rules-data addon, and update `dnd-sheets` last. The official compendium keeps a
-temporary legacy publication during this migration, so an older sheet release
-continues to automate while the new engine is being introduced. Once this
-sheet version is active, it uses only the host-selected `dnd5e.rules-engine`
-service and never names the compendium or engine addon.
+For an existing installation, update the host, install `dnd-engine`, install
+exactly one compatible rules-data addon, and then update `dnd-sheets`. This
+sheet release consumes only `dnd5e.rules-engine` v2 and never names the
+compendium or engine addon. The host rejects installing a second exclusive
+rules-data provider; switch revisions by uninstalling the installed provider
+before installing the replacement.
 
 If no compatible engine is selected, sheets remain hand-fillable and retain
 their stored/materialized values. Installing a compatible engine later enables
@@ -131,7 +135,7 @@ the Builder without migrating the `dnd-sheets` character namespace.
 No build step (browser ES modules). From a sibling checkout of the host:
 
 ```sh
-node scripts/dev-install-addon.cjs ../dnd-character-sheets   # from the ttrpg-codex repo
+node scripts/dev-install-addon.cjs ../addon-dnd-character-sheets   # from the ttrpg-codex repo
 ```
 
 Run the complete test suite (assume the host and `addon-dnd-engine` repos are

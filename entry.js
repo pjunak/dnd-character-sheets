@@ -225,7 +225,7 @@ export default function register(host) {
         computed: comp,
         warnings,
         editable,
-      }, defaultHtml);
+      }, defaultHtml, { sheet: s, engine });
       return `<div class="addon-dnd-sheets codex-stack codex-stack-flush">${ctx.ui.styleTag}${tabBar}
         <div role="tabpanel" id="${esc(pid)}" aria-labelledby="${esc(tabBtnId(c.id, active))}" tabindex="0">${rendered}</div>${restOverlay}${swapOverlay}${spellMgrOverlay}${importOverlay}${addItemOverlay}</div>`;
     },

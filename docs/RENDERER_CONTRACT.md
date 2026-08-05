@@ -1,4 +1,4 @@
-# `dnd-sheets.renderer` v1 authoring contract
+# `dnd-sheets.renderer` v2 authoring contract
 
 A renderer addon can add a sheet style without changing `dnd-sheets` or naming
 the rules engine/data provider. The host loads compatible providers before the
@@ -9,11 +9,11 @@ sheet and the sheet discovers all of them through `host.listServices()`.
 ```json
 {
   "apiVersion": 2,
-  "hostVersion": ">=1.2.0",
+  "hostVersion": ">=1.3.0",
   "permissions": ["ui:override", "data:read:characters"],
   "services": {
     "provides": [
-      { "contract": "dnd-sheets.renderer", "version": "1.0.0" }
+      { "contract": "dnd-sheets.renderer", "version": "2.0.0" }
     ]
   }
 }
@@ -30,18 +30,24 @@ Register one immutable API object:
 ```js
 export default function register(host) {
   const api = Object.freeze({
-    apiVersion: 1,
+    apiVersion: 2,
     descriptor: () => Object.freeze({
       id: 'ink',
       label: host.i18n.t('renderer.name'),
       description: host.i18n.t('renderer.description'),
       sheetSchemaVersion: 1,
+      appliesTo: {
+        classIds: ['fighter'],
+        subclassIds: ['eldritch-knight'],
+        editions: ['2024'],
+        rulesetIds: ['dnd-2024'],
+      },
     }),
     render(payload) {
       return `<div class="my-addon-ink">${payload.defaultHtml}</div>`;
     },
   });
-  host.provideService('dnd-sheets.renderer', '1.0.0', api);
+  host.provideService('dnd-sheets.renderer', '2.0.0', api);
 }
 ```
 
@@ -49,6 +55,19 @@ export default function register(host) {
 hyphens (maximum 64 characters). The persisted identity is
 `<provider-addon-id>:<renderer-id>`, so neither component may be renamed without
 a preference migration. Labels and descriptions are plain localized text.
+
+`appliesTo` is optional. Without it, the style applies to every character.
+With it, the descriptor may contain `classIds`, `subclassIds`, `editions`, and
+`rulesetIds`; each field is a non-empty list of stable IDs. Values within one
+field are alternatives, while every declared field must match. The example is
+therefore available only to a 2024 Fighter using the Eldritch Knight subclass
+under the `dnd-2024` ruleset. A class-only renderer should declare only
+`classIds`; a subclass-only renderer may declare only `subclassIds`.
+
+Applicability is declarative so the sheet can filter choices without executing
+provider callbacks or knowing any class, subclass, ruleset, or addon ID. If a
+character stops matching its preferred renderer, Compact is used without
+erasing the preference. The renderer resumes if that character matches again.
 
 `render(payload)` is synchronous and returns an HTML string. Dynamic values
 must be escaped with the provider's `host.h.esc()` before interpolation. Keep

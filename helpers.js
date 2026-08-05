@@ -33,7 +33,7 @@ export const abilityMod = score => Math.floor((num(score, 10) - 10) / 2);
 export const clampHp = (value, max) => Math.max(0, Math.min(Math.max(0, num(max, 0)), num(value, 0)));
 
 export const pointBuyFor = engine => {
-  const value = engine?.getRuleset?.()?.constants?.pointBuy;
+  const value = engine?.getBuilderPlan?.({})?.pointBuy;
   return value && typeof value === 'object'
     ? value
     : Object.freeze({ budget: 0, min: 1, max: 30, cost: Object.freeze({}) });

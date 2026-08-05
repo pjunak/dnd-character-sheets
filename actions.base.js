@@ -104,7 +104,8 @@ export function registerBaseActions(deps) {
       });
     },
     uiRendererSet(cid, identity) {
-      if (renderers.select(cid, String(identity))) host.ui.rerender();
+      const sheet = sheetOf(host.store.getCharacters().find(item => item && item.id === cid) || {});
+      if (renderers.select(cid, String(identity), { sheet, engine: getRules(sheet) })) host.ui.rerender();
     },
     providerResolve(cid, choice) {
       resolveProvider(cid, choice);

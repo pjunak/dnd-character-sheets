@@ -17,7 +17,7 @@ the selected rules-data provider.
 
 ## Rules-engine discovery
 
-The manifest consumes optional cardinality-one `dnd5e.rules-engine` v1 through
+The manifest consumes optional cardinality-one `dnd5e.rules-engine` v2 through
 `host.useService()`. It never names an engine or data-provider addon. The host
 selects among compatible engine providers; the engine independently selects a
 compatible rules-data service.
@@ -26,9 +26,13 @@ An engine is active only when its API is compatible and `getAvailability()`
 reports available rules data. Otherwise the sheet remains fully hand-fillable,
 the Builder is hidden, and the last materialized flat values remain usable.
 
-The sheet delegates ruleset-dependent calculations to the engine API. Panels
-and actions must not recreate point-buy tables, spell-copy costs, hit-die
-averages, feat caps, edition constants, or sourcebook-specific branches.
+The sheet delegates ruleset-dependent calculations and Builder semantics to
+the engine API. `getBuilderPlan()` supplies normalized classes, base scores,
+point buy, creation grants, class choices, advancement levels, feat categories,
+and caps. `applyBuilderChoice()` validates mutations, and
+`reconcileBuilderDecisions()` prunes decisions invalidated by structural
+changes. Panels and actions must not recreate those policies, spell-copy
+costs, hit-die averages, edition constants, or sourcebook-specific branches.
 Presentation vocabulary and manual-mode arithmetic may remain local.
 
 Provider-owned record links are resolved through
@@ -61,11 +65,11 @@ full service identity becomes available.
 
 ## Renderer discovery and selection
 
-The manifest consumes optional cardinality-many `dnd-sheets.renderer` v1
+The manifest consumes optional cardinality-many `dnd-sheets.renderer` v2
 through `host.listServices()`. A provider is accepted by contract and schema,
 not by addon id, when it:
 
-- exposes `apiVersion: 1`, `descriptor()`, and `render(payload)`;
+- exposes `apiVersion: 2`, `descriptor()`, and `render(payload)`;
 - declares `sheetSchemaVersion: 1` and a safe renderer id; and
 - has explicit `ui:override` and `data:read:characters` grants, because the
   sheet delegates HTML production and a bounded character snapshot.
@@ -80,6 +84,12 @@ entity. Legacy Classic/Compact layout keys migrate on read. If a preferred
 renderer is missing, invalid, throws, or returns an invalid result, the sheet
 uses Compact without deleting the preference. It resumes automatically when
 the provider returns.
+
+A descriptor may restrict itself declaratively by class IDs, subclass IDs,
+editions, and ruleset IDs. The registry evaluates those fields from the current
+character and selected engine context. Inapplicable providers are omitted from
+that character's selector; a previously selected provider falls back exactly
+like a missing one. The sheet contains no class/subclass or provider whitelist.
 
 The Settings tab and selector remain sheet-owned so a renderer cannot hide the
 mechanism used to leave it. Renderer input is cloned/frozen, excludes other

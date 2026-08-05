@@ -1,6 +1,6 @@
 // A compact in-memory rules-data service fixture. Shapes mirror the public
 // contract while remaining synthetic and redistributable.
-import { DEFAULT_RULESET } from '../../addon-dnd-engine/rules/ruleset.js';
+import { SYNTHETIC_2024_RULESET } from '../../addon-dnd-engine/contract/synthetic-rulesets.mjs';
 export function makeFake() {
   const store = {
     class: {
@@ -37,6 +37,7 @@ export function makeFake() {
         id: 'fighter', name: 'Fighter', kind: 'class', hitDie: 'd10', savingThrows: ['STR', 'CON'],
         spellcasting: null, weaponMastery: { count: 3 }, acFormulas: [],
         startingProficiencies: { weapons: ['simple', 'martial'] },
+        abilityScoreImprovementLevels: [6, 14],
       },
       paladin: {
         id: 'paladin', name: 'Paladin', kind: 'class', hitDie: 'd10', savingThrows: ['WIS', 'CHA'],
@@ -66,6 +67,7 @@ export function makeFake() {
         // (exercises expertise materialization into the standalone fallback).
         startingProficiencies: { weapons: ['martial-finesse-or-light'], skills: { choose: 4, from: ['acrobatics', 'athletics', 'deception', 'insight', 'intimidation', 'investigation', 'perception', 'persuasion', 'sleightOfHand', 'stealth'] } },
         grants: { choices: [{ id: 'rogue-expertise-1', source: 'level:1', type: 'expertise', count: 2, prompt: 'Expertise (choose 2 skills)' }] },
+        abilityScoreImprovementLevels: [10],
         // Mirrors the real table's tricky rows: 'Expertise' repeats at two levels
         // (one record per occurrence — BOTH grant), and L3 mixes a recordless
         // generic label ('Rogue Subclass') with a real feature record.
@@ -146,7 +148,7 @@ export function makeFake() {
       leather: { id: 'leather', name: 'Leather Armor', kind: 'armor', armorType: 'light', baseAC: 11, dexCap: null, acBonus: 0 },
     },
     species: {
-      dwarf: { id: 'dwarf', name: 'Dwarf', kind: 'species', speeds: { walk: 30 }, senses: { darkvision: 120 }, resistances: ['poison'], grants: { hpPerLevel: 1 }, lineages: [{ id: 'hill-dwarf', name: 'Hill Dwarf', grants: { hpPerLevel: 1 } }] },
+      dwarf: { id: 'dwarf', name: 'Dwarf', kind: 'species', abilityScores: ['CON', 'WIS'], speeds: { walk: 30 }, senses: { darkvision: 120 }, resistances: ['poison'], grants: { hpPerLevel: 1 }, lineages: [{ id: 'hill-dwarf', name: 'Hill Dwarf', grants: { hpPerLevel: 1 } }] },
       elf: { id: 'elf', name: 'Elf', kind: 'species', speeds: { walk: 30 }, senses: { darkvision: 60 }, resistances: [], lineages: [
         { id: 'drow', name: 'Drow', grants: { senses: { darkvision: 120 }, spells: [{ level: 0, ids: ['dancing-lights'], alwaysPrepared: true }, { level: 3, ids: ['faerie-fire'], alwaysPrepared: true, free: '1/long' }, { level: 5, ids: ['darkness'], alwaysPrepared: true, free: '1/long' }] } },
         { id: 'wood-elf', name: 'Wood Elf', grants: { speedBonus: 5, spells: [{ level: 0, ids: ['druidcraft'], alwaysPrepared: true }] } },
@@ -155,7 +157,7 @@ export function makeFake() {
     background: {
       sage: { id: 'sage', name: 'Sage', kind: 'background', skillProficiencies: ['arcana', 'history'] },
       // Origin feat carrier → exercises the bg→feat→choose-grant chain (smoke.mjs).
-      acolyte: { id: 'acolyte', name: 'Acolyte', kind: 'background', skillProficiencies: ['insight', 'religion'], originFeat: 'magic-initiate' },
+      acolyte: { id: 'acolyte', name: 'Acolyte', kind: 'background', abilityScores: ['INT', 'WIS', 'CHA'], skillProficiencies: ['insight', 'religion'], originFeat: 'magic-initiate' },
     },
     // Feature records incl. an option-pool parent (Metamagic) + its category-tagged
     // options — exercises collectChoices' feature-grants + fromCategory expansion.
@@ -178,7 +180,7 @@ export function makeFake() {
   const byName = (kind, name) => Object.values(store[kind] || {}).find((r) => (r.name || '').toLowerCase() === String(name).toLowerCase()) || null;
   const vals = (kind) => Object.values(store[kind] || {});
   return {
-    apiVersion: 1,
+    apiVersion: 2,
     listClasses: () => vals('class').map((c) => ({ id: c.id, name: c.name })),
     listSubclasses: (classId) => vals('subclass').filter((s) => !classId || s.classId === classId).map((c) => ({ id: c.id, name: c.name, classId: c.classId })),
     listFeatures: (q) => vals('feature').filter((f) =>
@@ -200,7 +202,7 @@ export function makeFake() {
     getItem: (kind, id) => (store[kind] && store[kind][id]) || null,
     getItemByName: byName,
     getRecords: (kind) => vals(kind),
-    getRuleset: () => DEFAULT_RULESET,
+    getRuleset: () => SYNTHETIC_2024_RULESET,
     resolveReference: (kind, id) => (store[kind] && store[kind][id])
       ? { href: `#/compendium/${kind}:${id}` }
       : null,

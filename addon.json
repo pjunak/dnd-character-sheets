@@ -1,9 +1,9 @@
 {
   "id": "dnd-sheets",
   "name": "D&D Character Sheets",
-  "version": "0.12.0",
+  "version": "1.0.0",
   "apiVersion": 2,
-  "hostVersion": ">=1.2.0",
+  "hostVersion": ">=1.3.0",
   "capabilities": {
     "required": [
       "lifecycle.dispose",
@@ -24,13 +24,13 @@
     "consumes": [
       {
         "contract": "dnd5e.rules-engine",
-        "range": "^1.0.0",
+        "range": "^2.0.0",
         "cardinality": "one",
         "required": false
       },
       {
         "contract": "dnd-sheets.renderer",
-        "range": "^1.0.0",
+        "range": "^2.0.0",
         "cardinality": "many",
         "required": false
       }
@@ -45,5 +45,5 @@
       "tests/provider-state.mjs"
     ]
   },
-  "summary": "Hand-fillable D&D character sheets with per-character renderer selection; discovers compatible rules engines and renderer addons through versioned service contracts."
+  "summary": "Hand-fillable D&D 5e-family character sheets with engine-owned Builder policy and per-character discovery of universal or class-specific renderers."
 }

@@ -1,10 +1,12 @@
 export const RENDERER_CONTRACT = 'dnd-sheets.renderer';
-export const RENDERER_CONTRACT_VERSION = 1;
+export const RENDERER_CONTRACT_VERSION = 2;
 export const COMPACT_RENDERER = 'builtin:compact';
 export const CLASSIC_RENDERER = 'builtin:classic';
 
 const ID_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
+const MATCH_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const REQUIRED_PERMISSIONS = Object.freeze(['ui:override', 'data:read:characters']);
+const APPLICABILITY_FIELDS = Object.freeze(['classIds', 'subclassIds', 'editions', 'rulesetIds']);
 
 const clone = value => {
   if (value == null) return value;
@@ -17,6 +19,47 @@ const freezeTree = value => {
   for (const child of Object.values(value)) freezeTree(child);
   return Object.freeze(value);
 };
+
+function normalizeApplicability(value) {
+  if (value == null) return null;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new TypeError('invalid renderer applicability');
+  if (Object.keys(value).some(key => !APPLICABILITY_FIELDS.includes(key))) throw new TypeError('unknown renderer applicability field');
+  const normalized = {};
+  for (const field of APPLICABILITY_FIELDS) {
+    if (value[field] == null) continue;
+    if (!Array.isArray(value[field]) || !value[field].length || value[field].length > 64) throw new TypeError('invalid renderer applicability list');
+    const items = [...new Set(value[field].map(item => String(item || '')))];
+    if (items.some(item => !MATCH_ID_RE.test(item))) throw new TypeError('invalid renderer applicability id');
+    normalized[field] = Object.freeze(items);
+  }
+  return Object.keys(normalized).length ? Object.freeze(normalized) : null;
+}
+
+function applicabilityContext(value) {
+  const sheet = value?.sheet || value || {};
+  const classes = Array.isArray(sheet.classes) ? sheet.classes : [];
+  let identity = sheet.rulesProvider?.identity || {};
+  try { identity = value?.engine?.getContextIdentity?.() || identity; } catch (_) {}
+  return Object.freeze({
+    classIds: Object.freeze([...new Set(classes.map(entry => String(entry?.classId || '')).filter(Boolean))]),
+    subclassIds: Object.freeze([...new Set(classes.map(entry => String(entry?.subclass || '')).filter(Boolean))]),
+    edition: String(identity.edition || sheet.ruleset || ''),
+    rulesetId: String(identity.rulesetId || ''),
+  });
+}
+
+function applies(renderer, value) {
+  if (!renderer.appliesTo) return true;
+  const context = applicabilityContext(value);
+  const tests = [
+    ['classIds', context.classIds],
+    ['subclassIds', context.subclassIds],
+    ['editions', context.edition ? [context.edition] : []],
+    ['rulesetIds', context.rulesetId ? [context.rulesetId] : []],
+  ];
+  return tests.every(([field, selected]) => !renderer.appliesTo[field]
+    || renderer.appliesTo[field].some(id => selected.includes(id)));
+}
 
 const builtins = Object.freeze([
   Object.freeze({
@@ -50,6 +93,7 @@ function inspectHandle(handle) {
     const descriptor = api.descriptor();
     const id = String(descriptor?.id || '');
     if (!descriptor || !ID_RE.test(id) || Number(descriptor.sheetSchemaVersion) !== 1) return null;
+    const appliesTo = normalizeApplicability(descriptor.appliesTo);
     const providerId = String(provider.addonId || '');
     const identity = `${providerId}:${id}`;
     if (!providerId || identity.length > 128) return null;
@@ -66,6 +110,7 @@ function inspectHandle(handle) {
       }),
       builtin: false,
       baseLayout: 'compact',
+      appliesTo,
       api,
     });
   } catch (_) {
@@ -74,7 +119,7 @@ function inspectHandle(handle) {
 }
 
 export function createRendererRegistry(host, uiState) {
-  const available = () => {
+  const discovered = () => {
     let handles = [];
     try { handles = host.listServices?.(RENDERER_CONTRACT) || []; } catch (_) {}
     const external = handles.map(inspectHandle).filter(Boolean);
@@ -83,20 +128,21 @@ export function createRendererRegistry(host, uiState) {
       return left.identity.localeCompare(right.identity);
     });
   };
+  const available = context => discovered().filter(renderer => applies(renderer, context));
 
-  const resolve = characterId => {
+  const resolve = (characterId, context) => {
     const preferred = uiState.getRenderer(characterId);
-    const renderer = available().find(candidate => candidate.identity === preferred)
+    const renderer = available(context).find(candidate => candidate.identity === preferred)
       || builtins[0];
     return Object.freeze({ preferred, renderer, unavailable: renderer.identity !== preferred });
   };
 
   return Object.freeze({
-    list: available,
+    list: discovered,
     resolve,
-    options(characterId) {
-      const state = resolve(characterId);
-      const options = available();
+    options(characterId, context) {
+      const state = resolve(characterId, context);
+      const options = available(context);
       if (state.unavailable) options.push(Object.freeze({
         identity: state.preferred,
         label: state.preferred,
@@ -106,17 +152,17 @@ export function createRendererRegistry(host, uiState) {
       }));
       return options;
     },
-    select(characterId, identity) {
+    select(characterId, identity, context) {
       const value = String(identity || '');
-      if (!available().some(candidate => candidate.identity === value)) return false;
+      if (!available(context).some(candidate => candidate.identity === value)) return false;
       uiState.setRenderer(characterId, value);
       return true;
     },
-    baseLayout(characterId) {
-      return resolve(characterId).renderer.baseLayout;
+    baseLayout(characterId, context) {
+      return resolve(characterId, context).renderer.baseLayout;
     },
-    render(characterId, surface, payload, defaultHtml) {
-      const state = resolve(characterId);
+    render(characterId, surface, payload, defaultHtml, context) {
+      const state = resolve(characterId, context);
       const renderer = state.renderer;
       if (renderer.builtin) return defaultHtml;
       try {

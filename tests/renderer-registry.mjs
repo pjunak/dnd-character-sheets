@@ -15,7 +15,7 @@ function storage(initial = {}) {
 function handle(addonId = 'community-sheets', overrides = {}) {
   return Object.freeze({
     api: Object.freeze({
-      apiVersion: 1,
+      apiVersion: 2,
       descriptor: () => ({
         id: 'ink', label: 'Ink', description: 'A printable ink-first style.',
         sheetSchemaVersion: 1,
@@ -25,7 +25,7 @@ function handle(addonId = 'community-sheets', overrides = {}) {
     }),
     provider: Object.freeze({
       addonId, addonName: 'Community Sheets', addonVersion: '2.0.0',
-      contract: 'dnd-sheets.renderer', contractVersion: '1.0.0',
+      contract: 'dnd-sheets.renderer', contractVersion: '2.0.0',
       permissions: Object.freeze(['ui:override', 'data:read:characters']),
       ...overrides.provider,
     }),
@@ -93,6 +93,62 @@ test('renderer providers must hold the privileges delegated through the sheet', 
   const denied = handle('unprivileged-style', { provider: { permissions: Object.freeze([]) } });
   const registry = createRendererRegistry({ listServices: () => [denied] }, createUiState(storage()));
   assert.ok(!registry.list().some(renderer => renderer.identity.startsWith('unprivileged-style:')));
+});
+
+test('specialized renderers are filtered by class, subclass, edition, and ruleset without addon whitelists', () => {
+  const specialized = handle('specialized-sheets', {
+    api: {
+      descriptor: () => ({
+        id: 'eldritch-knight', label: 'Eldritch Knight', description: 'Class-specific layout.',
+        sheetSchemaVersion: 1,
+        appliesTo: {
+          classIds: ['fighter'],
+          subclassIds: ['eldritch-knight'],
+          editions: ['2024'],
+          rulesetIds: ['dnd-2024'],
+        },
+      }),
+    },
+  });
+  const registry = createRendererRegistry(
+    { listServices: () => [specialized] },
+    createUiState(storage()),
+  );
+  const matching = {
+    sheet: {
+      classes: [{ classId: 'fighter', subclass: 'eldritch-knight', level: 8 }],
+      rulesProvider: { identity: { edition: '2024', rulesetId: 'dnd-2024' } },
+    },
+  };
+  const otherSubclass = {
+    sheet: {
+      classes: [{ classId: 'fighter', subclass: 'champion', level: 8 }],
+      rulesProvider: { identity: { edition: '2024', rulesetId: 'dnd-2024' } },
+    },
+  };
+
+  assert.ok(registry.options('hero', matching).some(renderer => renderer.identity === 'specialized-sheets:eldritch-knight'));
+  assert.ok(!registry.options('hero', otherSubclass).some(renderer => renderer.identity === 'specialized-sheets:eldritch-knight'));
+  assert.equal(registry.select('hero', 'specialized-sheets:eldritch-knight', matching), true);
+  assert.equal(registry.resolve('hero', otherSubclass).renderer.identity, COMPACT_RENDERER);
+  assert.equal(registry.resolve('hero', otherSubclass).unavailable, true);
+});
+
+test('malformed renderer applicability is isolated to its provider', () => {
+  const malformed = handle('malformed-applicability', {
+    api: {
+      descriptor: () => ({
+        id: 'ink', label: 'Ink', sheetSchemaVersion: 1,
+        appliesTo: { classIds: ['fighter'], predicate: 'not-supported' },
+      }),
+    },
+  });
+  const registry = createRendererRegistry(
+    { listServices: () => [malformed, handle('healthy-style')] },
+    createUiState(storage()),
+  );
+  assert.ok(!registry.list().some(renderer => renderer.identity.startsWith('malformed-applicability:')));
+  assert.ok(registry.list().some(renderer => renderer.identity === 'healthy-style:ink'));
 });
 
 test('legacy layout preferences migrate on read and Compact is the fresh default', () => {

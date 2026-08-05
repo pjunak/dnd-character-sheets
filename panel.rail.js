@@ -132,7 +132,7 @@ export function makeRail(ctx) {
   function abilityRail(c, s, comp, editable) {
     const vm = viewModel(s, comp);
     const L = legends(s, comp, vm);
-    const compact = uiLayout(c.id) === 'compact';
+    const compact = uiLayout(c.id, { sheet: s }) === 'compact';
     // ability → the casting classes keyed on it (each carries saveDC/spellAttack).
     const casters = {};
     if (compact && comp && comp.spellcasting) {

@@ -1,26 +1,35 @@
 export const BUILDER_ACTIONS = Object.freeze(['builderField','builderAbility','builderToggleManual','builderAbilitySet','builderClassSet','builderLevelSet','builderSubclassSet','builderAddClass','builderRemoveClass','builderTab','builderTabKey','builderNavigate','builderToggleLevel','builderExtraFeatAdd','builderExtraFeatRemove','builderAsiSet','builderChoose']);
 
 export function registerBuilderActions(deps) {
-  const { host, plural, num, uid, ABILITIES, pointBuyFor, pointCost, pointsSpent, featAsiFrom, featAbilityCap, uiState, sheetOf, getRules } = deps;
+  const { host, plural, num, uid, ABILITIES, pointBuyFor, pointCost, pointsSpent, uiState, sheetOf, getRules } = deps;
   const { builderMutate, reconcile, builderModel } = deps.engine;
   const register = (name, fn) => host.registerAction(name, fn);
   const timers = new Set();
   const later = (fn) => { const id = setTimeout(() => { timers.delete(id); fn(); }, 0); timers.add(id); };
   // ── Builder (engine mode) — edit the rich decision model + materialize ────
-  const removeGrant = (s, id) => { s.abilityGrants = (s.abilityGrants || []).filter((g) => g.id !== id); };
-  // `cap` (optional) is a RAISED per-ability max the grant carries (AB-4 —
-  // 2024 Epic Boons: 30); absent → the engine's default 20 applies.
-  const upsertGrant = (s, id, source, assign, cap) => { removeGrant(s, id); if (assign && Object.keys(assign).length) s.abilityGrants = (s.abilityGrants || []).concat([{ id, source, assign, ...(cap ? { cap: num(cap) } : {}) }]); };
+  const applyChoice = (sheet, engine, change) => {
+    if (!engine) return;
+    const next = engine.applyBuilderChoice(sheet, change);
+    sheet.featureChoices = { ...(next.featureChoices || {}) };
+    sheet.abilityGrants = Array.isArray(next.abilityGrants) ? next.abilityGrants : [];
+  };
 
   register('builderField', (cid, field, value) => {
-    builderMutate(cid, (s) => {
+    builderMutate(cid, (s, engine) => {
       s[field] = String(value);
       if (field === 'race') s.lineage = '';
-      if (field === 'background') { delete s.featureChoices['bgasi']; removeGrant(s, 'bgasi'); }
+      if (engine) reconcile(s, engine);
     });
   });
   register('builderAbility', (cid, ability, value) => {
-    builderMutate(cid, (s) => { s.baseStats = { ...(s.baseStats || {}), [ability]: Math.max(1, Math.min(30, num(value, 10))) }; });
+    if (!ABILITIES.includes(String(ability))) return;
+    builderMutate(cid, (s, engine) => {
+      const range = engine.getBuilderPlan(s).abilityScoreRange;
+      s.baseStats = {
+        ...(s.baseStats || {}),
+        [ability]: Math.max(range.min, Math.min(range.max, num(value, 10))),
+      };
+    });
   });
   // Toggle point-buy ↔ manual base scores. Leaving manual (→ point buy) clamps
   // each base into the 8–15 point-buy range so the pool math stays valid.
@@ -161,10 +170,16 @@ export function registerBuilderActions(deps) {
       note = (document.getElementById('dse-xfeat-note-' + cid) || {}).value || '';
     } catch (_) {}
     if (!featId && !String(name).trim()) { host.ui.rerender(); return; }
-    builderMutate(cid, (s) => { s.extraFeats = (Array.isArray(s.extraFeats) ? s.extraFeats : []).concat([{ id: uid('xfeat'), featId: String(featId) || null, name: featId ? '' : String(name).trim(), sourceNote: String(note) }]); });
+    builderMutate(cid, (s, engine) => {
+      s.extraFeats = (Array.isArray(s.extraFeats) ? s.extraFeats : []).concat([{ id: uid('xfeat'), featId: String(featId) || null, name: featId ? '' : String(name).trim(), sourceNote: String(note) }]);
+      if (engine) reconcile(s, engine);
+    });
   });
   register('builderExtraFeatRemove', (cid, id) => {
-    builderMutate(cid, (s) => { s.extraFeats = (Array.isArray(s.extraFeats) ? s.extraFeats : []).filter((f) => f.id !== id); });
+    builderMutate(cid, (s, engine) => {
+      s.extraFeats = (Array.isArray(s.extraFeats) ? s.extraFeats : []).filter((f) => f.id !== id);
+      if (engine) reconcile(s, engine);
+    });
   });
   // Distribute-N-points ASI picker: set one ability's delta (from the host
   // `.codex-stepper` input's change) in an ability grant (bg ASI 'bgasi' / class ASI
@@ -172,29 +187,17 @@ export function registerBuilderActions(deps) {
   // the shared `budget` server-side. The abilityGrants `assign` map is the source of
   // truth the engine hydrates; the grant's source type is derived from the key so
   // hydrate/reconcile treat it exactly as the old split-select did.
-  register('builderAsiSet', (cid, key, ability, value, budget, perMax) => {
+  register('builderAsiSet', (cid, key, ability, value, budget) => {
     if (ABILITIES.indexOf(String(ability)) < 0) return;
-    let left = null;   // remaining ASI budget, captured post-clamp
+    let left = null;
     builderMutate(cid, (s, engine) => {
-      const k = String(key);
-      const type = k === 'bgasi' ? 'background' : /:featability$/.test(k) ? 'feat' : 'asi';
-      // A half-feat/boon ability pick inherits its feat's raised cap (Epic
-      // Boons: max 30) so the engine can clamp past 20 for exactly this grant.
-      let cap = null;
-      if (type === 'feat' && engine) {
-        const featId = s.featureChoices[k.replace(/:featability$/, ':feat')];
-        cap = featAbilityCap(featId ? engine.getItem('feat', String(featId)) : null, engine);
-      }
-      const g = (s.abilityGrants || []).find((x) => x.id === k);
-      const assign = { ...((g && g.assign) || {}) };
-      const pmax = Math.max(1, num(perMax, 2));
-      const bud = Math.max(1, num(budget, 2));
-      const others = ABILITIES.reduce((n, a) => n + (a === String(ability) ? 0 : num(assign[a], 0)), 0);
-      let v = Math.max(0, Math.min(pmax, num(value, 0)));   // clamp 0..perMax
-      v = Math.min(v, bud - others);                        // clamp to the remaining budget
-      if (v <= 0) delete assign[ability]; else assign[ability] = v;
-      left = bud - others - Math.max(0, v);
-      upsertGrant(s, k, { type }, assign, cap);
+      applyChoice(s, engine, {
+        choiceId: String(key),
+        value: { ability: String(ability), amount: num(value, 0) },
+      });
+      const assign = (s.abilityGrants || []).find(grant => grant?.id === String(key))?.assign || {};
+      const spent = Object.values(assign).reduce((total, amount) => total + Math.max(0, num(amount)), 0);
+      left = Math.max(0, num(budget, 0) - spent);
     });
     // Same persistent-live-region announcement as point-buy (builderAbilitySet).
     if (left != null && typeof host.ui.announce === 'function') host.ui.announce(plural('builder.pointsLeft', left));
@@ -202,29 +205,12 @@ export function registerBuilderActions(deps) {
   register('builderChoose', (cid, key, value) => {
     builderMutate(cid, (s, engine) => {
       const k = String(key);
-      if (value === '' || value == null) delete s.featureChoices[k];
-      else s.featureChoices[k] = String(value);
-      if (/:featability$/.test(k)) {
-        const featId = s.featureChoices[k.replace(/:featability$/, ':feat')];
-        const cap = engine ? featAbilityCap(featId ? engine.getItem('feat', String(featId)) : null, engine) : null;
-        upsertGrant(s, k, { type: 'feat' }, value ? { [String(value)]: 1 } : null, cap);
-      } else if (/:ability$/.test(k)) {
-        upsertGrant(s, k, { type: 'asi' }, value ? { [String(value)]: 2 } : null);
-      } else if (/:feat$/.test(k)) {
-        const abilKey = k.replace(/:feat$/, '') + ':featability';
-        removeGrant(s, abilKey); delete s.featureChoices[abilKey];
-        const feat = value && engine ? engine.getItem('feat', String(value)) : null;
-        const asi = feat && feat.grants && feat.grants.abilityScoreIncrease;
-        // 'ANY' (Boon of Skill) expands to all six — never auto-applied; a
-        // genuine single-option bump applies with its feat's cap (boons: 30).
-        const from = featAsiFrom(asi, engine);
-        if (asi && from.length === 1) {
-          upsertGrant(s, abilKey, { type: 'feat' }, { [from[0]]: num(asi.amount, 1) }, featAbilityCap(feat, engine));
-        }
-      } else if (/^asi:[^:]+:\d+$/.test(k)) {
-        if (value !== 'asi') { removeGrant(s, k + ':ability'); delete s.featureChoices[k + ':ability']; }
-        if (value !== 'feat') { delete s.featureChoices[k + ':feat']; delete s.featureChoices[k + ':featability']; removeGrant(s, k + ':featability'); }
-      }
+      const slotMatch = /#(\d+)$/.exec(k);
+      applyChoice(s, engine, {
+        choiceId: slotMatch ? k.slice(0, slotMatch.index) : k,
+        ...(slotMatch ? { slot: num(slotMatch[1]) } : {}),
+        value,
+      });
     });
   });
 

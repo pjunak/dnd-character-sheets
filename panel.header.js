@@ -194,7 +194,7 @@ export function makeHeaderPanel(ctx) {
     // Spell Attack and Initiative are docked onto the ability cards
     // (panel.rail.js), so the band keeps only Speed beside HP/AC. CLASSIC
     // keeps every tile here.
-    const compact = uiLayout(cid) === 'compact';
+    const compact = uiLayout(cid, { sheet: s, engine }) === 'compact';
 
     // Spell save DC + spell attack per casting class (engine mode; SP-4 — each
     // class keeps its own numbers). Multiclass tiles carry the class name.

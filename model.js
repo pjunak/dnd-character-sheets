@@ -29,302 +29,32 @@ export function makeEngine(ctx) {
     ...(engine?.getContextIdentity?.() || {}),
   };
 
-  /** Normalize a stored sheet into the Builder's working model, deriving the
-   *  rich shape from the flat fields on first use (MC-1 migration). `engine` is
-   *  used to resolve a free-text className → a rules-data class id. Returns
-   *  { classes, baseStats } — does NOT mutate; the actions persist edits. */
-  const builderModel = (s, engine) => {
-    const baseStats = (s.baseStats && Object.keys(s.baseStats).length)
-      ? { ...s.baseStats }
-      : { ...s.abilities };               // first Builder open: current scores become the base
-    let classes = Array.isArray(s.classes) && s.classes.length ? s.classes.map((c) => ({ ...c })) : null;
-    if (!classes) {
-      const cid = s.className && engine && engine.getItemByName ? (engine.getItemByName('class', s.className) || {}).id : '';
-      classes = s.className
-        ? [{ classId: cid || '', level: Math.max(1, num(s.level, 1)), subclass: s.subclass || '' }]
-        : [{ classId: '', level: 1, subclass: '' }];
-    }
-    return { baseStats, classes };
+  const builderPlan = (sheet, engine) => engine.getBuilderPlan(sheet);
+  const builderModel = (sheet, engine) => {
+    const plan = builderPlan(sheet, engine);
+    return { baseStats: plan.baseStats, classes: plan.classes };
+  };
+  const collectChoices = (classes, engine) => builderPlan({ classes }, engine).classChoices;
+  const collectCreationChoices = (sheet, engine) => builderPlan(sheet, engine).creationChoices;
+
+  /** Apply the engine-owned pruning result to the mutable sheet passed by the
+   *  host store. The engine returns a detached copy; persistence stays here. */
+  const reconcile = (sheet, engine) => {
+    if (!engine || !sheet) return;
+    const next = engine.reconcileBuilderDecisions(sheet);
+    sheet.featureChoices = { ...(next.featureChoices || {}) };
+    sheet.abilityGrants = Array.isArray(next.abilityGrants) ? next.abilityGrants : [];
   };
 
-  // ASI-opportunity levels for a class. The base levels come from the ruleset
-  // (2024: 4/8/12/16/19); some classes get extras (Fighter 6 & 14,
-  // Rogue 10) declared in the class's `progression` (levels whose features
-  // include an "Ability Score Improvement"). Union with the base so extras are
-  // ADDED without dropping anything.
-  const asiLevelsFor = (rec, engine) => {
-    const set = new Set(engine.getRuleset().constants.asi.baseLevels);
-    for (const p of (Array.isArray(rec && rec.progression) ? rec.progression : []))
-      if ((p.features || []).some((f) => /ability score improvement/i.test(String(f)))) { const n = num(p.level); if (n > 0) set.add(n); }
-    return [...set].sort((a, b) => a - b);
-  };
-
-  const choiceKind = (choice, from) => {
-    if (choice.type === 'skillProficiency') return 'skills';
-    if (choice.type === 'expertise') return 'expertise';
-    if (choice.type === 'skillExpertise') return 'skillExpertise';
-    if (choice.type === 'toolProficiency') return 'tools';
-    if (choice.type === 'proficiency') return 'proficiencies';
-    if (choice.type === 'weaponMastery') return 'weaponMastery';
-    if (choice.type === 'language') return 'languages';
-    if (choice.type === 'savingThrowProficiency') return 'savingThrows';
-    if (choice.type === 'weaponProficiency') return 'weapons';
-    if (choice.type === 'armorProficiency') return 'armor';
-    if (choice.type === 'damageResistance') return 'resistances';
-    if (choice.type === 'conditionImmunity') return 'immunities';
-    if (choice.type === 'feat' || (!Array.isArray(from) && choice.category)) return 'feat';
-    return 'enumerated';
-  };
-
-  /** The choice descriptors for a build — the SINGLE source used by BOTH the
-   *  Builder UI (to render pickers) and resolveChoices (to apply resolutions),
-   *  so the two never drift. Background ASI is handled separately (its split UI).
-   *  `kind` is the normalized consumer operation, independent of sourcebook or
-   *  record owner. */
-  const collectChoices = (classes, engine) => {
-    const out = [];
-    // A ruleset without the weapon-mastery subsystem drops those
-    // descriptors — the engine zeroes the slots too, this keeps the picker away.
-    const noMastery = engine.getRuleset().capabilities.weaponMastery === false;
-    for (const [classIndex, cl] of classes.entries()) {
-      const rec = cl.classId ? engine.getItem('class', cl.classId) : null;
-      if (!rec) continue;
-      const clvl = num(cl.level, 1);
-      const starting = rec.startingProficiencies || {};
-      const reduced = classIndex > 0 ? rec.multiclassProficiencies : null;
-      const sk = (reduced && reduced.skills) || starting.skills;
-      if (sk && sk.choose) out.push({ id: 'skills:' + cl.classId, kind: 'skills', count: num(sk.choose, 1), from: sk.from || [], classId: cl.classId, source: { type: 'class', id: cl.classId, level: 1 } });
-      for (const ch of (rec.grants && rec.grants.choices) || []) {
-        const srcLevel = num(String(ch.source || '').split(':')[1], 1);
-        if (srcLevel > clvl) continue;
-        const kind = choiceKind(ch, ch.from);
-        if (kind === 'weaponMastery' && noMastery) continue;
-        out.push({ id: ch.id, kind, count: num(ch.count, 1), from: ch.from, category: ch.category, prompt: ch.prompt, default: ch.default, changeOn: ch.changeOn, classId: cl.classId, source: { type: 'class', id: cl.classId, level: srcLevel } });
-      }
-      const subclass = cl.subclass ? engine.getItem('subclass', cl.subclass) : null;
-      for (const ch of (subclass && subclass.grants && subclass.grants.choices) || []) {
-        const srcLevel = num(ch.minLevel, num(subclass.subclassLevel, 3));
-        if (srcLevel > clvl) continue;
-        const kind = choiceKind(ch, ch.from);
-        if (kind === 'weaponMastery' && noMastery) continue;
-        out.push({
-          id: ch.id,
-          kind,
-          count: num(ch.count, 1),
-          from: ch.from,
-          category: ch.category,
-          prompt: ch.prompt,
-          default: ch.default,
-          changeOn: ch.changeOn,
-          classId: cl.classId,
-          source: { type: 'subclass', id: cl.subclass, level: srcLevel },
-        });
-      }
-      // Option-pool choices declared on the class's FEATURE records (Metamagic,
-      // Battle Master maneuvers, …). Historically collectChoices read only the
-      // class record's grants; feature records carry their own grants.choices,
-      // usually with `fromCategory` — expand it to the ids of every feature in
-      // that category (all Metamagic options, all maneuvers, …). Subclass-feature
-      // grants apply only when that subclass is selected. (feature.grants rides
-      // on the slim projection, so no per-feature full fetch here.)
-      if (engine.listFeatures) {
-        for (const fslim of engine.listFeatures({ classId: cl.classId })) {
-          if (num(fslim.level) > clvl) continue;
-          if (fslim.subclassId && fslim.subclassId !== cl.subclass) continue;
-          for (const ch of (fslim.grants && fslim.grants.choices) || []) {
-            const srcLevel = num(String(ch.source || '').split(':')[1], num(fslim.level, 1));
-            if (srcLevel > clvl) continue;
-            let from = Array.isArray(ch.from) ? ch.from : null;
-            if (!from && ch.fromCategory) from = engine.listFeatures({ category: ch.fromCategory }).map((o) => o.id);
-            const kind = choiceKind(ch, from);
-            if (kind === 'weaponMastery' && noMastery) continue;
-            // Pool size grows with level: `countByLevel` maps a level → total known;
-            // take the highest entry at or below this class's level (falls back to the
-            // flat `count`, so a handbook without the schedule still yields the base size).
-            let count = num(ch.count, 1);
-            if (ch.countByLevel) {
-              let best = -1;
-              for (const k of Object.keys(ch.countByLevel)) { const lv = num(k); if (lv <= clvl && lv > best) { best = lv; count = num(ch.countByLevel[k], count); } }
-            }
-            out.push({ id: ch.id, kind, count, from, category: ch.category, prompt: ch.prompt, default: ch.default, changeOn: ch.changeOn, classId: cl.classId, source: { type: 'feature', id: fslim.id, level: srcLevel } });
-          }
-        }
-      }
-      for (const lvl of asiLevelsFor(rec, engine)) if (lvl <= clvl) out.push({ id: 'asi:' + cl.classId + ':' + lvl, kind: 'asiMode', classId: cl.classId, level: lvl, source: { type: 'class', id: cl.classId, level: lvl } });
-    }
-    // Dedupe by descriptor id (keep-first). Class records declare the L1 skills
-    // choice TWICE — canonically in startingProficiencies.skills (pushed first, WITH
-    // its `from` pool) AND redundantly in grants.choices as a bare {type:'skills'}
-    // (no `from`), which would otherwise surface as an empty `enumerated` picker
-    // ("content pending"). featureChoices are keyed by descriptor id, so a duplicate
-    // id already aliases the same stored resolution — keep-first both drops the
-    // malformed dup and enforces that id-uniqueness invariant. (Entries lacking an
-    // id can't be deduped — a separate data concern — so pass them through.)
-    const seen = new Set();
-    return out.filter((c) => (c.id ? (seen.has(c.id) ? false : (seen.add(c.id), true)) : true));
-  };
-
-  const collectCreationChoices = (s, engine) => {
-    const out = [];
-    const append = (choice, owner, source) => {
-      if (!choice || !choice.id) return;
-      out.push({
-        id: `${owner}:${choice.id}`,
-        kind: choiceKind(choice, choice.from),
-        count: num(choice.count, 1),
-        from: Array.isArray(choice.from) ? choice.from : choice.from,
-        category: choice.category,
-        prompt: choice.prompt,
-        default: choice.default,
-        changeOn: choice.changeOn,
-        source,
-      });
-    };
-    const background = s.background
-      ? (engine.getItemByName('background', s.background) || engine.getItem('background', s.background))
-      : null;
-    if (background && background.toolProficiencyChoice) {
-      const choice = background.toolProficiencyChoice;
-      out.push({
-        id: `background:${background.id}:tool`,
-        kind: 'tools',
-        count: num(choice.count, 1),
-        from: Array.isArray(choice.from) ? choice.from : [],
-        prompt: choice.prompt,
-        source: { type: 'background', id: background.id, level: 1 },
-      });
-    }
-    for (const choice of (background && background.grants && background.grants.choices) || []) {
-      append(choice, `background:${background.id}`, { type: 'background', id: background.id, level: 1 });
-    }
-    const speciesId = s.species || s.race;
-    const species = speciesId
-      ? (engine.getItemByName('species', speciesId) || engine.getItem('species', speciesId))
-      : null;
-    for (const choice of (species && species.grants && species.grants.choices) || []) {
-      append(choice, `species:${species.id}`, { type: 'species', id: species.id, level: 1 });
-    }
-    const lineage = species && s.lineage
-      ? (species.lineages || []).find((candidate) => candidate.id === s.lineage)
-      : null;
-    for (const choice of (lineage && lineage.grants && lineage.grants.choices) || []) {
-      append(choice, `species:${species.id}`, { type: 'species', id: species.id, level: 1 });
-    }
-    const featIds = new Set();
-    if (background && background.originFeat) featIds.add(background.originFeat);
-    for (const feat of Array.isArray(s.feats) ? s.feats : []) {
-      const id = feat && (feat.featId || feat.id || feat);
-      if (id) featIds.add(id);
-    }
-    for (const feat of Array.isArray(s.extraFeats) ? s.extraFeats : []) {
-      if (feat && feat.featId) featIds.add(feat.featId);
-    }
-    for (const [key, value] of Object.entries(s.featureChoices || {})) {
-      if (key.endsWith(':feat') && value) featIds.add(value);
-    }
-    for (const featId of featIds) {
-      const feat = engine.getItem('feat', featId);
-      for (const choice of (feat && feat.grants && feat.grants.choices) || []) {
-        append(choice, `feat:${featId}`, { type: 'feat', id: featId, level: 1 });
-      }
-    }
-    return out;
-  };
-
-  /** Map featureChoices resolutions → the canonical input fields the engine
-   *  reads (skill proficiencies, expertise, feats, weapon-mastery picks). The
-   *  background ASI is already an abilityGrant; ASI-level "+2" picks too. */
-  const resolveChoices = (s, classes, engine) => {
-    const fc = s.featureChoices || {};
-    const skillProficiencies = [], toolProficiencies = [], feats = [], weaponMasteryChoices = [];
-    const languageProficiencies = [], saveProficiencies = [], weaponProficiencies = [];
-    const armorProficiencies = [], damageResistances = [], conditionImmunities = [];
-    const skillExpertise = {};
-    const valsOf = (ch) => {
-      // Dedup across boxes (FE-7): a value picked twice counts once, so duplicate
-      // legacy data never double-applies (skills/expertise/weaponMastery/feats).
-      if (num(ch.count, 1) > 1) { const a = []; for (let i = 0; i < ch.count; i++) { const v = fc[ch.id + '#' + i]; if (v && !a.includes(v)) a.push(v); } return a; }
-      const v = fc[ch.id] || ch.default; return v ? [v] : [];
-    };
-    const bgRec = s.background ? (engine.getItemByName('background', s.background) || engine.getItem('background', s.background)) : null;
-    if (bgRec && bgRec.originFeat) feats.push(bgRec.originFeat);
-    // Level-independent extra feats from a custom source: a compendium featId
-    // applies its mechanics via the engine; free-text (no featId) is tracked only.
-    for (const ef of (Array.isArray(s.extraFeats) ? s.extraFeats : [])) if (ef && ef.featId) feats.push(ef.featId);
-    for (const ch of collectChoices(classes, engine).concat(collectCreationChoices(s, engine))) {
-      const vals = valsOf(ch);
-      if (ch.kind === 'skills') skillProficiencies.push(...vals);
-      else if (ch.kind === 'tools') toolProficiencies.push(...vals);
-      else if (ch.kind === 'proficiencies') {
-        for (const value of vals) {
-          if (value.startsWith('skill:')) skillProficiencies.push(value.slice(6));
-          else if (value.startsWith('tool:')) toolProficiencies.push(value.slice(5));
-        }
-      }
-      else if (ch.kind === 'expertise') vals.forEach((v) => { skillExpertise[v] = true; });
-      else if (ch.kind === 'skillExpertise') {
-        skillProficiencies.push(...vals);
-        vals.forEach((v) => { skillExpertise[v] = true; });
-      }
-      else if (ch.kind === 'languages') languageProficiencies.push(...vals);
-      else if (ch.kind === 'savingThrows') saveProficiencies.push(...vals);
-      else if (ch.kind === 'weapons') weaponProficiencies.push(...vals);
-      else if (ch.kind === 'armor') armorProficiencies.push(...vals);
-      else if (ch.kind === 'resistances') damageResistances.push(...vals);
-      else if (ch.kind === 'immunities') conditionImmunities.push(...vals);
-      else if (ch.kind === 'weaponMastery') weaponMasteryChoices.push(...vals);
-      else if (ch.kind === 'feat') feats.push(...vals);
-      else if (ch.kind === 'asiMode') { if (fc[ch.id] === 'feat' && fc[ch.id + ':feat']) feats.push(fc[ch.id + ':feat']); }
-    }
-    return {
-      skillProficiencies: [...new Set(skillProficiencies)],
-      toolProficiencies: [...new Set(toolProficiencies)],
-      skillExpertise,
-      feats: feats.map((f) => ({ featId: f })),
-      weaponMasteryChoices,
-      languageProficiencies: [...new Set(languageProficiencies)],
-      saveProficiencies: [...new Set(saveProficiencies)],
-      weaponProficiencies: [...new Set(weaponProficiencies)],
-      armorProficiencies: [...new Set(armorProficiencies)],
-      damageResistances: [...new Set(damageResistances)],
-      conditionImmunities: [...new Set(conditionImmunities)],
-    };
-  };
-
-  /** Prune orphaned decisions after a structural change (class/subclass/level/
-   *  class-removal): featureChoices + abilityGrants whose owning choice no longer
-   *  exists in the current build. CRITICAL because abilityGrants apply
-   *  UNCONDITIONALLY in hydrate — a stale ASI / half-feat grant from a dropped
-   *  class or lowered level would keep bumping ability scores otherwise. Mutates `s`.
-   *  (Complements builderChoose's mode-switch cleanup, which handles ASI↔feat.) */
-  const reconcile = (s, engine) => {
-    if (!engine || !s) return;
-    const classes = Array.isArray(s.classes) ? s.classes : [];
-    const valid = new Set(
-      collectChoices(classes, engine)
-        .concat(collectCreationChoices(s, engine))
-        .map((c) => c.id)
-    );
-    const bgRec = s.background ? (engine.getItemByName('background', s.background) || engine.getItem('background', s.background)) : null;
-    if (bgRec && Array.isArray(bgRec.abilityScores) && bgRec.abilityScores.length) valid.add('bgasi');
-    const baseOf = (k) => String(k).replace(/#\d+$/, '').replace(/:(ability|feat|featability)$/, '');
-    const fc = s.featureChoices || {};
-    for (const k of Object.keys(fc)) if (!valid.has(baseOf(k))) delete fc[k];
-    if (Array.isArray(s.abilityGrants)) s.abilityGrants = s.abilityGrants.filter((g) => valid.has(baseOf(g.id)));
-  };
-
-  /** The decisions object the engine hydrates: the Builder's rich model + the
-   *  resolved choices, merged over the stored sheet (so the engine sees
-   *  classes[]/baseStats/grants AND the applied skill/expertise/feat picks). */
+  /** Hydration accepts the stored decisions directly. The engine normalizes
+   *  legacy flat fields, resolves every Builder descriptor, and applies rules. */
   const decisionsOf = (s, engine) => {
-    const m = builderModel(s, engine);
-    const resolved = engine ? resolveChoices(s, m.classes, engine) : {};
+    const plan = builderPlan(s, engine);
     return {
       ...s,
       saveProf: { ...(s.manualSaveProf || {}) },
-      classes: m.classes,
-      baseStats: m.baseStats,
-      ...resolved,
+      classes: plan.classes,
+      baseStats: plan.baseStats,
     };
   };
 
@@ -338,7 +68,7 @@ export function makeEngine(ctx) {
       // A character built under another edition still renders; the
       // installed provider's rules interpret the decisions — but says so
       // warning is advisory and never blocks editing.
-      const ed = engine.getRuleset ? engine.getRuleset().edition : null;
+      const ed = identityFor(engine).edition || null;
       if (ed && s && s.ruleset && s.ruleset !== ed) r.warnings.unshift('Character was built with the ' + s.ruleset + ' ruleset; the installed rules are ' + ed);
       return r;
     }
@@ -353,7 +83,8 @@ export function makeEngine(ctx) {
     if (!r || !r.sheet) return;
     // Stamp which edition's rules computed this build for legacy display and
     // migration; full engine/data/ruleset identity is captured below.
-    if (engine.getRuleset) { const ed = engine.getRuleset().edition; if (ed) s.ruleset = ed; }
+    const edition = identityFor(engine).edition;
+    if (edition) s.ruleset = edition;
     const cs = r.sheet, d = cs.derived || {};
     const m = builderModel(s, engine);
     // First REAL class (placeholder "＋ Add class" rows carry no classId).
@@ -440,7 +171,11 @@ export function makeEngine(ctx) {
     try {
       const handle = host.useService?.('dnd5e.rules-engine');
       const engine = handle?.api;
-      if (!engine || engine.apiVersion !== 1 || typeof engine.hydrate !== 'function') return null;
+      if (!engine || engine.apiVersion !== 2
+          || typeof engine.hydrate !== 'function'
+          || typeof engine.getBuilderPlan !== 'function'
+          || typeof engine.applyBuilderChoice !== 'function'
+          || typeof engine.reconcileBuilderDecisions !== 'function') return null;
       const availability = engine.getAvailability?.();
       if (!availability?.available) return null;
       const identity = {
@@ -603,7 +338,7 @@ export function makeEngine(ctx) {
   };
 
   return {
-    builderModel, collectChoices, collectCreationChoices, resolveChoices, reconcile, decisionsOf,
+    builderPlan, builderModel, collectChoices, collectCreationChoices, reconcile, decisionsOf,
     safeHydrate, materializeInto, getRules, viewModel, mutate, builderMutate,
     effectiveMaxHp, providerState, resolveProvider, prepareSheetExport,
   };

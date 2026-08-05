@@ -30,14 +30,6 @@ const records = {
 };
 
 const engine = {
-  getRuleset: () => ({
-    constants: {
-      asi: {
-        budget: 2,
-        bgBudget: 3,
-      },
-    },
-  }),
   getItem: (kind, id) => records[`${kind}:${id}`] || null,
   getItemByName: (kind, id) => records[`${kind}:${id}`] || null,
   listSubclasses: classId => classId === 'wizard'
@@ -68,7 +60,12 @@ test('builder progress: multi-pick descriptors require distinct completed slots'
 });
 
 test('builder progress: a half-feat is incomplete until its ability is assigned', () => {
-  const choice = { id: 'asi:wizard:4', kind: 'asiMode' };
+  const choice = {
+    id: 'asi:wizard:4',
+    kind: 'asiMode',
+    ability: { id: 'asi:wizard:4:ability', budget: 2 },
+    feat: { id: 'asi:wizard:4:feat', ability: { id: 'asi:wizard:4:featability' } },
+  };
   const base = {
     featureChoices: {
       'asi:wizard:4': 'feat',
@@ -97,8 +94,14 @@ test('builder progress: issues point to the exact builder section or spellbook',
       kind: 'asiMode',
       classId: 'wizard',
       source: { level: 4 },
+      ability: { id: 'asi:wizard:4:ability', budget: 2 },
+      feat: { id: 'asi:wizard:4:feat', ability: { id: 'asi:wizard:4:featability' } },
     }],
     creationChoices: [],
+    creationAbilityChoices: [{
+      id: 'bgasi', kind: 'abilityBudget', budget: 3,
+      source: { type: 'background', id: 'sage' },
+    }],
     engine,
     pointBuyRemaining: 20,
     computed: {
@@ -123,6 +126,7 @@ test('builder progress: issues point to the exact builder section or spellbook',
   assert.ok(progress.issues.some(issue => issue.code === 'choice'
     && issue.target.classId === 'wizard'
     && issue.target.level === 4));
+  assert.ok(progress.issues.some(issue => issue.code === 'originAbility'));
   assert.equal(
     progress.issues.filter(issue => issue.target.tab === 'spellbook').length,
     2,

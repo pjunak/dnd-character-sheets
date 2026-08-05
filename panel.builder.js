@@ -10,29 +10,30 @@ import { createBuilderProgress, descriptorCompletion } from './builder-progress.
 // ═══════════════════════════════════════════════════════════════
 
 export function makeBuilderPanel(ctx) {
-  const { host, t, plural, ABILITIES, SKILLS, num, signed, abilityMod, titleize, firstPara, featureRecordFor, ui, engine: E, pointBuyFor, pointCost, pointsSpent, featAsiFrom, uiState } = ctx;
+  const { host, t, plural, ABILITIES, SKILLS, num, signed, abilityMod, titleize, firstPara, featureRecordFor, ui, engine: E, pointCost, pointsSpent, featAsiFrom, uiState } = ctx;
   const { esc, dataAction, dataOn } = host.h;
   const { section, miniStat, selectBox, fieldRow, choiceBlock, warningsBlock, numField, entityRef } = ui;
-  const { builderModel, collectChoices, collectCreationChoices } = E;
+  const { builderPlan } = E;
 
   function panelBuilder(c, s, editable, comp, warnings, engine) {
     if (!engine) return panelBuilderStub();
     const ro = !editable;
-    const model = builderModel(s, engine);
-    const classes = model.classes;
-    const base = model.baseStats;
+    const plan = builderPlan(s, engine);
+    const classes = plan.classes;
+    const base = plan.baseStats;
     const totalLevel = classes.reduce((n, cl) => n + Math.max(1, num(cl.level, 1)), 0);
     const d = (comp && comp.derived) || {};
-    const classChoices = collectChoices(classes, engine);
-    const creationChoices = collectCreationChoices(s, engine);
+    const classChoices = plan.classChoices;
+    const creationChoices = plan.creationChoices;
     const pointBuyRemaining = s.manualScores
       ? 0
-      : pointBuyFor(engine).budget - pointsSpent(base, engine);
+      : plan.pointBuy.budget - pointsSpent(base, engine);
     const progress = createBuilderProgress({
       sheet: s,
       classes,
       classChoices,
       creationChoices,
+      creationAbilityChoices: plan.creationAbilityChoices,
       engine,
       computed: comp,
       pointBuyRemaining,
@@ -51,12 +52,12 @@ export function makeBuilderPanel(ctx) {
     const active = classTabs.some((cl) => cl.classId === st.tab) ? st.tab : 'character';
 
     const body = active === 'character'
-      ? `${builderAbilities(c, s, base, comp, ro, engine)}
+      ? `${builderAbilities(c, s, base, comp, ro, engine, plan)}
          ${builderIdentity(c, s, engine, ro)}
          ${builderClasses(c, classes, engine, ro)}
-         ${builderCreationChoices(c, s, engine, ro)}
+         ${builderCreationChoices(c, s, engine, ro, plan)}
          ${builderExtraFeats(c, s, engine, ro)}`
-      : builderClassTab(c, s, active, classes, engine, comp, ro);
+      : builderClassTab(c, s, active, classes, classChoices, engine, comp, ro);
 
     return `
       <div class="dse-builder">
@@ -92,6 +93,11 @@ export function makeBuilderPanel(ctx) {
     if (value.code === 'castingAbility') {
       return t('builder.progress.castingAbility', {
         source: titleize(value.castingChoice?.source?.id || ''),
+      });
+    }
+    if (value.code === 'originAbility') {
+      return t('builder.progress.issue.originAbility', {
+        source: titleize(value.abilityChoice?.source?.type || ''),
       });
     }
     return t(`builder.progress.issue.${value.code}`);
@@ -158,14 +164,14 @@ export function makeBuilderPanel(ctx) {
   // choices made at that level (as chips). Rows with choices are click-to-expand
   // (accordion, one open at a time) into that level's
   // editors; unresolved levels get a soft "needs choices" flag (never blocks — FE-7).
-  function builderClassTab(c, s, classId, classes, engine, comp, ro) {
+  function builderClassTab(c, s, classId, classes, classChoices, engine, comp, ro) {
     const cl = classes.find((x) => x.classId === classId);
     if (!cl) return '';
     const idx = classes.findIndex((x) => x.classId === classId);
     const rec = engine.getItem('class', classId);
     const clsName = rec ? rec.name : classId;
     const features = (comp && comp.features) || [];
-    const chDescs = collectChoices([cl], engine);   // this class's choices, each tagged with source.level
+    const chDescs = classChoices.filter(choice => choice.classId === classId);
     const subclassLevel = rec ? num(rec.subclassLevel, 3) : 3;
     const hasSubclasses = (engine.listSubclasses(classId) || []).length > 0;
     const st = uiState.get(c.id, 'builder', {});
@@ -263,9 +269,9 @@ export function makeBuilderPanel(ctx) {
     const completion = descriptorCompletion(s, ch, engine);
     if (ch.kind === 'asiMode') {
       const mode = fc[ch.id];
-      if (mode === 'feat') { const f = fc[ch.id + ':feat']; return { text: f ? ((engine.getItem('feat', f) || {}).name || titleize(f)) : t('builder.featOption'), done: completion.done }; }
+      if (mode === 'feat') { const f = fc[ch.feat.id]; return { text: f ? ((engine.getItem('feat', f) || {}).name || titleize(f)) : t('builder.featOption'), done: completion.done }; }
       if (mode === 'asi') {
-        const assign = assignOf(s, ch.id + ':ability');
+        const assign = assignOf(s, ch.ability.id);
         const parts = ABILITIES.filter((a) => num(assign[a], 0) > 0).map((a) => '+' + num(assign[a]) + ' ' + t('ability.' + a));
         return { text: parts.length ? parts.join(', ') : t('builder.asiOption'), done: completion.done };
       }
@@ -324,7 +330,7 @@ export function makeBuilderPanel(ctx) {
   // Ability scores — point buy by default (27 pts, each base 8–15), or free
   // manual entry when the box is ticked. Either way this sets only the BASE
   // scores; the engine adds species / background / feat increases on top.
-  function builderAbilities(c, s, base, comp, ro, engine) {
+  function builderAbilities(c, s, base, comp, ro, engine, plan) {
     const manual = !!s.manualScores;
     const toggle = ro ? '' : `<label style="display:inline-flex;align-items:center;gap:6px;font-size:var(--text-xs);color:var(--text-muted);cursor:pointer">
       <input type="checkbox" style="accent-color:var(--accent-gold);cursor:pointer"${manual ? ' checked' : ''}${dataOn('change', host.action('builderToggleManual'), c.id)}> ${esc(t('builder.manualScores'))}</label>`;
@@ -343,7 +349,11 @@ export function makeBuilderPanel(ctx) {
         const b = num(base[a], 10);
         const ctrl = ro
           ? `<div style="color:var(--text-parchment);font-weight:700;font-size:var(--text-lg)">${esc(String(b))}</div>`
-          : numField(dataOn('change', host.action('builderAbility'), c.id, a, '$value'), b, { min: 1, max: 30, ariaLabel: a });
+          : numField(dataOn('change', host.action('builderAbility'), c.id, a, '$value'), b, {
+            min: plan.abilityScoreRange.min,
+            max: plan.abilityScoreRange.max,
+            ariaLabel: a,
+          });
         return tile(a, ctrl, b);
       }).join('');
       return section(t('builder.abilities'),
@@ -353,7 +363,7 @@ export function makeBuilderPanel(ctx) {
     }
 
     // ── Point buy ──
-    const pointBuy = pointBuyFor(engine);
+    const pointBuy = plan.pointBuy;
     const spent = pointsSpent(base, engine);
     const remaining = pointBuy.budget - spent;
     const remColor = remaining < 0 ? 'var(--color-danger)' : remaining === 0 ? 'var(--text-muted)' : 'var(--accent-gold)';
@@ -412,24 +422,27 @@ export function makeBuilderPanel(ctx) {
     return section(t('builder.classes'), rows + addBtn);
   }
 
-  // Creation-time choices on the Character tab: the background ASI (AB-1) + the
-  // origin-feat note. Per-class / per-level choices (skills, grants, ASI/feat, pools)
-  // now live in each class tab's spine (bucketed by source.level), not a flat list.
-  function builderCreationChoices(c, s, engine, ro) {
+  // Creation-time origin choices live on the Character tab. Their source,
+  // eligibility, budget, and caps are normalized by the engine's Builder plan.
+  function builderCreationChoices(c, s, engine, ro, plan) {
     const bgRec = s.background ? (engine.getItemByName('background', s.background) || engine.getItem('background', s.background)) : null;
     const blocks = [];
-    const asiRules = engine.getRuleset().constants.asi;
-    if (
-      bgRec
-      && Array.isArray(bgRec.abilityScores)
-      && bgRec.abilityScores.length
-      && num(asiRules.bgBudget, 0) > 0
-    ) {
-      const pickers = abilityBudgetPickers(c, 'bgasi', bgRec.abilityScores, assignOf(s, 'bgasi'), asiRules.bgBudget, asiRules.bgPerMax, ro);
-      blocks.push(choiceBlock(t('builder.bgAsi', { bg: bgRec.name }), pickers));
+    for (const choice of plan.creationAbilityChoices) {
+      const source = engine.getItem(choice.source?.type, choice.source?.id);
+      const label = source?.name || titleize(choice.source?.id || choice.source?.type);
+      const pickers = abilityBudgetPickers(
+        c,
+        choice.id,
+        choice.eligible,
+        assignOf(s, choice.id),
+        choice.budget,
+        choice.perAbilityMax,
+        ro,
+      );
+      blocks.push(choiceBlock(t('builder.originAbility', { source: label }), pickers));
     }
     if (bgRec && bgRec.originFeat) blocks.push(`<div style="color:var(--text-muted);font-size:var(--text-xs)">${esc(t('builder.originFeat', { feat: titleize(bgRec.originFeat) }))}</div>`);
-    for (const choice of collectCreationChoices(s, engine)) {
+    for (const choice of plan.creationChoices) {
       blocks.push(renderDescriptor(c, s, choice, engine, ro));
     }
     if (!blocks.length) return '';
@@ -568,17 +581,12 @@ export function makeBuilderPanel(ctx) {
     );
   }
 
-  // ASI-vs-Feat at an ability-score-improvement level (descriptor kind asiMode).
-  // The ruleset's epicBoons capability marks one level (2024: 19) as the EPIC
-  // BOON slot: "you gain an Epic Boon feat or another feat of your choice for
-  // which you qualify" — an ASI is itself a feat, so the mode select stays; the
-  // feat picker adds the epicBoon category (grouped) on top of the general
-  // feats. Earlier ASI levels stay general-only; a ruleset without the
-  // capability (2014: epicBoons null) never marks any level.
+  // ASI-vs-feat rendering consumes only the normalized advancement descriptor.
+  // A provider may expose any feat categories at any level without sheet changes.
   function renderAsiLevel(c, s, ch, engine, ro) {
-    const key = ch.id;   // 'asi:<classId>:<level>'
-    const rsBoons = engine.getRuleset().capabilities.epicBoons;
-    const isEpic = !!rsBoons && num(ch.level) === num(rsBoons.atLevel, 19);
+    const key = ch.id;
+    const categories = Array.isArray(ch.feat?.categories) ? ch.feat.categories : [];
+    const hasEpicBoon = categories.includes('epicBoon');
     const mode = s.featureChoices[key] || '';
     const modeOpts = [
       { value: 'asi', label: t('builder.asiOption') },
@@ -587,18 +595,17 @@ export function makeBuilderPanel(ctx) {
     const label = t('builder.asiLevel', { cls: (engine.getItem('class', ch.classId) || {}).name || ch.classId, lvl: ch.level });
     let detail = '';
     if (mode === 'asi') {
-      // ASI budgets from the ruleset (2024: distribute 2 points — +2 to one, or
-      // +1/+1 to two) through number pickers.
-      const asiRules = engine.getRuleset().constants.asi;
-      detail = `<div style="margin-top:var(--space-2)">${abilityBudgetPickers(c, key + ':ability', ABILITIES, assignOf(s, key + ':ability'), asiRules.budget, asiRules.perMax, ro)}</div>`;
+      const ability = ch.ability;
+      detail = `<div style="margin-top:var(--space-2)">${abilityBudgetPickers(c, ability.id, ability.eligible, assignOf(s, ability.id), ability.budget, ability.perAbilityMax, ro)}</div>`;
     } else if (mode === 'feat') {
-      const featKey = key + ':feat';
+      const featKey = ch.feat.id;
       const chosenFeat = s.featureChoices[featKey] || '';
-      const generalOpts = engine.listFeats({ category: 'general' }).map((f) => ({ value: f.id, label: f.name }));
-      const boonOpts = isEpic ? engine.listFeats({ category: 'epicBoon' }).map((f) => ({ value: f.id, label: f.name })) : [];
-      const featOpts = boonOpts.length
-        ? [{ label: t('builder.epicBoons'), options: boonOpts }, { label: t('builder.generalFeats'), options: generalOpts }]
-        : generalOpts;
+      const groups = categories.map(category => ({
+        label: category === 'general' ? t('builder.generalFeats')
+          : category === 'epicBoon' ? t('builder.epicBoons') : titleize(category),
+        options: engine.listFeats({ category }).map(feat => ({ value: feat.id, label: feat.name })),
+      })).filter(group => group.options.length);
+      const featOpts = groups.length === 1 ? groups[0].options : groups;
       const featRec = chosenFeat ? engine.getItem('feat', chosenFeat) : null;
       // Chosen feat → a ↗ link to its compendium page (+ summary hover) beside the
       // picker, since a <select><option> cannot itself be a link.
@@ -611,12 +618,11 @@ export function makeBuilderPanel(ctx) {
       // 'ANY' (Boon of Skill) expands to all six abilities for the picker.
       const from = featAsiFrom(asi, engine);
       if (asi && from.length > 1) {
-        // Distribute a half-feat or boon ability increase through the pickers.
         const amt = Math.max(1, num(asi.amount, 1));
-        detail += `<div style="margin-top:var(--space-2)">${abilityBudgetPickers(c, key + ':featability', from, assignOf(s, key + ':featability'), amt, amt, ro)}</div>`;
+        detail += `<div style="margin-top:var(--space-2)">${abilityBudgetPickers(c, ch.feat.ability.id, from, assignOf(s, ch.feat.ability.id), amt, amt, ro)}</div>`;
       }
     }
-    return choiceBlock(label, `${selectBox(mode, modeOpts, dataOn('change', host.action('builderChoose'), c.id, key, '$value'), t('builder.choose'), ro)}${detail}`, isEpic ? t('builder.epicBoonHint') : undefined);
+    return choiceBlock(label, `${selectBox(mode, modeOpts, dataOn('change', host.action('builderChoose'), c.id, key, '$value'), t('builder.choose'), ro)}${detail}`, hasEpicBoon ? t('builder.epicBoonHint') : undefined);
   }
 
   return { panelBuilder };

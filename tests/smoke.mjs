@@ -69,15 +69,15 @@ function renderBody(rec, char, lore) {
 
 const META = {
   id: 'dnd-sheets',
-  version: '0.9.0',
+  version: '1.0.0',
   apiVersion: 2,
-  hostVersion: '>=1.2.0',
+  hostVersion: '>=1.3.0',
   capabilities: { required: ['lifecycle.dispose', 'i18n.catalogs'] },
   locales: { en: 'locales/en.json' },
   permissions: ['ui:override', 'ui:action', 'data:read:characters', 'data:write:characters.addonData'],
   services: { consumes: [
-    { contract: 'dnd5e.rules-engine', range: '^1.0.0', cardinality: 'one', required: false },
-    { contract: 'dnd-sheets.renderer', range: '^1.0.0', cardinality: 'many', required: false },
+    { contract: 'dnd5e.rules-engine', range: '^2.0.0', cardinality: 'one', required: false },
+    { contract: 'dnd-sheets.renderer', range: '^2.0.0', cardinality: 'many', required: false },
   ] },
 };
 const localizedOpts = (opts = {}) => ({ ...opts, catalogs: { en: EN_CATALOG } });
@@ -87,15 +87,15 @@ const mockHost = (opts = {}) => createMockHost(META, localizedOpts(opts));
 const rulesDataHandle = api => Object.freeze({
   api,
   provider: Object.freeze({
-    addonId: 'test-rules-data', addonName: 'Test Rules Data', addonVersion: '1.0.0',
-    contract: 'dnd5e.rules-data', contractVersion: '1.0.0', contentRevision: 'test',
+    addonId: 'test-rules-data', addonName: 'Test Rules Data', addonVersion: '2.0.0',
+    contract: 'dnd5e.rules-data', contractVersion: '2.0.0', contentRevision: 'test',
   }),
 });
 const engineHandle = api => Object.freeze({
   api: makeRulesApi(() => rulesDataHandle(api)),
   provider: Object.freeze({
-    addonId: 'test-rules-engine', addonName: 'Test Rules Engine', addonVersion: '1.0.0',
-    contract: 'dnd5e.rules-engine', contractVersion: '1.0.0', contentRevision: '', permissions: Object.freeze([]),
+    addonId: 'test-rules-engine', addonName: 'Test Rules Engine', addonVersion: '2.0.0',
+    contract: 'dnd5e.rules-engine', contractVersion: '2.0.0', contentRevision: '', permissions: Object.freeze([]),
   }),
 });
 const testIdentity = () => {
@@ -366,9 +366,8 @@ test('sheets: the class spine links resolved feature names to the compendium', (
 });
 
 test('sheets: featureChoices resolve into engine inputs (skill prof + expertise)', () => {
-  // Adapter-level: decisionsOf maps stored featureChoices → the canonical
-  // engine input fields. Uses a minimal local fake (a class with a skill
-  // choice + an expertise choice) through the real rules api.
+  // Boundary-level: the sheet passes stored feature choices untouched and the
+  // engine v2 Builder normalizer resolves them during hydration.
   const WIZ = {
     id: 'wizard', name: 'Wizard', hitDie: 'd6', subclassLevel: 3,
     startingProficiencies: { skills: { choose: 2, from: ['arcana', 'history', 'stealth'] } },
@@ -385,9 +384,9 @@ test('sheets: featureChoices resolve into engine inputs (skill prof + expertise)
     className: 'Wizard',
     featureChoices: { 'skills:wizard#0': 'arcana', 'skills:wizard#1': 'stealth', 'wiz-exp': 'stealth' },
   } } });
-  const cd = E.decisionsOf(s, api);
-  assert.deepEqual([...cd.skillProficiencies].sort(), ['arcana', 'stealth'], 'class skill picks resolved');
-  assert.equal(cd.skillExpertise.stealth, true, 'expertise pick resolved');
+  const hydrated = api.hydrate(E.decisionsOf(s, api)).sheet;
+  assert.equal(hydrated.proficiencies.skills.arcana, 'proficient', 'class skill pick resolved');
+  assert.equal(hydrated.proficiencies.skills.stealth, 'expertise', 'expertise pick resolved');
 });
 
 test('sheets: duplicate multi-pick values dedupe in resolved inputs (FE-7)', () => {
@@ -401,8 +400,8 @@ test('sheets: duplicate multi-pick values dedupe in resolved inputs (FE-7)', () 
   const E = makeEngine({ host, NS: 'dnd-sheets', ABILITIES, SKILLS, num, abilityMod, sheetOf });
   const s = sheetOf({ addonData: { 'dnd-sheets': { className: 'Wizard',
     featureChoices: { 'skills:wizard#0': 'arcana', 'skills:wizard#1': 'arcana' } } } });   // same skill in both boxes (legacy dup)
-  const cd = E.decisionsOf(s, api);
-  assert.deepEqual(cd.skillProficiencies, ['arcana'], 'a value picked in two boxes collapses to one proficiency');
+  const hydrated = api.hydrate(E.decisionsOf(s, api));
+  assert.equal(hydrated.sheet.proficiencies.skills.arcana, 'proficient', 'the engine resolves duplicate picks once');
 });
 
 test('sheets: duplicate L1 skills descriptor dedupes to one picker — no "content pending"', () => {
@@ -447,7 +446,10 @@ test('sheets: a half-feat chosen at an ASI level applies its ability bump (AB-2)
   // great-weapon-master (single-option +1 STR) and fey-touched (choose one of
   // INT/WIS/CHA) both live in the shared fake book data.
   const { host, rec } = mockHost(PHB());
-  let stored = {};
+  let stored = {
+    classes: [{ classId: 'wizard', level: 4, subclass: '' }],
+    featureChoices: { 'asi:wizard:4': 'feat' },
+  };
   host.store.patchAddonData = (_c, itemId, fn) => { stored = fn(stored) || stored; return { id: itemId, addonData: { 'dnd-sheets': stored } }; };
   register(host);
   const act = (name, ...args) => rec.actions.find((a) => a.name === name).fn(...args);
@@ -458,7 +460,7 @@ test('sheets: a half-feat chosen at an ASI level applies its ability bump (AB-2)
 
   act('builderChoose', 'c1', 'asi:wizard:4:feat', 'fey-touched');
   assert.equal(grantFor('asi:wizard:4'), undefined, 'multi-option half-feat waits for the ability sub-pick');
-  act('builderChoose', 'c1', 'asi:wizard:4:featability', 'CHA');
+  act('builderAsiSet', 'c1', 'asi:wizard:4:featability', 'CHA', 1, 1);
   assert.equal(grantFor('asi:wizard:4')?.assign.CHA, 1, 'sub-pick applies +1 CHA');
 
   act('builderChoose', 'c1', 'asi:wizard:4', 'asi');
@@ -467,7 +469,10 @@ test('sheets: a half-feat chosen at an ASI level applies its ability bump (AB-2)
 
 test('sheets: ASI number picker distributes a capped 2-point budget', () => {
   const { host, rec } = mockHost(PHB());
-  let stored = {};
+  let stored = {
+    classes: [{ classId: 'wizard', level: 4, subclass: '' }],
+    featureChoices: { 'asi:wizard:4': 'asi' },
+  };
   host.store.patchAddonData = (_c, itemId, fn) => { stored = fn(stored) || stored; return { id: itemId, addonData: { 'dnd-sheets': stored } }; };
   register(host);
   const act = (name, ...args) => rec.actions.find((a) => a.name === name).fn(...args);
@@ -491,18 +496,18 @@ test('sheets: ASI number picker distributes a capped 2-point budget', () => {
 
 test('sheets: background ASI picker distributes 3 points with +2 max per ability', () => {
   const { host, rec } = mockHost(PHB());
-  let stored = {};
+  let stored = { background: 'Acolyte' };
   host.store.patchAddonData = (_c, itemId, fn) => { stored = fn(stored) || stored; return { id: itemId, addonData: { 'dnd-sheets': stored } }; };
   register(host);
   const act = (name, ...args) => rec.actions.find((a) => a.name === name).fn(...args);
   const bg = () => (stored.abilityGrants || []).find((g) => g.id === 'bgasi');
   const set = (ab, v) => act('builderAsiSet', 'c1', 'bgasi', ab, v, 3, 2);
-  set('STR', 2); set('DEX', 1);   // +2 STR, +1 DEX = the 3-point spend
-  assert.deepEqual(bg().assign, { STR: 2, DEX: 1 }, '+2/+1 across two abilities (3 points)');
-  set('CON', 1);
-  assert.equal(bg().assign.CON, undefined, 'a 4th point exceeds the 3-budget → clamped away');
-  set('STR', 3);
-  assert.equal(bg().assign.STR, 2, 'per-ability cap (2) enforced');
+  set('INT', 2); set('WIS', 1);   // +2 INT, +1 WIS = the 3-point spend
+  assert.deepEqual(bg().assign, { INT: 2, WIS: 1 }, '+2/+1 across two eligible abilities (3 points)');
+  set('CHA', 1);
+  assert.equal(bg().assign.CHA, undefined, 'a 4th point exceeds the 3-budget → clamped away');
+  set('INT', 3);
+  assert.equal(bg().assign.INT, 2, 'per-ability cap (2) enforced');
 });
 
 test('sheets: ASI level renders ability number pickers, not a single select', () => {
@@ -535,7 +540,7 @@ test('sheets: the L19 slot offers Epic Boon feats (grouped); earlier ASI levels 
     assert.match(out, /<optgroup label="Epic Boons">/, 'boons are grouped distinctly');
     assert.match(out, /value="boon-of-fate"/, 'an epic boon is offered at L19');
     assert.match(out, /value="tough"/, 'general feats remain offered at L19 ("or another feat")');
-    assert.match(out, /Level 19 grants an Epic Boon/, 'the canon hint explains the slot');
+    assert.match(out, /This advancement permits Epic Boon feats/, 'the descriptor-driven hint explains the slot');
     act('builderTab', 'ceb2', 'fighter');
     act('builderToggleLevel', 'ceb2', 'fighter:4');
     const out2 = renderBody(rec, charOf('ceb2'));
@@ -905,15 +910,21 @@ test('sheets: the Character tab manages compendium and free-text extra feats', (
 });
 
 test('sheets: an extra feat with a featId feeds the engine feats list', () => {
-  const api = makeTestRulesApi({ getItem: () => null, getItemByName: () => null });
+  const api = makeTestRulesApi();
   const { host } = mockHost({});
   const { sheetOf } = makeHelpers(host);
   const E = makeEngine({ host, NS: 'dnd-sheets', ABILITIES, SKILLS, num, abilityMod, sheetOf });
+  const build = {
+    classes: [{ classId: 'fighter', level: 1, subclass: '' }],
+    baseStats: { STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10 },
+  };
   const s = sheetOf({ addonData: { 'dnd-sheets': {
-    extraFeats: [{ id: 'x1', featId: 'tough' }, { id: 'x2', name: 'Homebrew Luck' }] } } });
-  const cd = E.decisionsOf(s, api);
-  assert.ok(cd.feats.some((f) => f.featId === 'tough'), 'a compendium extra feat is fed to the engine');
-  assert.ok(!cd.feats.some((f) => f.featId == null), 'a free-text extra feat is not fed as a mechanical feat');
+    ...build,
+    extraFeats: [{ id: 'x1', featId: 'tough' }, { id: 'x2', name: 'Homebrew Luck' }],
+  } } });
+  const withoutFeat = api.hydrate({ ...build, extraFeats: [] }).sheet.derived.maxHp;
+  const withFeat = api.hydrate(E.decisionsOf(s, api)).sheet.derived.maxHp;
+  assert.equal(withFeat, withoutFeat + 2, 'the compendium feat reaches engine mechanics');
 });
 
 test('sheets: a recorded spell swap appears at its level in the class spine', () => {
